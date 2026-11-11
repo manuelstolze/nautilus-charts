@@ -1,0 +1,13 @@
+name = "Display name"
+description = "Short purpose of this repository."
+# key = "ABC"
+# system = "system-id"
+# status = "active"
+# owner = "Responsible team or person"
+# tags = ["utility"]
+# remote = "ssh://git@example.com/group/repository.git"
+# default-branch = "main"
+# Only entries this repository uses in order to work. Mentioning an ID is not a dependency.
+# depends-on = [
+#   { id = "dependency-id", via = "REST" },
+# ]
