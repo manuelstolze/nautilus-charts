@@ -9,7 +9,7 @@ nautilus-charts is the system catalog of Nautilus. Read [the README](./README.md
 - Keep the module within its responsibilities in the README. Work that belongs to another module goes there.
 - Update documentation when a change affects how the module is used.
 - Check changes with commands or examples suited to the files changed.
-- Do not commit credentials, secrets, personal settings, or machine-specific paths.
+- Do not commit credentials, secrets, personal settings, machine-specific paths, or catalog entries.
 
 ## Branches and pull requests
 
@@ -70,9 +70,13 @@ Include exactly one matching emoji and type. Use `charts` as the scope, or a nar
 
 ## Catalog entries
 
+Entries in `systems/`, `repositories/`, and `externals/` are each user's own catalog. Git ignores them because they can name private systems, internal hosts, and remotes. Never commit them, and never force-add them with `git add -f`.
+
 Read [docs/structure.md](./docs/structure.md) for entry types, fields, and ID rules. Follow the [charts skill](./.agents/skills/charts/SKILL.md) when finding or changing entries or resolving a local repository path.
 
 Use the templates in `templates/` when adding entries. Keep one entry per file. The file name is the ID. Use only tags listed in `tags.toml`. Store machine-specific paths only in `local/paths.toml`, which Git ignores. Do not put credentials in remote links. Removing an entry never deletes a repository or its files.
+
+Examples in documentation, templates, and tests use neutral names such as `shop` or `example.com`. Never use a real company, internal host, or private repository as an example.
 
 ## Skills
 
@@ -118,6 +122,6 @@ Before requesting review, confirm that:
 - [ ] The change is limited to the required files.
 - [ ] Relevant instructions, templates, and documentation are up to date.
 - [ ] Checks suited to the change have been run, or missing checks are explained.
-- [ ] `npm run check` passes, and `local/paths.toml` is not committed.
-- [ ] No credentials, personal settings, or machine-specific paths are included.
+- [ ] `npm run check` passes, and no catalog entries or `local/paths.toml` are committed.
+- [ ] No credentials, personal settings, machine-specific paths, or real company, host, or repository names are included.
 - [ ] The pull request lists checks, results, and known limitations.
