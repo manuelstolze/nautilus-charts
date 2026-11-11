@@ -93,6 +93,8 @@ npm ci
 npm run check
 ```
 
+The catalog starts empty. Add your systems, repositories, and externals from `templates/`, or ask the `charts` skill to register them. Git ignores your entries, so back them up yourself, for example in a private repository.
+
 Skills live in `.agents/skills/`. For Claude Code, link them into the ignored `.claude/skills/`:
 
 ```bash
