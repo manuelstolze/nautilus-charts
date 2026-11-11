@@ -1,0 +1,5 @@
+name = "Service name"
+description = "Short purpose of this external service."
+# provider = "provider-name"
+# kind = "cloud-service"
+# status = "active"
