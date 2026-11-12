@@ -60,7 +60,7 @@ depends-on = [
 Ask an agent, for example Pi or Claude, from this repository. The `charts` skill handles the request:
 
 - "Where is `<repository>` on this machine?" shows the entry and its checked local path.
-- "Register `<repository>` in system `<system>`" creates the entry from `templates/` and runs `check`.
+- "Register `<repository>` in system `<system>`" uses `charts add` and runs full catalog validation.
 - "What depends on `<id>`?" lists the entries that depend on a repository, external, or system.
 - "Remove `<id>`" lists the dependents first and asks before changing anything. It never deletes the repository.
 
@@ -72,9 +72,20 @@ npm run --silent charts -- show <id>
 npm run --silent charts -- deps <id>
 npm run --silent charts -- rdeps <id>
 npm run --silent charts -- check
+npm run --silent charts -- add <system|repository|external> <id> --data '<JSON>' [--local-path <path>] [--json]
 ```
 
-Output is one line per entry. Add `--json` when another tool reads the result.
+For example:
+
+```bash
+npm run --silent charts -- add system shop --data '{"description":"Online shop system."}'
+```
+
+The `--data` value is a JSON object. JSON is a text format for structured data. Include a required `description`. Do not include an `id`; pass it as the second positional value. Use only fields defined for that entry type. Charts uses the matching template and omits optional fields you do not supply. It does not generate IDs or repository keys.
+
+Use `--local-path` only for a repository. Charts checks the full catalog, including the path and its relation to a configured remote. The Charts skill asks the owner to confirm a proposed remote before it adds that remote. If validation fails, the command removes the new entry and restores `local/paths.toml`. The entry and path files stay ignored by Git. The command does not stage or commit files.
+
+Find prints one line per entry. Add `--json` when another tool reads a result. The script uses local Git data only. It never contacts remote servers, clones, or fetches.
 
 ## Requirements
 
@@ -82,8 +93,6 @@ Output is one line per entry. Add `--json` when another tool reads the result.
 | --- | --- |
 | Node 20 or later | The `charts` script does not run. The TOML files stay readable. |
 | `local/paths.toml` | `show` reports no local path. Everything else works. |
-
-The script uses local Git data only. It never contacts remote servers, clones, or fetches.
 
 ## Setup
 
@@ -93,7 +102,7 @@ npm ci
 npm run check
 ```
 
-The catalog starts empty. Add your systems, repositories, and externals from `templates/`, or ask the `charts` skill to register them. Git ignores your entries, so back them up yourself, for example in a private repository.
+The catalog starts empty. Add systems, repositories, and externals with `charts add`, or ask the `charts` skill to register them. Git ignores your entries, so back them up yourself, for example in a private repository.
 
 Skills live in `.agents/skills/`. For Claude Code, link them into the ignored `.claude/skills/`:
 
