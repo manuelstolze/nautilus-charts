@@ -36,16 +36,21 @@ Use `--silent` so npm messages do not mix with JSON output. From another directo
 
 If a result is ambiguous, ask the owner which entry they mean. A path in `local/paths.toml` is specific to this machine. Do not invent a path when it is missing.
 
-## Register an entry
+## Add an entry
 
-1. Search for the ID and name first. IDs must be unique across systems, repositories, and externals.
-2. Choose the matching template in `templates/`.
-3. Create one file named `<id>.toml` in `systems/`, `repositories/`, or `externals/`. Do not add an `id` field. Add the required description and only the optional fields that apply.
-4. For a repository, add a `system` only when it belongs to that system. Add only tags listed in `tags.toml`. Record dependencies only when you can verify them. A dependency can name a repository or an external. Charts derives system dependencies; do not write them by hand.
-5. Add a repository `key` only when one is needed. Search with `find <key>` first, then choose a unique key with the owner. `find` also matches the key inside other text, so rely on `check` to confirm that the key is unique.
-6. If you know the local repository path, add its ID and path to `local/paths.toml`. This file is ignored by Git and can be absent on another machine.
-7. Before you record a suggested remote, inspect the local Git remote settings and ask the owner to confirm the remote. Never record credentials. Do not connect to a remote, clone, or fetch.
-8. Run `npm run --silent charts -- check` and fix all errors.
+1. Search for the ID and name first. IDs must be unique across systems, repositories, and externals. Use an explicit lowercase kebab-case ID. Charts does not generate IDs or repository keys.
+2. Use the field names in [the structure guide](../../../docs/structure.md). Pass a JSON object. JSON is a text format for structured data. Include a required `description`. Do not include an `id` field. Omit optional fields that do not apply.
+3. For a repository, add `system` only when it belongs to that system. Use tags listed in `tags.toml`. Record only dependencies you can verify. A dependency can name a repository or an external. Charts derives system dependencies; do not add them by hand. Add a repository `key` only when needed. Search with `find <key>` and ask the owner to choose a unique key; Charts checks that it is unique.
+4. Before you record a suggested remote, inspect local Git remote settings and ask the owner to confirm the remote. Never record credentials. Do not connect to a remote, clone, or fetch.
+5. Run `charts add` from the Charts root. It uses the matching template, checks the full catalog, and removes its new entry if validation fails:
+
+   ```sh
+   npm run --silent charts -- add repository new-repository \
+     --data '{"description":"Purpose of this repository."}'
+   ```
+
+   Add `--local-path <path>` only for a repository. Charts validates the path and its remote before it records the mapping in ignored `local/paths.toml`. If validation fails, it restores the prior path map. The command does not stage or commit catalog files.
+6. Check the command result. Fix errors, then run `npm run --silent charts -- check`.
 
 ## Update an entry
 

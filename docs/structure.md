@@ -16,7 +16,7 @@ nautilus-charts/
 ├── tags.toml
 ├── local/paths.toml          # git-ignored, one per machine
 ├── templates/                # entry templates
-├── scripts/charts.ts         # find, show, deps, rdeps, check
+├── scripts/charts.ts         # find, show, deps, rdeps, check, add
 ├── tests/                    # TypeScript tests
 ├── package.json              # commands and dependencies
 ├── package-lock.json
@@ -141,6 +141,7 @@ shop-common-lib = "~/code/shop/shop-common-lib"
 | `deps <id>` | Show what a repository or system depends on. For a system, also the derived system dependencies. |
 | `rdeps <id>` | Show what depends on a repository, external, or system. |
 | `check` | Validate all entries and the local paths. |
+| `add <system|repository|external> <id> --data '<JSON>' [--local-path <path>] [--json]` | Create one entry from its template and validate the catalog. `--local-path` is for repositories only. |
 
 `check` reports:
 
@@ -155,9 +156,26 @@ shop-common-lib = "~/code/shop/shop-common-lib"
 
 The script uses local Git data only. It never contacts remote servers, clones, or fetches.
 
-## Changing entries
+## Adding entries
 
-Agents edit the TOML files directly, using `templates/`, and run `npm run --silent charts -- check` afterwards. Run tests with `npm test` and type checks with `npm run typecheck`. The skill in `.agents/skills/charts/` describes how to find, register, update, and remove entries. Removing an entry never deletes the repository or its files.
+Pass the entry type and explicit ID as positional values. Pass a JSON object with `--data`. JSON is a text format for structured data. The object contains the fields listed above, but not `id`. `description` is required. Unknown fields and values that fail the catalog rules are rejected. Charts does not generate IDs or repository keys.
+
+For example:
+
+```bash
+npm run --silent charts -- add repository shop-api \
+  --data '{"description":"The shop API.","system":"shop"}'
+```
+
+Charts reads the matching file in `templates/` to set the field order. It writes only supplied values, so optional template examples do not appear in the new entry. A repository can omit `--local-path`; when supplied, the path is added to ignored `local/paths.toml`. Charts checks that it is a Git repository root and that its local remote matches the entry's `remote`, if set. It uses local Git data only and does not connect to remote servers.
+
+After writing, Charts validates the full catalog. If validation fails, it removes only the new entry and restores the previous `local/paths.toml` contents. It does not change existing entry files, stage files, or commit catalog data. Entry and path files stay ignored by Git. The Charts skill asks the owner to confirm a proposed remote before adding it.
+
+Use `--json` for machine-readable results. Success reports the type, ID, path, and validation result. Failure reports the errors and returns a non-zero status.
+
+## Updating and removing entries
+
+The `charts` command does not update or remove entries. Follow the skill in `.agents/skills/charts/` to edit existing TOML files and run `npm run --silent charts -- check` afterwards. Run tests with `npm test` and type checks with `npm run typecheck`. Removing an entry never deletes the repository or its files.
 
 ## Catalog data
 
@@ -170,7 +188,6 @@ Git ignores the entries in `systems/`, `repositories/`, and `externals/`. Each u
 - A user interface.
 - Sub-systems.
 - Dependency kinds other than `depends-on`.
-- Script commands that write entries.
 
 ## Open points
 
