@@ -1,6 +1,13 @@
 <!--
 Sync Impact Report
 
+1.1.0 (2026-11-12)
+- Version: 1.0.0 → 1.1.0
+- Changed rules: new rule V. Other modules reach Charts's data only through its
+  commands, with no store paths in its output (nautilus-bridge ADR 0006).
+- Affected guidance: none.
+- Open follow-up: check the JSON output for paths into the store and remove them.
+
 1.0.0 (2026-11-12)
 - Version: unversioned → 1.0.0
 - Changed rules: added rules I to IV. They move existing rules here from README.md and
@@ -11,7 +18,7 @@ Sync Impact Report
 
 # nautilus-charts Constitution
 
-Version 1.0.0
+Version 1.1.0
 
 These are the mandatory rules for Charts. They bind every change to this repository and every agent that runs its skills. Other guidance in this repository links to these rules instead of repeating them. Conventions, such as branch names, commit messages, and checks, are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -49,6 +56,10 @@ Charts is not responsible for:
 - Cloning or fetching repositories.
 
 Work that belongs to another module goes to that module.
+
+### V. Charts is reached only through its commands
+
+Other modules reach Charts's data only through its commands, with text in and out: arguments, standard input, and `--json`. Its output carries content, never a path into its own store. Paths to the change owner's repositories are data, not store paths (nautilus-bridge ADR 0006).
 
 ## Governance
 
