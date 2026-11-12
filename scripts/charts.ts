@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -12,10 +12,13 @@ type Dependency = { id: string; via?: unknown; [key: string]: unknown };
 type Entry = { kind: Kind; id: string; data: Data; path: string };
 type Finding = { errors: string[]; warnings: string[] };
 type Options = {
-  command: "find" | "show" | "deps" | "rdeps" | "check";
+  command: "find" | "show" | "deps" | "rdeps" | "check" | "add";
   json: boolean;
   text?: string;
   id?: string;
+  kind?: Kind;
+  data?: Data;
+  localPath?: string;
   system?: string;
   tag?: string;
   status?: string;
@@ -31,9 +34,9 @@ const ENTRY_DIRS: Array<[Kind, string]> = [
   ["external", "externals"],
 ];
 const STATUSES = new Set(["planned", "active", "deprecated", "archived"]);
-const FIELDS: Record<Kind, Set<string>> = {
-  system: new Set(["name", "description", "owner", "status"]),
-  repository: new Set([
+const FIELD_ORDER: Record<Kind, string[]> = {
+  system: ["name", "description", "owner", "status"],
+  repository: [
     "name",
     "description",
     "key",
@@ -44,8 +47,13 @@ const FIELDS: Record<Kind, Set<string>> = {
     "remote",
     "default-branch",
     "depends-on",
-  ]),
-  external: new Set(["name", "description", "provider", "kind", "status"]),
+  ],
+  external: ["name", "description", "provider", "kind", "status"],
+};
+const FIELDS: Record<Kind, Set<string>> = {
+  system: new Set(FIELD_ORDER.system),
+  repository: new Set(FIELD_ORDER.repository),
+  external: new Set(FIELD_ORDER.external),
 };
 
 function isRecord(value: unknown): value is Data {
@@ -314,6 +322,111 @@ export function reverseDependencies(catalog: Catalog, entry: Entry): Data {
   return { id: entry.id, type: entry.kind, dependents };
 }
 
+function validateEntryData(
+  catalog: Catalog,
+  entry: Entry,
+  seen: Map<string, Entry>,
+  keys: Map<string, Entry>,
+): Finding {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const file = relative(catalog.root, entry.path);
+  if (!ID_PATTERN.test(entry.id)) errors.push(`${file}: ID ${JSON.stringify(entry.id)} is not lowercase kebab-case`);
+  const prior = seen.get(entry.id);
+  if (prior) errors.push(`${file}: duplicate ID ${JSON.stringify(entry.id)}; also used by ${relative(catalog.root, prior.path)}`);
+  else seen.set(entry.id, entry);
+
+  const unknown = Object.keys(entry.data).filter((field) => !FIELDS[entry.kind].has(field)).sort();
+  if (unknown.length) errors.push(`${file}: unknown field(s): ${unknown.join(", ")}`);
+  if (!("description" in entry.data)) errors.push(`${file}: missing required field: description`);
+  else if (!isString(entry.data.description)) errors.push(`${file}: description must be a string`);
+
+  for (const field of ["name", "owner", "remote", "default-branch"]) {
+    if (field in entry.data && !isString(entry.data[field])) errors.push(`${file}: ${field} must be a string`);
+  }
+  if (entry.kind === "external") {
+    for (const field of ["provider", "kind"]) {
+      if (field in entry.data && !isString(entry.data[field])) errors.push(`${file}: ${field} must be a string`);
+    }
+  }
+
+  const status = entryStatus(entry);
+  if (!isString(status) || !STATUSES.has(status)) errors.push(`${file}: invalid status ${JSON.stringify(status)}`);
+  if (isString(entry.data.remote) && remoteHasCredentials(entry.data.remote)) {
+    errors.push(`${file}: remote must not contain credentials`);
+  }
+
+  if (entry.kind !== "repository") return { errors, warnings };
+  const key = entry.data.key;
+  if (key !== undefined && (!isString(key) || !KEY_PATTERN.test(key))) {
+    errors.push(`${file}: key must be 2–5 characters: an uppercase letter, then uppercase letters or digits`);
+  } else if (isString(key)) {
+    const priorKey = keys.get(key);
+    if (priorKey) errors.push(`${file}: duplicate key ${JSON.stringify(key)}; also used by ${relative(catalog.root, priorKey.path)}`);
+    else keys.set(key, entry);
+  }
+
+  const systemId = entry.data.system;
+  if (systemId !== undefined && !isString(systemId)) {
+    errors.push(`${file}: system must be a string`);
+  } else if (isString(systemId)) {
+    const target = catalog.get(systemId);
+    if (!target || target.kind !== "system") errors.push(`${file}: system ${JSON.stringify(systemId)} does not name a system`);
+  }
+
+  const tags = entry.data.tags ?? [];
+  if (!Array.isArray(tags) || tags.some((tag) => !isString(tag))) {
+    errors.push(`${file}: tags must be a list of strings`);
+  } else {
+    for (const tag of tags) {
+      if (!(tag in catalog.tags)) errors.push(`${file}: tag ${JSON.stringify(tag)} is not defined in tags.toml`);
+    }
+  }
+
+  const rawDependencies = entry.data["depends-on"] ?? [];
+  if (!Array.isArray(rawDependencies)) {
+    errors.push(`${file}: depends-on must be a list`);
+    return { errors, warnings };
+  }
+  for (const [index, rawDependency] of rawDependencies.entries()) {
+    const label = `${file}: depends-on[${index}]`;
+    if (!isRecord(rawDependency)) {
+      errors.push(`${label} must be a table`);
+      continue;
+    }
+    const extra = Object.keys(rawDependency).filter((field) => !["id", "via"].includes(field)).sort();
+    if (extra.length) errors.push(`${label} has unknown field(s): ${extra.join(", ")}`);
+    const dependencyId = rawDependency.id;
+    if (!isString(dependencyId)) {
+      errors.push(`${label} requires a string id`);
+      continue;
+    }
+    if (dependencyId === entry.id) errors.push(`${label} cannot point to the same repository`);
+    const target = catalog.get(dependencyId);
+    if (!target) errors.push(`${label} ID ${JSON.stringify(dependencyId)} does not exist`);
+    else if (target.kind !== "repository" && target.kind !== "external") {
+      errors.push(`${label} ID ${JSON.stringify(dependencyId)} is not a repository or external`);
+    }
+    if ("via" in rawDependency && !isString(rawDependency.via)) errors.push(`${label} via must be a string`);
+    const dependencyStatus = target ? entryStatus(target) : "active";
+    if (target && (dependencyStatus === "deprecated" || dependencyStatus === "archived")) {
+      warnings.push(`${label} points to ${dependencyStatus} entry ${JSON.stringify(dependencyId)}`);
+    }
+  }
+  return { errors, warnings };
+}
+
+function validationMaps(catalog: Catalog): { seen: Map<string, Entry>; keys: Map<string, Entry> } {
+  const seen = new Map<string, Entry>();
+  const keys = new Map<string, Entry>();
+  for (const entry of catalog.entries) {
+    if (!seen.has(entry.id)) seen.set(entry.id, entry);
+    const key = entry.kind === "repository" ? entry.data.key : undefined;
+    if (isString(key) && KEY_PATTERN.test(key) && !keys.has(key)) keys.set(key, entry);
+  }
+  return { seen, keys };
+}
+
 export function validateCatalog(catalog: Catalog): Finding {
   const errors = [...catalog.loadErrors];
   const warnings: string[] = [];
@@ -321,89 +434,9 @@ export function validateCatalog(catalog: Catalog): Finding {
   const keys = new Map<string, Entry>();
 
   for (const entry of catalog.entries) {
-    const file = relative(catalog.root, entry.path);
-    if (!ID_PATTERN.test(entry.id)) errors.push(`${file}: ID ${JSON.stringify(entry.id)} is not lowercase kebab-case`);
-    const prior = seen.get(entry.id);
-    if (prior) errors.push(`${file}: duplicate ID ${JSON.stringify(entry.id)}; also used by ${relative(catalog.root, prior.path)}`);
-    else seen.set(entry.id, entry);
-
-    const unknown = Object.keys(entry.data).filter((field) => !FIELDS[entry.kind].has(field)).sort();
-    if (unknown.length) errors.push(`${file}: unknown field(s): ${unknown.join(", ")}`);
-    if (!("description" in entry.data)) errors.push(`${file}: missing required field: description`);
-    else if (!isString(entry.data.description)) errors.push(`${file}: description must be a string`);
-
-    for (const field of ["name", "owner", "remote", "default-branch"]) {
-      if (field in entry.data && !isString(entry.data[field])) errors.push(`${file}: ${field} must be a string`);
-    }
-    if ((entry.kind === "external") && ["provider", "kind"].some((field) => field in entry.data && !isString(entry.data[field]))) {
-      for (const field of ["provider", "kind"]) {
-        if (field in entry.data && !isString(entry.data[field])) errors.push(`${file}: ${field} must be a string`);
-      }
-    }
-
-    const status = entryStatus(entry);
-    if (!isString(status) || !STATUSES.has(status)) errors.push(`${file}: invalid status ${JSON.stringify(status)}`);
-    if (isString(entry.data.remote) && remoteHasCredentials(entry.data.remote)) {
-      errors.push(`${file}: remote must not contain credentials`);
-    }
-
-    if (entry.kind !== "repository") continue;
-    const key = entry.data.key;
-    if (key !== undefined && (!isString(key) || !KEY_PATTERN.test(key))) {
-      errors.push(`${file}: key must be 2–5 characters: an uppercase letter, then uppercase letters or digits`);
-    } else if (isString(key)) {
-      const priorKey = keys.get(key);
-      if (priorKey) errors.push(`${file}: duplicate key ${JSON.stringify(key)}; also used by ${relative(catalog.root, priorKey.path)}`);
-      else keys.set(key, entry);
-    }
-
-    const systemId = entry.data.system;
-    if (systemId !== undefined && !isString(systemId)) {
-      errors.push(`${file}: system must be a string`);
-    } else if (isString(systemId)) {
-      const target = catalog.get(systemId);
-      if (!target || target.kind !== "system") errors.push(`${file}: system ${JSON.stringify(systemId)} does not name a system`);
-    }
-
-    const tags = entry.data.tags ?? [];
-    if (!Array.isArray(tags) || tags.some((tag) => !isString(tag))) {
-      errors.push(`${file}: tags must be a list of strings`);
-    } else {
-      for (const tag of tags) {
-        if (!(tag in catalog.tags)) errors.push(`${file}: tag ${JSON.stringify(tag)} is not defined in tags.toml`);
-      }
-    }
-
-    const rawDependencies = entry.data["depends-on"] ?? [];
-    if (!Array.isArray(rawDependencies)) {
-      errors.push(`${file}: depends-on must be a list`);
-      continue;
-    }
-    for (const [index, rawDependency] of rawDependencies.entries()) {
-      const label = `${file}: depends-on[${index}]`;
-      if (!isRecord(rawDependency)) {
-        errors.push(`${label} must be a table`);
-        continue;
-      }
-      const extra = Object.keys(rawDependency).filter((field) => !["id", "via"].includes(field)).sort();
-      if (extra.length) errors.push(`${label} has unknown field(s): ${extra.join(", ")}`);
-      const dependencyId = rawDependency.id;
-      if (!isString(dependencyId)) {
-        errors.push(`${label} requires a string id`);
-        continue;
-      }
-      if (dependencyId === entry.id) errors.push(`${label} cannot point to the same repository`);
-      const target = catalog.get(dependencyId);
-      if (!target) errors.push(`${label} ID ${JSON.stringify(dependencyId)} does not exist`);
-      else if (target.kind !== "repository" && target.kind !== "external") {
-        errors.push(`${label} ID ${JSON.stringify(dependencyId)} is not a repository or external`);
-      }
-      if ("via" in rawDependency && !isString(rawDependency.via)) errors.push(`${label} via must be a string`);
-      const status = target ? entryStatus(target) : "active";
-      if (target && (status === "deprecated" || status === "archived")) {
-        warnings.push(`${label} points to ${status} entry ${JSON.stringify(dependencyId)}`);
-      }
-    }
+    const result = validateEntryData(catalog, entry, seen, keys);
+    errors.push(...result.errors);
+    warnings.push(...result.warnings);
   }
 
   const tagsPath = join(catalog.root, "tags.toml");
@@ -441,13 +474,285 @@ export function validateCatalog(catalog: Catalog): Finding {
   return { errors, warnings: [...new Set(warnings)].sort() };
 }
 
+function tomlKey(value: string): string {
+  return /^[A-Za-z0-9_-]+$/.test(value) ? value : JSON.stringify(value);
+}
+
+function tomlValue(value: unknown): string {
+  if (value === null || value === undefined) throw new Error("JSON null values cannot be written to TOML");
+  if (typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "boolean") return String(value);
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new Error("number is outside the TOML range");
+    return String(value);
+  }
+  if (Array.isArray(value)) return `[${value.map(tomlValue).join(", ")}]`;
+  if (isRecord(value)) {
+    const pairs = Object.entries(value).map(([key, item]) => `${tomlKey(key)} = ${tomlValue(item)}`);
+    return `{ ${pairs.join(", ")} }`;
+  }
+  throw new Error(`unsupported TOML value: ${String(value)}`);
+}
+
+function tomlTable(data: Data, order: string[] = Object.keys(data)): string {
+  return order
+    .filter((key) => Object.prototype.hasOwnProperty.call(data, key))
+    .map((key) => `${tomlKey(key)} = ${tomlValue(data[key])}`)
+    .join("\n") + "\n";
+}
+
+function entryPathFor(root: string, kind: Kind, id: string): string {
+  const directory = ENTRY_DIRS.find(([entryKind]) => entryKind === kind)![1];
+  return join(root, directory, `${id}.toml`);
+}
+
+function renderEntry(root: string, kind: Kind, data: Data): string {
+  const templatePath = join(root, "templates", `${kind}.toml`);
+  const templateValue: unknown = parseToml(readFileSync(templatePath, "utf8"));
+  if (!isRecord(templateValue)) throw new Error(`templates/${kind}.toml must contain a TOML table`);
+  // Use the template's field order, but never copy its sample values.
+  const order = [...new Set([...Object.keys(templateValue), ...FIELD_ORDER[kind]])];
+  return tomlTable(data, order);
+}
+
+function printAddResult(
+  json: boolean,
+  result: { ok: boolean; type: Kind; id: string; path: string; validation: Finding },
+): void {
+  if (json) {
+    printJson({
+      ok: result.ok,
+      type: result.type,
+      id: result.id,
+      path: result.path,
+      validation: { ok: result.validation.errors.length === 0, ...result.validation },
+    });
+    return;
+  }
+  for (const warning of result.validation.warnings) console.log(`WARNING: ${warning}`);
+  for (const error of result.validation.errors) console.error(`ERROR: ${error}`);
+  if (result.ok) console.log(`Created ${result.type} ${result.id} at ${result.path}; validation ok`);
+  else console.error(`Could not add ${result.type} ${result.id} at ${result.path}; validation failed`);
+}
+
+function rollbackAdd(
+  entryPath: string,
+  entryText: string,
+  entryCreated: boolean,
+  localPathFile: string,
+  localPathText: string | null,
+  localPathWritten: boolean,
+  previousLocalPathText: string | null,
+): string[] {
+  const errors: string[] = [];
+  if (entryCreated && existsSync(entryPath)) {
+    try {
+      if (readFileSync(entryPath, "utf8") !== entryText) {
+        errors.push("new entry changed during rollback and was not removed");
+      } else {
+        unlinkSync(entryPath);
+      }
+    } catch (error) {
+      errors.push(`could not remove new entry: ${errorMessage(error)}`);
+    }
+  }
+  if (localPathWritten && existsSync(localPathFile)) {
+    try {
+      if (readFileSync(localPathFile, "utf8") !== localPathText) {
+        errors.push("local/paths.toml changed during rollback and was not restored");
+      } else if (previousLocalPathText === null) {
+        unlinkSync(localPathFile);
+      } else {
+        writeFileSync(localPathFile, previousLocalPathText, "utf8");
+      }
+    } catch (error) {
+      errors.push(`could not restore local/paths.toml: ${errorMessage(error)}`);
+    }
+  }
+  return errors;
+}
+
+function addEntry(catalog: Catalog, options: Options): number {
+  const kind = options.kind!;
+  const id = options.id!;
+  const data = options.data!;
+  const entryPath = entryPathFor(catalog.root, kind, id);
+  const relativeEntryPath = relative(catalog.root, entryPath);
+  const localPathFile = join(catalog.root, "local/paths.toml");
+  const failure = (errors: string[], status = 2, warnings: string[] = []): number => {
+    printAddResult(options.json, {
+      ok: false,
+      type: kind,
+      id,
+      path: relativeEntryPath,
+      validation: { errors, warnings },
+    });
+    return status;
+  };
+
+  const duplicatePaths = ENTRY_DIRS
+    .map(([, directory]) => join(catalog.root, directory, `${id}.toml`))
+    .filter((path) => existsSync(path));
+  if (catalog.entries.some((entry) => entry.id === id) || duplicatePaths.length) {
+    return failure([`ID ${JSON.stringify(id)} already exists`]);
+  }
+
+  const ignored = spawnSync("git", ["check-ignore", "-q", relativeEntryPath], {
+    cwd: catalog.root,
+    encoding: "utf8",
+  });
+  if (ignored.error) return failure([`could not check Git ignore rule: ${ignored.error.message}`]);
+  if (ignored.status !== 0) return failure([`${relativeEntryPath} is not ignored by Git`]);
+
+  const candidate: Entry = { kind, id, data, path: entryPath };
+  const maps = validationMaps(catalog);
+  const inputFinding = validateEntryData(catalog, candidate, maps.seen, maps.keys);
+  if (inputFinding.errors.length) return failure(inputFinding.errors, 2, inputFinding.warnings);
+
+  let entryText: string;
+  try {
+    entryText = renderEntry(catalog.root, kind, data);
+  } catch (error) {
+    return failure([`cannot create entry from template: ${errorMessage(error)}`]);
+  }
+
+  let previousLocalPathText: string | null = null;
+  let localPathText: string | null = null;
+  if (options.localPath !== undefined) {
+    try {
+      if (existsSync(localPathFile)) {
+        previousLocalPathText = readFileSync(localPathFile, "utf8");
+        const parsed: unknown = parseToml(previousLocalPathText);
+        if (!isRecord(parsed)) return failure(["local/paths.toml must contain a TOML table"]);
+        localPathText = tomlTable({ ...parsed, [id]: options.localPath });
+      } else {
+        localPathText = tomlTable({ [id]: options.localPath });
+      }
+    } catch (error) {
+      return failure([`cannot update local/paths.toml: ${errorMessage(error)}`]);
+    }
+  }
+
+  let entryCreated = false;
+  let localPathWritten = false;
+  try {
+    writeFileSync(entryPath, entryText, { encoding: "utf8", flag: "wx" });
+    entryCreated = true;
+    if (localPathText !== null) {
+      mkdirSync(dirname(localPathFile), { recursive: true });
+      writeFileSync(localPathFile, localPathText, "utf8");
+      localPathWritten = true;
+    }
+  } catch (error) {
+    const rollbackErrors = rollbackAdd(
+      entryPath,
+      entryText,
+      entryCreated,
+      localPathFile,
+      localPathText,
+      localPathWritten,
+      previousLocalPathText,
+    );
+    return failure([`could not write entry: ${errorMessage(error)}`, ...rollbackErrors], 1);
+  }
+
+  let validation: Finding;
+  try {
+    validation = validateCatalog(new Catalog(catalog.root));
+  } catch (error) {
+    const rollbackErrors = rollbackAdd(
+      entryPath,
+      entryText,
+      entryCreated,
+      localPathFile,
+      localPathText,
+      localPathWritten,
+      previousLocalPathText,
+    );
+    return failure([`catalog validation failed: ${errorMessage(error)}`, ...rollbackErrors], 1);
+  }
+  if (validation.errors.length) {
+    const rollbackErrors = rollbackAdd(
+      entryPath,
+      entryText,
+      entryCreated,
+      localPathFile,
+      localPathText,
+      localPathWritten,
+      previousLocalPathText,
+    );
+    return failure([...validation.errors, ...rollbackErrors], 1, validation.warnings);
+  }
+
+  printAddResult(options.json, {
+    ok: true,
+    type: kind,
+    id,
+    path: relativeEntryPath,
+    validation,
+  });
+  return 0;
+}
+
 function parseArgs(argv: string[]): Options {
   const [command, ...rest] = argv;
-  if (!["find", "show", "deps", "rdeps", "check"].includes(command)) {
-    throw new Error("usage: charts <find|show|deps|rdeps|check> [arguments] [--json]");
+  if (!["find", "show", "deps", "rdeps", "check", "add"].includes(command)) {
+    throw new Error("usage: charts <find|show|deps|rdeps|check|add> [arguments] [--json]");
   }
   const options: Options = { command: command as Options["command"], json: false };
   const positional: string[] = [];
+
+  if (command === "add") {
+    let dataText: string | undefined;
+    let localPathSet = false;
+    for (let index = 0; index < rest.length; index += 1) {
+      const argument = rest[index];
+      if (argument === "--json") {
+        options.json = true;
+        continue;
+      }
+      if (argument === "--data" || argument === "--local-path") {
+        const value = rest[index + 1];
+        if (value === undefined) throw new Error(`${argument} requires a value`);
+        index += 1;
+        if (argument === "--data") {
+          if (dataText !== undefined) throw new Error("--data can be used only once");
+          dataText = value;
+        } else {
+          if (localPathSet) throw new Error("--local-path can be used only once");
+          localPathSet = true;
+          options.localPath = value;
+        }
+        continue;
+      }
+      if (argument.startsWith("--")) throw new Error(`unknown option: ${argument}`);
+      positional.push(argument);
+    }
+    if (positional.length !== 2) throw new Error("add requires an entry type and ID");
+    const kind = positional[0];
+    if (!ENTRY_DIRS.some(([entryKind]) => entryKind === kind)) {
+      throw new Error(`invalid entry type: ${kind}`);
+    }
+    options.kind = kind as Kind;
+    options.id = positional[1];
+    if (!ID_PATTERN.test(options.id)) throw new Error(`invalid ID ${JSON.stringify(options.id)}; use lowercase kebab-case`);
+    if (dataText === undefined) throw new Error("add requires --data '<JSON>'");
+    if (options.localPath !== undefined && options.kind !== "repository") {
+      throw new Error("--local-path is valid only for repository entries");
+    }
+    if (options.localPath === "") throw new Error("--local-path must not be empty");
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(dataText);
+    } catch (error) {
+      throw new Error(`--data is not valid JSON: ${errorMessage(error)}`);
+    }
+    if (!isRecord(parsed)) throw new Error("--data must be a JSON object");
+    if ("id" in parsed) throw new Error("do not include id in --data; pass it as the positional ID");
+    options.data = parsed;
+    return options;
+  }
+
   for (let index = 0; index < rest.length; index += 1) {
     const argument = rest[index];
     if (argument === "--json") {
@@ -550,10 +855,14 @@ export function main(argv = process.argv.slice(2), root = ROOT): number {
   try {
     options = parseArgs(argv);
   } catch (error) {
-    console.error(errorMessage(error));
+    const message = errorMessage(error);
+    if (argv[0] === "add" && argv.includes("--json")) printJson({ ok: false, error: message });
+    else console.error(message);
     return 2;
   }
   const catalog = new Catalog(root);
+
+  if (options.command === "add") return addEntry(catalog, options);
 
   if (options.command === "check") {
     const result = validateCatalog(catalog);
