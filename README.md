@@ -110,23 +110,13 @@ On a new machine, create `local/paths.toml` and add the repositories you have ch
 nautilus-bridge = "~/code/nautilus/nautilus-bridge"
 ```
 
-## Responsible for
+## Rules
 
-- Registering, finding, updating, and removing systems, repositories, and externals.
-- Recording dependencies between repositories and on external services.
-- Deriving dependencies between systems.
-- Resolving a repository's local path on this machine.
-- Validating entries, references, tags, local paths, and remotes.
-
-## Not responsible for
-
-- Knowledge about systems, such as how-tos or spike results. That belongs in `nautilus-library`.
-- Specifications, plans, and task lists for changes. They belong in `nautilus-logbook`.
-- Checking IDs that other modules use. The Bridge resolves them against Charts.
-- Cloning or fetching repositories.
+[CONSTITUTION.md](CONSTITUTION.md) holds Charts' mandatory rules, including what Charts is and is not responsible for.
 
 ## More
 
 - [docs/structure.md](docs/structure.md): entry fields, IDs, status values, and the `charts` script in detail.
+- [CONSTITUTION.md](CONSTITUTION.md): the mandatory rules.
 - [GLOSSARY.md](GLOSSARY.md): the terms Charts uses.
 - [CONTRIBUTING.md](CONTRIBUTING.md): how to change Charts.

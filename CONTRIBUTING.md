@@ -1,12 +1,11 @@
 # Contributing to nautilus-charts
 
-nautilus-charts is the system catalog of Nautilus. Read [the README](./README.md) and [the structure](./docs/structure.md) before contributing.
+nautilus-charts is the system catalog of Nautilus. Read [the README](./README.md), [the constitution](./CONSTITUTION.md), and [the structure](./docs/structure.md) before contributing. The constitution's rules are mandatory; this guide holds the conventions.
 
 ## Scope and change discipline
 
 - Keep changes small, focused, and easy to review.
 - Read the relevant instructions, skills, templates, and documents before changing them.
-- Keep the module within its responsibilities in the README. Work that belongs to another module goes there.
 - Update documentation when a change affects how the module is used.
 - Check changes with commands or examples suited to the files changed.
 - Do not commit credentials, secrets, personal settings, machine-specific paths, or catalog entries.
@@ -70,13 +69,11 @@ Include exactly one matching emoji and type. Use `charts` as the scope, or a nar
 
 ## Catalog entries
 
-Entries in `systems/`, `repositories/`, and `externals/` are each user's own catalog. Git ignores them because they can name private systems, internal hosts, and remotes. Never commit them, and never force-add them with `git add -f`.
+Entries in `systems/`, `repositories/`, and `externals/` are each user's own catalog and stay private, as [rule I of the constitution](./CONSTITUTION.md#i-the-catalog-stays-private) sets out.
 
 Read [docs/structure.md](./docs/structure.md) for entry types, fields, and ID rules. Follow the [charts skill](./.agents/skills/charts/SKILL.md) when finding or changing entries or resolving a local repository path.
 
-Use the templates in `templates/` when adding entries. Keep one entry per file. The file name is the ID. Use only tags listed in `tags.toml`. Store machine-specific paths only in `local/paths.toml`, which Git ignores. Do not put credentials in remote links. Removing an entry never deletes a repository or its files.
-
-Examples in documentation, templates, and tests use neutral names such as `shop` or `example.com`. Never use a real company, internal host, or private repository as an example.
+Use the templates in `templates/` when adding entries. Keep one entry per file. The file name is the ID. Use only tags listed in `tags.toml`. Store machine-specific paths only in `local/paths.toml`, which Git ignores.
 
 ## Skills
 
