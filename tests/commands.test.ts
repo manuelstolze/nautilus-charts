@@ -86,6 +86,22 @@ describe("add use case", () => {
     assert.equal(ports.store.files.size, 0);
   });
 
+  test("rejects a tag that the tags table only inherits", () => {
+    const ports = catalog();
+    const result = add(ports, {
+      kind: "repository",
+      id: "inherited-tag",
+      data: { description: "Inherited tag.", tags: ["toString"] },
+      localPath: "/work/new-repo",
+    });
+    assert.equal(result.status, 2);
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.validation.errors, ['repositories/inherited-tag.toml: tag "toString" is not defined in tags.toml']);
+    assert.ok(!ports.store.entries.some((entry) => entry.id === "inherited-tag"));
+    assert.equal(ports.store.files.size, 0);
+    assert.deepEqual(ports.store.localPaths, { "alpha-app": "/work/alpha-app" });
+  });
+
   test("rolls back a failed revalidation and restores the previous local paths", () => {
     const ports = catalog();
     const result = add(ports, {
