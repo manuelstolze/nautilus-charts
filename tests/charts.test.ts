@@ -227,12 +227,13 @@ describe("catalog validation", () => {
   });
 
   test("rejects tags that tags.toml does not define, even inherited names", () => {
-    write("repositories/inherited-tags.toml", 'description = "Inherited tags."\ntags = ["toString", "constructor", "utility"]\n');
+    write("repositories/inherited-tags.toml", 'description = "Inherited tags."\ntags = ["toString", "constructor", "__proto__", "utility"]\n');
     const { result, output } = capture(() => main(["check"], root));
     assert.notEqual(result, 0);
     assert.deepEqual(output.filter((line) => line.includes("repositories/inherited-tags.toml")), [
       'ERROR: repositories/inherited-tags.toml: tag "toString" is not defined in tags.toml',
       'ERROR: repositories/inherited-tags.toml: tag "constructor" is not defined in tags.toml',
+      'ERROR: repositories/inherited-tags.toml: tag "__proto__" is not defined in tags.toml',
     ]);
   });
 });
