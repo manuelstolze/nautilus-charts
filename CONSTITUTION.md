@@ -3,7 +3,7 @@ Sync Impact Report
 
 1.2.1 (2026-11-13)
 - Version: 1.2.0 → 1.2.1
-- Changed rules: rule VI reworded. Terminal output is rendered by the CLI
+- Changed rules: rule VI reworded; terminal output is rendered by the CLI
   adapter, not reached through a core port. The meaning is unchanged.
 - Affected guidance: none. The "Code structure" section of docs/structure.md
   already matches.
