@@ -493,6 +493,20 @@ describe("catalog commands", () => {
     assert.deepEqual(payload.entries.map((entry: { id: string }) => entry.id), ["alpha-app", "alpha"]);
   });
 
+  test("matches externals without a status as active", () => {
+    const { result, output } = capture(() => main(["find", "--status", "active", "--json"], root));
+    const payload = JSON.parse(output.join("\n"));
+    assert.equal(result, 0);
+    assert.ok(payload.entries.some((entry: { id: string; type: string }) => entry.type === "external" && entry.id === "stripe"));
+  });
+
+  test("lists archived externals in the status filter", () => {
+    write("externals/old-api.toml", 'description = "Retired API."\nstatus = "archived"\n');
+    const { result, output } = capture(() => main(["find", "--status", "archived"], root));
+    assert.equal(result, 0);
+    assert.ok(output.some((line) => line.includes("old-api")));
+  });
+
   test("rejects deps for external entries", () => {
     const errors: string[] = [];
     const original = console.error;
