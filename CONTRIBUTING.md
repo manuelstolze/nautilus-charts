@@ -94,7 +94,7 @@ The tooling is written in TypeScript. It needs Node 20 or later. Install depende
 npm install
 ```
 
-Keep scripts under `scripts/` and tests under `tests/`. Use `node:test` for tests. Add a runtime dependency only when the standard library is not enough, and commit `package-lock.json` with it.
+Keep production code under `src/`, the entry point in `scripts/`, and tests under `tests/`. [docs/structure.md](./docs/structure.md#code-structure) explains the code structure. Use `node:test` for tests. Add a runtime dependency only when the standard library is not enough, and commit `package-lock.json` with it.
 
 ## Validation
 
