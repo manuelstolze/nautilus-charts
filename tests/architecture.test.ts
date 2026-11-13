@@ -6,6 +6,7 @@ import { describe, test } from "node:test";
 
 // Rule VI of the constitution: the core, in src/domain/ and src/commands/,
 // imports only other core files and does not use console or process.
+// It also may not reach the network through globals such as fetch.
 // src/domain/ is stricter still: it imports only src/domain/.
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -51,7 +52,7 @@ export function coreViolations(root: string, path: string, source: string): stri
   }
   if (/\bimport\s*\(\s*[^"'\s)]/.test(source)) violations.push(`${label}: uses a dynamic import that is not a string literal`);
   if (/\brequire\s*\(\s*[^"'\s)]/.test(source)) violations.push(`${label}: uses require with a non-literal argument`);
-  for (const word of ["console", "process"]) {
+  for (const word of ["console", "process", "fetch", "WebSocket", "XMLHttpRequest", "EventSource"]) {
     if (new RegExp(`\\b${word}\\b`).test(source)) violations.push(`${label}: uses ${word}`);
   }
   return violations;
@@ -91,6 +92,8 @@ describe("architecture", () => {
       { path: domain, source: 'const fs = require("node:fs");\n', expected: '"node:fs"' },
       { path: domain, source: 'console.log("hello");\n', expected: "uses console" },
       { path: commands, source: "const home = process.env.HOME;\n", expected: "uses process" },
+      { path: commands, source: 'const response = await fetch("https://example.com");\n', expected: "uses fetch" },
+      { path: domain, source: 'const socket = new WebSocket("wss://example.com");\n', expected: "uses WebSocket" },
     ];
     for (const sample of samples) {
       const violations = coreViolations(REPO_ROOT, sample.path, sample.source);
