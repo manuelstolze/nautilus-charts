@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -510,6 +510,7 @@ describe("catalog commands", () => {
     // The catalog is git-ignored, so run a copy of the script inside the fixture.
     mkdirSync(join(root, "scripts"));
     copyFileSync(join(REPO_ROOT, "scripts/charts.ts"), join(root, "scripts/charts.ts"));
+    cpSync(join(REPO_ROOT, "src"), join(root, "src"), { recursive: true });
     symlinkSync(join(REPO_ROOT, "node_modules"), join(root, "node_modules"));
     const otherDirectory = mkdtempSync(join(tmpdir(), "charts-cwd-"));
     try {
