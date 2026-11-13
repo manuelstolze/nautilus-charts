@@ -16,7 +16,7 @@ export function find({ store }: Ports, options: FindOptions): FindResult {
       if (!options.tag) return true;
       return entry.kind === "repository" && Array.isArray(entry.data.tags) && entry.data.tags.includes(options.tag);
     })
-    .filter((entry) => !options.status || (entry.kind !== "external" && entryStatus(entry) === options.status))
+    .filter((entry) => !options.status || entryStatus(entry) === options.status)
     .filter((entry) => !options.owner || (isString(entry.data.owner) && entry.data.owner.toLowerCase().includes(options.owner!.toLowerCase())))
     .sort((left, right) => left.kind.localeCompare(right.kind) || left.id.localeCompare(right.id));
   return { entries, status: 0 };
