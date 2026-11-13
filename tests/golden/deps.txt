@@ -1,0 +1,144 @@
+## repository
+$ charts "deps" "alpha-app"
+exit: 0
+--- stdout
+alpha-app -> repository beta-lib via npm
+alpha-app -> external stripe via API
+--- stderr
+
+## repository (--json)
+$ charts "deps" "alpha-app" "--json"
+exit: 0
+--- stdout
+{
+  "id": "alpha-app",
+  "type": "repository",
+  "dependencies": [
+    {
+      "id": "beta-lib",
+      "type": "repository",
+      "name": "beta-lib",
+      "via": "npm"
+    },
+    {
+      "id": "stripe",
+      "type": "external",
+      "name": "stripe",
+      "via": "API"
+    }
+  ]
+}
+--- stderr
+
+## repository without dependencies
+$ charts "deps" "beta-lib"
+exit: 0
+--- stdout
+beta-lib: no dependencies
+--- stderr
+
+## repository without dependencies (--json)
+$ charts "deps" "beta-lib" "--json"
+exit: 0
+--- stdout
+{
+  "id": "beta-lib",
+  "type": "repository",
+  "dependencies": []
+}
+--- stderr
+
+## system
+$ charts "deps" "alpha"
+exit: 0
+--- stdout
+alpha -> repository beta-lib via npm from alpha-app
+alpha -> external stripe via API from alpha-app
+alpha -> system beta via repositories alpha-app
+--- stderr
+
+## system (--json)
+$ charts "deps" "alpha" "--json"
+exit: 0
+--- stdout
+{
+  "id": "alpha",
+  "type": "system",
+  "dependencies": [
+    {
+      "id": "beta-lib",
+      "type": "repository",
+      "name": "beta-lib",
+      "via": "npm",
+      "from": "alpha-app"
+    },
+    {
+      "id": "stripe",
+      "type": "external",
+      "name": "stripe",
+      "via": "API",
+      "from": "alpha-app"
+    }
+  ],
+  "system_dependencies": [
+    {
+      "id": "beta",
+      "type": "system",
+      "via_repositories": [
+        "alpha-app"
+      ]
+    }
+  ]
+}
+--- stderr
+
+## system without dependencies
+$ charts "deps" "beta"
+exit: 0
+--- stdout
+beta: no dependencies
+--- stderr
+
+## system without dependencies (--json)
+$ charts "deps" "beta" "--json"
+exit: 0
+--- stdout
+{
+  "id": "beta",
+  "type": "system",
+  "dependencies": [],
+  "system_dependencies": []
+}
+--- stderr
+
+## external
+$ charts "deps" "stripe"
+exit: 2
+--- stdout
+--- stderr
+deps supports repositories and systems, not external entries: stripe
+
+## external (--json)
+$ charts "deps" "stripe" "--json"
+exit: 2
+--- stdout
+{
+  "error": "deps supports repositories and systems, not external entries: stripe"
+}
+--- stderr
+
+## unknown ID
+$ charts "deps" "missing"
+exit: 2
+--- stdout
+--- stderr
+unknown entry ID: missing
+
+## unknown ID (--json)
+$ charts "deps" "missing" "--json"
+exit: 2
+--- stdout
+{
+  "error": "unknown entry ID: missing"
+}
+--- stderr

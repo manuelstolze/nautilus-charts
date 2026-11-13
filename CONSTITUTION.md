@@ -1,6 +1,14 @@
 <!--
 Sync Impact Report
 
+1.2.0 (2026-11-13)
+- Version: 1.1.0 → 1.2.0
+- Changed rules: new rule VI. The core does no I/O; Charts uses lean hexagonal
+  architecture (ADR 0001), enforced by an import test.
+- Affected guidance: docs/structure.md, CONTRIBUTING.md.
+- Open follow-up: the Library, Logbook, and Bridge adopt the same rule after the
+  owner's review of this pilot.
+
 1.1.0 (2026-11-12)
 - Version: 1.0.0 → 1.1.0
 - Changed rules: new rule V. Other modules reach Charts's data only through its
@@ -18,7 +26,7 @@ Sync Impact Report
 
 # nautilus-charts Constitution
 
-Version 1.1.0
+Version 1.2.0
 
 These are the mandatory rules for Charts. They bind every change to this repository and every agent that runs its skills. Other guidance in this repository links to these rules instead of repeating them. Conventions, such as branch names, commit messages, and checks, are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -60,6 +68,10 @@ Work that belongs to another module goes to that module.
 ### V. Charts is reached only through its commands
 
 Other modules reach Charts's data only through its commands, with text in and out: arguments, standard input, and `--json`. Its output carries content, never a path into its own store. Paths to the change owner's repositories are data, not store paths (nautilus-bridge ADR 0006).
+
+### VI. The core does no I/O
+
+Charts uses lean hexagonal architecture (ADR 0001). The core, in `src/domain/` and `src/commands/`, imports only other core files and does not use `console` or `process`. Files, Git, and terminal output are reached only through ports that the core defines, implemented by adapters in `src/adapters/`. Add a port only at a real boundary. `scripts/charts.ts` wires the adapters to the commands. A test enforces this rule.
 
 ## Governance
 

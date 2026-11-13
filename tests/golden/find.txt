@@ -1,0 +1,486 @@
+## all entries
+$ charts "find"
+exit: 0
+--- stdout
+external old-api — old-api — Retired API.
+external stripe — stripe — Payment service.
+repository alpha-app — Alpha App — Alpha application.
+repository beta-lib — beta-lib — Beta library.
+repository gamma-app — gamma-app — Gamma application.
+repository old-tool — old-tool — Old tool.
+system alpha — Alpha — Alpha system.
+system beta — beta — Beta system.
+system gamma — gamma — Gamma system.
+--- stderr
+
+## all entries (--json)
+$ charts "find" "--json"
+exit: 0
+--- stdout
+{
+  "entries": [
+    {
+      "description": "Retired API.",
+      "status": "archived",
+      "type": "external",
+      "id": "old-api",
+      "name": "old-api"
+    },
+    {
+      "description": "Payment service.",
+      "provider": "example",
+      "kind": "saas",
+      "type": "external",
+      "id": "stripe",
+      "name": "stripe"
+    },
+    {
+      "name": "Alpha App",
+      "description": "Alpha application.",
+      "key": "ALP",
+      "system": "alpha",
+      "owner": "Team Alpha",
+      "tags": [
+        "utility"
+      ],
+      "remote": "https://example.com/shop/alpha-app.git",
+      "default-branch": "main",
+      "depends-on": [
+        {
+          "id": "beta-lib",
+          "via": "npm"
+        },
+        {
+          "id": "stripe",
+          "via": "API"
+        }
+      ],
+      "type": "repository",
+      "id": "alpha-app"
+    },
+    {
+      "description": "Beta library.",
+      "key": "BET",
+      "system": "beta",
+      "tags": [
+        "library"
+      ],
+      "type": "repository",
+      "id": "beta-lib",
+      "name": "beta-lib"
+    },
+    {
+      "description": "Gamma application.",
+      "system": "gamma",
+      "status": "deprecated",
+      "depends-on": [
+        {
+          "id": "beta-lib"
+        }
+      ],
+      "type": "repository",
+      "id": "gamma-app",
+      "name": "gamma-app"
+    },
+    {
+      "description": "Old tool.",
+      "system": "alpha",
+      "status": "archived",
+      "type": "repository",
+      "id": "old-tool",
+      "name": "old-tool"
+    },
+    {
+      "name": "Alpha",
+      "description": "Alpha system.",
+      "owner": "Team Alpha",
+      "type": "system",
+      "id": "alpha"
+    },
+    {
+      "description": "Beta system.",
+      "owner": "Team Beta",
+      "type": "system",
+      "id": "beta",
+      "name": "beta"
+    },
+    {
+      "description": "Gamma system.",
+      "status": "deprecated",
+      "type": "system",
+      "id": "gamma",
+      "name": "gamma"
+    }
+  ]
+}
+--- stderr
+
+## text
+$ charts "find" "alpha"
+exit: 0
+--- stdout
+repository alpha-app — Alpha App — Alpha application.
+repository old-tool — old-tool — Old tool.
+system alpha — Alpha — Alpha system.
+--- stderr
+
+## text (--json)
+$ charts "find" "alpha" "--json"
+exit: 0
+--- stdout
+{
+  "entries": [
+    {
+      "name": "Alpha App",
+      "description": "Alpha application.",
+      "key": "ALP",
+      "system": "alpha",
+      "owner": "Team Alpha",
+      "tags": [
+        "utility"
+      ],
+      "remote": "https://example.com/shop/alpha-app.git",
+      "default-branch": "main",
+      "depends-on": [
+        {
+          "id": "beta-lib",
+          "via": "npm"
+        },
+        {
+          "id": "stripe",
+          "via": "API"
+        }
+      ],
+      "type": "repository",
+      "id": "alpha-app"
+    },
+    {
+      "description": "Old tool.",
+      "system": "alpha",
+      "status": "archived",
+      "type": "repository",
+      "id": "old-tool",
+      "name": "old-tool"
+    },
+    {
+      "name": "Alpha",
+      "description": "Alpha system.",
+      "owner": "Team Alpha",
+      "type": "system",
+      "id": "alpha"
+    }
+  ]
+}
+--- stderr
+
+## text without match
+$ charts "find" "nothing-matches"
+exit: 0
+--- stdout
+--- stderr
+
+## text without match (--json)
+$ charts "find" "nothing-matches" "--json"
+exit: 0
+--- stdout
+{
+  "entries": []
+}
+--- stderr
+
+## key text
+$ charts "find" "ALP"
+exit: 0
+--- stdout
+repository alpha-app — Alpha App — Alpha application.
+repository old-tool — old-tool — Old tool.
+system alpha — Alpha — Alpha system.
+--- stderr
+
+## key text (--json)
+$ charts "find" "ALP" "--json"
+exit: 0
+--- stdout
+{
+  "entries": [
+    {
+      "name": "Alpha App",
+      "description": "Alpha application.",
+      "key": "ALP",
+      "system": "alpha",
+      "owner": "Team Alpha",
+      "tags": [
+        "utility"
+      ],
+      "remote": "https://example.com/shop/alpha-app.git",
+      "default-branch": "main",
+      "depends-on": [
+        {
+          "id": "beta-lib",
+          "via": "npm"
+        },
+        {
+          "id": "stripe",
+          "via": "API"
+        }
+      ],
+      "type": "repository",
+      "id": "alpha-app"
+    },
+    {
+      "description": "Old tool.",
+      "system": "alpha",
+      "status": "archived",
+      "type": "repository",
+      "id": "old-tool",
+      "name": "old-tool"
+    },
+    {
+      "name": "Alpha",
+      "description": "Alpha system.",
+      "owner": "Team Alpha",
+      "type": "system",
+      "id": "alpha"
+    }
+  ]
+}
+--- stderr
+
+## system filter
+$ charts "find" "--system" "alpha"
+exit: 0
+--- stdout
+repository alpha-app — Alpha App — Alpha application.
+repository old-tool — old-tool — Old tool.
+system alpha — Alpha — Alpha system.
+--- stderr
+
+## system filter (--json)
+$ charts "find" "--system" "alpha" "--json"
+exit: 0
+--- stdout
+{
+  "entries": [
+    {
+      "name": "Alpha App",
+      "description": "Alpha application.",
+      "key": "ALP",
+      "system": "alpha",
+      "owner": "Team Alpha",
+      "tags": [
+        "utility"
+      ],
+      "remote": "https://example.com/shop/alpha-app.git",
+      "default-branch": "main",
+      "depends-on": [
+        {
+          "id": "beta-lib",
+          "via": "npm"
+        },
+        {
+          "id": "stripe",
+          "via": "API"
+        }
+      ],
+      "type": "repository",
+      "id": "alpha-app"
+    },
+    {
+      "description": "Old tool.",
+      "system": "alpha",
+      "status": "archived",
+      "type": "repository",
+      "id": "old-tool",
+      "name": "old-tool"
+    },
+    {
+      "name": "Alpha",
+      "description": "Alpha system.",
+      "owner": "Team Alpha",
+      "type": "system",
+      "id": "alpha"
+    }
+  ]
+}
+--- stderr
+
+## tag filter
+$ charts "find" "--tag" "library"
+exit: 0
+--- stdout
+repository beta-lib — beta-lib — Beta library.
+--- stderr
+
+## tag filter (--json)
+$ charts "find" "--tag" "library" "--json"
+exit: 0
+--- stdout
+{
+  "entries": [
+    {
+      "description": "Beta library.",
+      "key": "BET",
+      "system": "beta",
+      "tags": [
+        "library"
+      ],
+      "type": "repository",
+      "id": "beta-lib",
+      "name": "beta-lib"
+    }
+  ]
+}
+--- stderr
+
+## status filter
+$ charts "find" "--status" "deprecated"
+exit: 0
+--- stdout
+repository gamma-app — gamma-app — Gamma application.
+system gamma — gamma — Gamma system.
+--- stderr
+
+## status filter (--json)
+$ charts "find" "--status" "deprecated" "--json"
+exit: 0
+--- stdout
+{
+  "entries": [
+    {
+      "description": "Gamma application.",
+      "system": "gamma",
+      "status": "deprecated",
+      "depends-on": [
+        {
+          "id": "beta-lib"
+        }
+      ],
+      "type": "repository",
+      "id": "gamma-app",
+      "name": "gamma-app"
+    },
+    {
+      "description": "Gamma system.",
+      "status": "deprecated",
+      "type": "system",
+      "id": "gamma",
+      "name": "gamma"
+    }
+  ]
+}
+--- stderr
+
+## archived status filter
+$ charts "find" "--status" "archived"
+exit: 0
+--- stdout
+repository old-tool — old-tool — Old tool.
+--- stderr
+
+## archived status filter (--json)
+$ charts "find" "--status" "archived" "--json"
+exit: 0
+--- stdout
+{
+  "entries": [
+    {
+      "description": "Old tool.",
+      "system": "alpha",
+      "status": "archived",
+      "type": "repository",
+      "id": "old-tool",
+      "name": "old-tool"
+    }
+  ]
+}
+--- stderr
+
+## owner filter
+$ charts "find" "--owner" "team alpha"
+exit: 0
+--- stdout
+repository alpha-app — Alpha App — Alpha application.
+system alpha — Alpha — Alpha system.
+--- stderr
+
+## owner filter (--json)
+$ charts "find" "--owner" "team alpha" "--json"
+exit: 0
+--- stdout
+{
+  "entries": [
+    {
+      "name": "Alpha App",
+      "description": "Alpha application.",
+      "key": "ALP",
+      "system": "alpha",
+      "owner": "Team Alpha",
+      "tags": [
+        "utility"
+      ],
+      "remote": "https://example.com/shop/alpha-app.git",
+      "default-branch": "main",
+      "depends-on": [
+        {
+          "id": "beta-lib",
+          "via": "npm"
+        },
+        {
+          "id": "stripe",
+          "via": "API"
+        }
+      ],
+      "type": "repository",
+      "id": "alpha-app"
+    },
+    {
+      "name": "Alpha",
+      "description": "Alpha system.",
+      "owner": "Team Alpha",
+      "type": "system",
+      "id": "alpha"
+    }
+  ]
+}
+--- stderr
+
+## combined filters
+$ charts "find" "app" "--system" "alpha" "--status" "active"
+exit: 0
+--- stdout
+repository alpha-app — Alpha App — Alpha application.
+--- stderr
+
+## combined filters (--json)
+$ charts "find" "app" "--system" "alpha" "--status" "active" "--json"
+exit: 0
+--- stdout
+{
+  "entries": [
+    {
+      "name": "Alpha App",
+      "description": "Alpha application.",
+      "key": "ALP",
+      "system": "alpha",
+      "owner": "Team Alpha",
+      "tags": [
+        "utility"
+      ],
+      "remote": "https://example.com/shop/alpha-app.git",
+      "default-branch": "main",
+      "depends-on": [
+        {
+          "id": "beta-lib",
+          "via": "npm"
+        },
+        {
+          "id": "stripe",
+          "via": "API"
+        }
+      ],
+      "type": "repository",
+      "id": "alpha-app"
+    }
+  ]
+}
+--- stderr

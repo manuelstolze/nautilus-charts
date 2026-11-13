@@ -1,0 +1,225 @@
+## system
+$ charts "show" "alpha"
+exit: 0
+--- stdout
+system alpha — name=Alpha — description=Alpha system. — owner=Team Alpha
+--- stderr
+
+## system (--json)
+$ charts "show" "alpha" "--json"
+exit: 0
+--- stdout
+{
+  "name": "Alpha",
+  "description": "Alpha system.",
+  "owner": "Team Alpha",
+  "type": "system",
+  "id": "alpha"
+}
+--- stderr
+
+## repository with an ok path
+$ charts "show" "alpha-app"
+exit: 0
+--- stdout
+repository alpha-app — name=Alpha App — description=Alpha application. — key=ALP — system=alpha — owner=Team Alpha — tags=utility — remote=https://example.com/shop/alpha-app.git — default-branch=main — depends-on=id=beta-lib, via=npm, id=stripe, via=API — local_path=<TMP>/work/alpha-app — local_path_status=ok
+--- stderr
+
+## repository with an ok path (--json)
+$ charts "show" "alpha-app" "--json"
+exit: 0
+--- stdout
+{
+  "name": "Alpha App",
+  "description": "Alpha application.",
+  "key": "ALP",
+  "system": "alpha",
+  "owner": "Team Alpha",
+  "tags": [
+    "utility"
+  ],
+  "remote": "https://example.com/shop/alpha-app.git",
+  "default-branch": "main",
+  "depends-on": [
+    {
+      "id": "beta-lib",
+      "via": "npm"
+    },
+    {
+      "id": "stripe",
+      "via": "API"
+    }
+  ],
+  "type": "repository",
+  "id": "alpha-app",
+  "local_path": "<TMP>/work/alpha-app",
+  "local_path_status": "ok"
+}
+--- stderr
+
+## repository with no path configured
+$ charts "show" "beta-lib"
+exit: 0
+--- stdout
+repository beta-lib — name=beta-lib — description=Beta library. — key=BET — system=beta — tags=library — local_path_status=not configured
+--- stderr
+
+## repository with no path configured (--json)
+$ charts "show" "beta-lib" "--json"
+exit: 0
+--- stdout
+{
+  "description": "Beta library.",
+  "key": "BET",
+  "system": "beta",
+  "tags": [
+    "library"
+  ],
+  "type": "repository",
+  "id": "beta-lib",
+  "name": "beta-lib",
+  "local_path": null,
+  "local_path_status": "not configured"
+}
+--- stderr
+
+## external
+$ charts "show" "stripe"
+exit: 0
+--- stdout
+external stripe — name=stripe — description=Payment service. — provider=example — kind=saas
+--- stderr
+
+## external (--json)
+$ charts "show" "stripe" "--json"
+exit: 0
+--- stdout
+{
+  "description": "Payment service.",
+  "provider": "example",
+  "kind": "saas",
+  "type": "external",
+  "id": "stripe",
+  "name": "stripe"
+}
+--- stderr
+
+## unknown ID
+$ charts "show" "missing"
+exit: 2
+--- stdout
+--- stderr
+unknown entry ID: missing
+
+## unknown ID (--json)
+$ charts "show" "missing" "--json"
+exit: 2
+--- stdout
+{
+  "error": "unknown entry ID: missing"
+}
+--- stderr
+
+## repository with a missing path
+$ charts "show" "alpha-app"
+exit: 0
+--- stdout
+repository alpha-app — name=Alpha App — description=Alpha application. — key=ALP — system=alpha — owner=Team Alpha — tags=utility — remote=https://example.com/shop/alpha-app.git — default-branch=main — depends-on=id=beta-lib, via=npm, id=stripe, via=API — local_path_status=path does not exist: <TMP>/work/absent
+--- stderr
+
+## repository with a missing path (--json)
+$ charts "show" "alpha-app" "--json"
+exit: 0
+--- stdout
+{
+  "name": "Alpha App",
+  "description": "Alpha application.",
+  "key": "ALP",
+  "system": "alpha",
+  "owner": "Team Alpha",
+  "tags": [
+    "utility"
+  ],
+  "remote": "https://example.com/shop/alpha-app.git",
+  "default-branch": "main",
+  "depends-on": [
+    {
+      "id": "beta-lib",
+      "via": "npm"
+    },
+    {
+      "id": "stripe",
+      "via": "API"
+    }
+  ],
+  "type": "repository",
+  "id": "alpha-app",
+  "local_path": null,
+  "local_path_status": "path does not exist: <TMP>/work/absent"
+}
+--- stderr
+
+## repository with a remote mismatch
+$ charts "show" "alpha-app"
+exit: 0
+--- stdout
+repository alpha-app — name=Alpha App — description=Alpha application. — key=ALP — system=alpha — owner=Team Alpha — tags=utility — remote=https://example.com/shop/alpha-app.git — default-branch=main — depends-on=id=beta-lib, via=npm, id=stripe, via=API — local_path_status=remote does not match "https://example.com/shop/alpha-app.git"
+--- stderr
+
+## repository with a remote mismatch (--json)
+$ charts "show" "alpha-app" "--json"
+exit: 0
+--- stdout
+{
+  "name": "Alpha App",
+  "description": "Alpha application.",
+  "key": "ALP",
+  "system": "alpha",
+  "owner": "Team Alpha",
+  "tags": [
+    "utility"
+  ],
+  "remote": "https://example.com/shop/alpha-app.git",
+  "default-branch": "main",
+  "depends-on": [
+    {
+      "id": "beta-lib",
+      "via": "npm"
+    },
+    {
+      "id": "stripe",
+      "via": "API"
+    }
+  ],
+  "type": "repository",
+  "id": "alpha-app",
+  "local_path": null,
+  "local_path_status": "remote does not match \"https://example.com/shop/alpha-app.git\""
+}
+--- stderr
+
+## repository path that is not a Git root
+$ charts "show" "beta-lib"
+exit: 0
+--- stdout
+repository beta-lib — name=beta-lib — description=Beta library. — key=BET — system=beta — tags=library — local_path_status=not a Git repository root: <TMP>/work/plain
+--- stderr
+
+## repository path that is not a Git root (--json)
+$ charts "show" "beta-lib" "--json"
+exit: 0
+--- stdout
+{
+  "description": "Beta library.",
+  "key": "BET",
+  "system": "beta",
+  "tags": [
+    "library"
+  ],
+  "type": "repository",
+  "id": "beta-lib",
+  "name": "beta-lib",
+  "local_path": null,
+  "local_path_status": "not a Git repository root: <TMP>/work/plain"
+}
+--- stderr

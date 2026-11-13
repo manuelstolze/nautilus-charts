@@ -1,0 +1,670 @@
+## system success
+$ charts "add" "system" "new-system" "--data" "{\"description\":\"Line one.\\nLine two.\",\"name\":\"Quoted \\\"System\\\"\",\"status\":\"planned\"}"
+exit: 0
+--- stdout
+Created system new-system at systems/new-system.toml; validation ok
+--- stderr
+--- file systems/new-system.toml
+name = "Quoted \"System\""
+description = "Line one.\nLine two."
+status = "planned"
+
+## system success (--json)
+$ charts "add" "system" "new-system" "--data" "{\"description\":\"Line one.\\nLine two.\",\"name\":\"Quoted \\\"System\\\"\",\"status\":\"planned\"}" "--json"
+exit: 0
+--- stdout
+{
+  "ok": true,
+  "type": "system",
+  "id": "new-system",
+  "path": "systems/new-system.toml",
+  "validation": {
+    "ok": true,
+    "errors": [],
+    "warnings": []
+  }
+}
+--- stderr
+--- file systems/new-system.toml
+name = "Quoted \"System\""
+description = "Line one.\nLine two."
+status = "planned"
+
+## repository success with a local path
+$ charts "add" "repository" "new-repo" "--data" "{\"depends-on\":[{\"id\":\"beta-lib\",\"via\":\"npm package\"},{\"id\":\"stripe\"}],\"tags\":[\"library\",\"utility\"],\"system\":\"alpha\",\"key\":\"NEW\",\"remote\":\"https://example.com/shop/new-repo.git\",\"description\":\"A new repository.\",\"default-branch\":\"main\"}" "--local-path" "<TMP>/work/new-repo"
+exit: 0
+--- stdout
+Created repository new-repo at repositories/new-repo.toml; validation ok
+--- stderr
+--- file repositories/new-repo.toml
+description = "A new repository."
+key = "NEW"
+system = "alpha"
+tags = ["library", "utility"]
+remote = "https://example.com/shop/new-repo.git"
+default-branch = "main"
+depends-on = [{ id = "beta-lib", via = "npm package" }, { id = "stripe" }]
+--- file local/paths.toml
+alpha-app = "<TMP>/work/alpha-app"
+new-repo = "<TMP>/work/new-repo"
+
+## repository success with a local path (--json)
+$ charts "add" "repository" "new-repo" "--data" "{\"depends-on\":[{\"id\":\"beta-lib\",\"via\":\"npm package\"},{\"id\":\"stripe\"}],\"tags\":[\"library\",\"utility\"],\"system\":\"alpha\",\"key\":\"NEW\",\"remote\":\"https://example.com/shop/new-repo.git\",\"description\":\"A new repository.\",\"default-branch\":\"main\"}" "--local-path" "<TMP>/work/new-repo" "--json"
+exit: 0
+--- stdout
+{
+  "ok": true,
+  "type": "repository",
+  "id": "new-repo",
+  "path": "repositories/new-repo.toml",
+  "validation": {
+    "ok": true,
+    "errors": [],
+    "warnings": []
+  }
+}
+--- stderr
+--- file repositories/new-repo.toml
+description = "A new repository."
+key = "NEW"
+system = "alpha"
+tags = ["library", "utility"]
+remote = "https://example.com/shop/new-repo.git"
+default-branch = "main"
+depends-on = [{ id = "beta-lib", via = "npm package" }, { id = "stripe" }]
+--- file local/paths.toml
+alpha-app = "<TMP>/work/alpha-app"
+new-repo = "<TMP>/work/new-repo"
+
+## repository success creating the local paths file
+$ charts "add" "repository" "fresh-repo" "--data" "{\"description\":\"Fresh.\"}" "--local-path" "<TMP>/work/fresh-repo"
+exit: 0
+--- stdout
+Created repository fresh-repo at repositories/fresh-repo.toml; validation ok
+--- stderr
+--- file repositories/fresh-repo.toml
+description = "Fresh."
+--- file local/paths.toml
+fresh-repo = "<TMP>/work/fresh-repo"
+
+## repository success creating the local paths file (--json)
+$ charts "add" "repository" "fresh-repo" "--data" "{\"description\":\"Fresh.\"}" "--local-path" "<TMP>/work/fresh-repo" "--json"
+exit: 0
+--- stdout
+{
+  "ok": true,
+  "type": "repository",
+  "id": "fresh-repo",
+  "path": "repositories/fresh-repo.toml",
+  "validation": {
+    "ok": true,
+    "errors": [],
+    "warnings": []
+  }
+}
+--- stderr
+--- file repositories/fresh-repo.toml
+description = "Fresh."
+--- file local/paths.toml
+fresh-repo = "<TMP>/work/fresh-repo"
+
+## external success with a deprecated dependency warning
+$ charts "add" "external" "new-api" "--data" "{\"kind\":\"saas\",\"provider\":\"example\",\"description\":\"New API.\"}"
+exit: 0
+--- stdout
+WARNING: repositories/delta-app.toml: depends-on[0] points to deprecated entry "gamma-app"
+Created external new-api at externals/new-api.toml; validation ok
+--- stderr
+--- file externals/new-api.toml
+description = "New API."
+provider = "example"
+kind = "saas"
+
+## external success with a deprecated dependency warning (--json)
+$ charts "add" "external" "new-api" "--data" "{\"kind\":\"saas\",\"provider\":\"example\",\"description\":\"New API.\"}" "--json"
+exit: 0
+--- stdout
+{
+  "ok": true,
+  "type": "external",
+  "id": "new-api",
+  "path": "externals/new-api.toml",
+  "validation": {
+    "ok": true,
+    "errors": [],
+    "warnings": [
+      "repositories/delta-app.toml: depends-on[0] points to deprecated entry \"gamma-app\""
+    ]
+  }
+}
+--- stderr
+--- file externals/new-api.toml
+description = "New API."
+provider = "example"
+kind = "saas"
+
+## invalid input
+$ charts "add" "repository" "bad-input" "--data" "{\"description\":\"Bad.\",\"key\":\"ALP\",\"status\":\"paused\",\"tags\":[\"unknown\"],\"extra\":1,\"depends-on\":[{\"id\":\"alpha\"},{\"id\":\"old-api\"}]}"
+exit: 2
+--- stdout
+WARNING: repositories/bad-input.toml: depends-on[1] points to archived entry "old-api"
+--- stderr
+ERROR: repositories/bad-input.toml: unknown field(s): extra
+ERROR: repositories/bad-input.toml: invalid status "paused"
+ERROR: repositories/bad-input.toml: duplicate key "ALP"; also used by repositories/alpha-app.toml
+ERROR: repositories/bad-input.toml: tag "unknown" is not defined in tags.toml
+ERROR: repositories/bad-input.toml: depends-on[0] ID "alpha" is not a repository or external
+Could not add repository bad-input at repositories/bad-input.toml; validation failed
+--- file repositories/bad-input.toml
+(absent)
+
+## invalid input (--json)
+$ charts "add" "repository" "bad-input" "--data" "{\"description\":\"Bad.\",\"key\":\"ALP\",\"status\":\"paused\",\"tags\":[\"unknown\"],\"extra\":1,\"depends-on\":[{\"id\":\"alpha\"},{\"id\":\"old-api\"}]}" "--json"
+exit: 2
+--- stdout
+{
+  "ok": false,
+  "type": "repository",
+  "id": "bad-input",
+  "path": "repositories/bad-input.toml",
+  "validation": {
+    "ok": false,
+    "errors": [
+      "repositories/bad-input.toml: unknown field(s): extra",
+      "repositories/bad-input.toml: invalid status \"paused\"",
+      "repositories/bad-input.toml: duplicate key \"ALP\"; also used by repositories/alpha-app.toml",
+      "repositories/bad-input.toml: tag \"unknown\" is not defined in tags.toml",
+      "repositories/bad-input.toml: depends-on[0] ID \"alpha\" is not a repository or external"
+    ],
+    "warnings": [
+      "repositories/bad-input.toml: depends-on[1] points to archived entry \"old-api\""
+    ]
+  }
+}
+--- stderr
+--- file repositories/bad-input.toml
+(absent)
+
+## missing description
+$ charts "add" "system" "no-description" "--data" "{\"name\":\"No description\"}"
+exit: 2
+--- stdout
+--- stderr
+ERROR: systems/no-description.toml: missing required field: description
+Could not add system no-description at systems/no-description.toml; validation failed
+--- file systems/no-description.toml
+(absent)
+
+## missing description (--json)
+$ charts "add" "system" "no-description" "--data" "{\"name\":\"No description\"}" "--json"
+exit: 2
+--- stdout
+{
+  "ok": false,
+  "type": "system",
+  "id": "no-description",
+  "path": "systems/no-description.toml",
+  "validation": {
+    "ok": false,
+    "errors": [
+      "systems/no-description.toml: missing required field: description"
+    ],
+    "warnings": []
+  }
+}
+--- stderr
+--- file systems/no-description.toml
+(absent)
+
+## duplicate ID
+$ charts "add" "external" "alpha-app" "--data" "{\"description\":\"Duplicate.\"}"
+exit: 2
+--- stdout
+--- stderr
+ERROR: ID "alpha-app" already exists
+Could not add external alpha-app at externals/alpha-app.toml; validation failed
+--- file externals/alpha-app.toml
+(absent)
+
+## duplicate ID (--json)
+$ charts "add" "external" "alpha-app" "--data" "{\"description\":\"Duplicate.\"}" "--json"
+exit: 2
+--- stdout
+{
+  "ok": false,
+  "type": "external",
+  "id": "alpha-app",
+  "path": "externals/alpha-app.toml",
+  "validation": {
+    "ok": false,
+    "errors": [
+      "ID \"alpha-app\" already exists"
+    ],
+    "warnings": []
+  }
+}
+--- stderr
+--- file externals/alpha-app.toml
+(absent)
+
+## duplicate ID in an unreadable entry
+$ charts "add" "system" "broken" "--data" "{\"description\":\"Duplicate.\"}"
+exit: 2
+--- stdout
+--- stderr
+ERROR: ID "broken" already exists
+Could not add system broken at systems/broken.toml; validation failed
+--- file systems/broken.toml
+(absent)
+
+## duplicate ID in an unreadable entry (--json)
+$ charts "add" "system" "broken" "--data" "{\"description\":\"Duplicate.\"}" "--json"
+exit: 2
+--- stdout
+{
+  "ok": false,
+  "type": "system",
+  "id": "broken",
+  "path": "systems/broken.toml",
+  "validation": {
+    "ok": false,
+    "errors": [
+      "ID \"broken\" already exists"
+    ],
+    "warnings": []
+  }
+}
+--- stderr
+--- file systems/broken.toml
+(absent)
+
+## entry path not ignored
+$ charts "add" "system" "unignored" "--data" "{\"description\":\"Unignored.\"}"
+exit: 2
+--- stdout
+--- stderr
+ERROR: systems/unignored.toml is not ignored by Git
+Could not add system unignored at systems/unignored.toml; validation failed
+--- file systems/unignored.toml
+(absent)
+
+## entry path not ignored (--json)
+$ charts "add" "system" "unignored" "--data" "{\"description\":\"Unignored.\"}" "--json"
+exit: 2
+--- stdout
+{
+  "ok": false,
+  "type": "system",
+  "id": "unignored",
+  "path": "systems/unignored.toml",
+  "validation": {
+    "ok": false,
+    "errors": [
+      "systems/unignored.toml is not ignored by Git"
+    ],
+    "warnings": []
+  }
+}
+--- stderr
+--- file systems/unignored.toml
+(absent)
+
+## failed validation with rollback of an existing map
+$ charts "add" "repository" "rollback-repo" "--data" "{\"description\":\"Rollback.\"}" "--local-path" "<TMP>/work/absent"
+exit: 1
+--- stdout
+--- stderr
+ERROR: local/paths.toml: path does not exist: <TMP>/work/absent for "rollback-repo"
+Could not add repository rollback-repo at repositories/rollback-repo.toml; validation failed
+--- file repositories/rollback-repo.toml
+(absent)
+--- file local/paths.toml
+alpha-app = "<TMP>/work/alpha-app"
+
+## failed validation with rollback of an existing map (--json)
+$ charts "add" "repository" "rollback-repo" "--data" "{\"description\":\"Rollback.\"}" "--local-path" "<TMP>/work/absent" "--json"
+exit: 1
+--- stdout
+{
+  "ok": false,
+  "type": "repository",
+  "id": "rollback-repo",
+  "path": "repositories/rollback-repo.toml",
+  "validation": {
+    "ok": false,
+    "errors": [
+      "local/paths.toml: path does not exist: <TMP>/work/absent for \"rollback-repo\""
+    ],
+    "warnings": []
+  }
+}
+--- stderr
+--- file repositories/rollback-repo.toml
+(absent)
+--- file local/paths.toml
+alpha-app = "<TMP>/work/alpha-app"
+
+## failed validation with rollback of a new map
+$ charts "add" "repository" "rollback-new" "--data" "{\"description\":\"Rollback.\",\"remote\":\"https://example.com/wanted.git\"}" "--local-path" "<TMP>/work/mismatch"
+exit: 1
+--- stdout
+--- stderr
+ERROR: local/paths.toml: remote does not match "https://example.com/wanted.git" for "rollback-new"
+Could not add repository rollback-new at repositories/rollback-new.toml; validation failed
+--- file repositories/rollback-new.toml
+(absent)
+--- file local/paths.toml
+(absent)
+
+## failed validation with rollback of a new map (--json)
+$ charts "add" "repository" "rollback-new" "--data" "{\"description\":\"Rollback.\",\"remote\":\"https://example.com/wanted.git\"}" "--local-path" "<TMP>/work/mismatch" "--json"
+exit: 1
+--- stdout
+{
+  "ok": false,
+  "type": "repository",
+  "id": "rollback-new",
+  "path": "repositories/rollback-new.toml",
+  "validation": {
+    "ok": false,
+    "errors": [
+      "local/paths.toml: remote does not match \"https://example.com/wanted.git\" for \"rollback-new\""
+    ],
+    "warnings": []
+  }
+}
+--- stderr
+--- file repositories/rollback-new.toml
+(absent)
+--- file local/paths.toml
+(absent)
+
+## failed validation of an already broken catalog
+$ charts "add" "system" "after-broken" "--data" "{\"description\":\"After broken.\"}"
+exit: 1
+--- stdout
+--- stderr
+ERROR: systems/unknown.toml: unknown field(s): extra
+Could not add system after-broken at systems/after-broken.toml; validation failed
+--- file systems/after-broken.toml
+(absent)
+
+## failed validation of an already broken catalog (--json)
+$ charts "add" "system" "after-broken" "--data" "{\"description\":\"After broken.\"}" "--json"
+exit: 1
+--- stdout
+{
+  "ok": false,
+  "type": "system",
+  "id": "after-broken",
+  "path": "systems/after-broken.toml",
+  "validation": {
+    "ok": false,
+    "errors": [
+      "systems/unknown.toml: unknown field(s): extra"
+    ],
+    "warnings": []
+  }
+}
+--- stderr
+--- file systems/after-broken.toml
+(absent)
+
+## invalid local paths file
+$ charts "add" "repository" "map-error" "--data" "{\"description\":\"Map error.\"}" "--local-path" "<TMP>/work/alpha-app"
+exit: 2
+--- stdout
+--- stderr
+ERROR: cannot update local/paths.toml: Invalid TOML document: invalid value
+
+1:  alpha-app = [
+
+Could not add repository map-error at repositories/map-error.toml; validation failed
+--- file repositories/map-error.toml
+(absent)
+--- file local/paths.toml
+alpha-app = [
+
+## invalid local paths file (--json)
+$ charts "add" "repository" "map-error" "--data" "{\"description\":\"Map error.\"}" "--local-path" "<TMP>/work/alpha-app" "--json"
+exit: 2
+--- stdout
+{
+  "ok": false,
+  "type": "repository",
+  "id": "map-error",
+  "path": "repositories/map-error.toml",
+  "validation": {
+    "ok": false,
+    "errors": [
+      "cannot update local/paths.toml: Invalid TOML document: invalid value\n\n1:  alpha-app = [\n"
+    ],
+    "warnings": []
+  }
+}
+--- stderr
+--- file repositories/map-error.toml
+(absent)
+--- file local/paths.toml
+alpha-app = [
+
+## argument error: missing data
+$ charts "add" "system" "no-data"
+exit: 2
+--- stdout
+--- stderr
+add requires --data '<JSON>'
+
+## argument error: missing data (--json)
+$ charts "add" "system" "no-data" "--json"
+exit: 2
+--- stdout
+{
+  "ok": false,
+  "error": "add requires --data '<JSON>'"
+}
+--- stderr
+
+## argument error: invalid JSON
+$ charts "add" "system" "bad-json" "--data" "{"
+exit: 2
+--- stdout
+--- stderr
+--data is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+
+## argument error: invalid JSON (--json)
+$ charts "add" "system" "bad-json" "--data" "{" "--json"
+exit: 2
+--- stdout
+{
+  "ok": false,
+  "error": "--data is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2)"
+}
+--- stderr
+
+## argument error: not an object
+$ charts "add" "system" "not-object" "--data" "[]"
+exit: 2
+--- stdout
+--- stderr
+--data must be a JSON object
+
+## argument error: not an object (--json)
+$ charts "add" "system" "not-object" "--data" "[]" "--json"
+exit: 2
+--- stdout
+{
+  "ok": false,
+  "error": "--data must be a JSON object"
+}
+--- stderr
+
+## argument error: id in data
+$ charts "add" "system" "with-id" "--data" "{\"id\":\"x\",\"description\":\"X.\"}"
+exit: 2
+--- stdout
+--- stderr
+do not include id in --data; pass it as the positional ID
+
+## argument error: id in data (--json)
+$ charts "add" "system" "with-id" "--data" "{\"id\":\"x\",\"description\":\"X.\"}" "--json"
+exit: 2
+--- stdout
+{
+  "ok": false,
+  "error": "do not include id in --data; pass it as the positional ID"
+}
+--- stderr
+
+## argument error: invalid type
+$ charts "add" "service" "new-entry" "--data" "{\"description\":\"X.\"}"
+exit: 2
+--- stdout
+--- stderr
+invalid entry type: service
+
+## argument error: invalid type (--json)
+$ charts "add" "service" "new-entry" "--data" "{\"description\":\"X.\"}" "--json"
+exit: 2
+--- stdout
+{
+  "ok": false,
+  "error": "invalid entry type: service"
+}
+--- stderr
+
+## argument error: invalid ID
+$ charts "add" "system" "Bad_ID" "--data" "{\"description\":\"X.\"}"
+exit: 2
+--- stdout
+--- stderr
+invalid ID "Bad_ID"; use lowercase kebab-case
+
+## argument error: invalid ID (--json)
+$ charts "add" "system" "Bad_ID" "--data" "{\"description\":\"X.\"}" "--json"
+exit: 2
+--- stdout
+{
+  "ok": false,
+  "error": "invalid ID \"Bad_ID\"; use lowercase kebab-case"
+}
+--- stderr
+
+## argument error: missing ID
+$ charts "add" "system" "--data" "{\"description\":\"X.\"}"
+exit: 2
+--- stdout
+--- stderr
+add requires an entry type and ID
+
+## argument error: missing ID (--json)
+$ charts "add" "system" "--data" "{\"description\":\"X.\"}" "--json"
+exit: 2
+--- stdout
+{
+  "ok": false,
+  "error": "add requires an entry type and ID"
+}
+--- stderr
+
+## argument error: local path for external
+$ charts "add" "external" "ext" "--data" "{\"description\":\"X.\"}" "--local-path" "/absent"
+exit: 2
+--- stdout
+--- stderr
+--local-path is valid only for repository entries
+
+## argument error: local path for external (--json)
+$ charts "add" "external" "ext" "--data" "{\"description\":\"X.\"}" "--local-path" "/absent" "--json"
+exit: 2
+--- stdout
+{
+  "ok": false,
+  "error": "--local-path is valid only for repository entries"
+}
+--- stderr
+
+## argument error: empty local path
+$ charts "add" "repository" "empty-path" "--data" "{\"description\":\"X.\"}" "--local-path" ""
+exit: 2
+--- stdout
+--- stderr
+--local-path must not be empty
+
+## argument error: empty local path (--json)
+$ charts "add" "repository" "empty-path" "--data" "{\"description\":\"X.\"}" "--local-path" "" "--json"
+exit: 2
+--- stdout
+{
+  "ok": false,
+  "error": "--local-path must not be empty"
+}
+--- stderr
+
+## argument error: repeated data
+$ charts "add" "system" "twice" "--data" "{}" "--data" "{}"
+exit: 2
+--- stdout
+--- stderr
+--data can be used only once
+
+## argument error: repeated data (--json)
+$ charts "add" "system" "twice" "--data" "{}" "--data" "{}" "--json"
+exit: 2
+--- stdout
+{
+  "ok": false,
+  "error": "--data can be used only once"
+}
+--- stderr
+
+## argument error: repeated local path
+$ charts "add" "repository" "twice" "--data" "{}" "--local-path" "/a" "--local-path" "/b"
+exit: 2
+--- stdout
+--- stderr
+--local-path can be used only once
+
+## argument error: repeated local path (--json)
+$ charts "add" "repository" "twice" "--data" "{}" "--local-path" "/a" "--local-path" "/b" "--json"
+exit: 2
+--- stdout
+{
+  "ok": false,
+  "error": "--local-path can be used only once"
+}
+--- stderr
+
+## argument error: option without value
+$ charts "add" "repository" "no-value" "--local-path"
+exit: 2
+--- stdout
+--- stderr
+--local-path requires a value
+
+## argument error: option without value (--json)
+$ charts "add" "repository" "no-value" "--local-path" "--json"
+exit: 2
+--- stdout
+{
+  "ok": false,
+  "error": "add requires --data '<JSON>'"
+}
+--- stderr
+
+## argument error: unknown option
+$ charts "add" "system" "unknown" "--force"
+exit: 2
+--- stdout
+--- stderr
+unknown option: --force
+
+## argument error: unknown option (--json)
+$ charts "add" "system" "unknown" "--force" "--json"
+exit: 2
+--- stdout
+{
+  "ok": false,
+  "error": "unknown option: --force"
+}
+--- stderr

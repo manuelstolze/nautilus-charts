@@ -1,0 +1,254 @@
+import type { AddResult } from "../commands/add.ts";
+import type { CheckResult } from "../commands/check.ts";
+import type { FindResult } from "../commands/find.ts";
+import type { EntryResult } from "../commands/show.ts";
+import {
+  compact,
+  entryJson,
+  entryName,
+  errorMessage,
+  ID_PATTERN,
+  isKind,
+  isRecord,
+  STATUSES,
+  type Data,
+  type Kind,
+} from "../domain/entry.ts";
+
+// The terminal adapter: argument parsing and text or JSON output.
+
+export type Options = {
+  command: "find" | "show" | "deps" | "rdeps" | "check" | "add";
+  json: boolean;
+  text?: string;
+  id?: string;
+  kind?: Kind;
+  data?: Data;
+  localPath?: string;
+  system?: string;
+  tag?: string;
+  status?: string;
+  owner?: string;
+};
+
+/** Parses the command line. Throws an Error with the usage message on bad input. */
+export function parseArgs(argv: string[]): Options {
+  const [command, ...rest] = argv;
+  if (!["find", "show", "deps", "rdeps", "check", "add"].includes(command)) {
+    throw new Error("usage: charts <find|show|deps|rdeps|check|add> [arguments] [--json]");
+  }
+  const options: Options = { command: command as Options["command"], json: false };
+  const positional: string[] = [];
+
+  if (command === "add") {
+    let dataText: string | undefined;
+    let localPathSet = false;
+    for (let index = 0; index < rest.length; index += 1) {
+      const argument = rest[index];
+      if (argument === "--json") {
+        options.json = true;
+        continue;
+      }
+      if (argument === "--data" || argument === "--local-path") {
+        const value = rest[index + 1];
+        if (value === undefined) throw new Error(`${argument} requires a value`);
+        index += 1;
+        if (argument === "--data") {
+          if (dataText !== undefined) throw new Error("--data can be used only once");
+          dataText = value;
+        } else {
+          if (localPathSet) throw new Error("--local-path can be used only once");
+          localPathSet = true;
+          options.localPath = value;
+        }
+        continue;
+      }
+      if (argument.startsWith("--")) throw new Error(`unknown option: ${argument}`);
+      positional.push(argument);
+    }
+    if (positional.length !== 2) throw new Error("add requires an entry type and ID");
+    const kind = positional[0];
+    if (!isKind(kind)) {
+      throw new Error(`invalid entry type: ${kind}`);
+    }
+    options.kind = kind;
+    options.id = positional[1];
+    if (!ID_PATTERN.test(options.id)) throw new Error(`invalid ID ${JSON.stringify(options.id)}; use lowercase kebab-case`);
+    if (dataText === undefined) throw new Error("add requires --data '<JSON>'");
+    if (options.localPath !== undefined && options.kind !== "repository") {
+      throw new Error("--local-path is valid only for repository entries");
+    }
+    if (options.localPath === "") throw new Error("--local-path must not be empty");
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(dataText);
+    } catch (error) {
+      throw new Error(`--data is not valid JSON: ${errorMessage(error)}`);
+    }
+    if (!isRecord(parsed)) throw new Error("--data must be a JSON object");
+    if ("id" in parsed) throw new Error("do not include id in --data; pass it as the positional ID");
+    options.data = parsed;
+    return options;
+  }
+
+  for (let index = 0; index < rest.length; index += 1) {
+    const argument = rest[index];
+    if (argument === "--json") {
+      options.json = true;
+      continue;
+    }
+    if (argument.startsWith("--")) {
+      if (command !== "find" || !["--system", "--tag", "--status", "--owner"].includes(argument)) {
+        throw new Error(`unknown option: ${argument}`);
+      }
+      const value = rest[index + 1];
+      if (!value || value.startsWith("--")) throw new Error(`${argument} requires a value`);
+      index += 1;
+      if (argument === "--system") options.system = value;
+      if (argument === "--tag") options.tag = value;
+      if (argument === "--status") options.status = value;
+      if (argument === "--owner") options.owner = value;
+      continue;
+    }
+    positional.push(argument);
+  }
+
+  if (command === "find") {
+    if (positional.length > 1) throw new Error("find accepts at most one text value");
+    options.text = positional[0];
+    if (options.status && !STATUSES.has(options.status)) throw new Error(`invalid status filter: ${options.status}`);
+  } else if (command === "check") {
+    if (positional.length) throw new Error("check accepts no positional arguments");
+  } else {
+    if (positional.length !== 1) throw new Error(`${command} requires one entry ID`);
+    options.id = positional[0];
+  }
+  return options;
+}
+
+function printJson(value: unknown): void {
+  console.log(JSON.stringify(value, null, 2));
+}
+
+/** Reports an argument error. `add --json` reports it as JSON. Returns the exit status. */
+export function renderUsageError(argv: string[], error: unknown): number {
+  const message = errorMessage(error);
+  if (argv[0] === "add" && argv.includes("--json")) printJson({ ok: false, error: message });
+  else console.error(message);
+  return 2;
+}
+
+export function renderFind(json: boolean, result: FindResult): number {
+  if (json) {
+    printJson({ entries: result.entries.map(entryJson) });
+  } else {
+    for (const entry of result.entries) {
+      console.log(`${entry.kind} ${entry.id} — ${compact(entryName(entry))} — ${compact(entry.data.description ?? "")}`);
+    }
+  }
+  return result.status;
+}
+
+function renderEntryError(json: boolean, error: string): void {
+  if (json) printJson({ error });
+  else console.error(error);
+}
+
+export function renderShow(json: boolean, result: EntryResult): number {
+  if (result.status !== 0) {
+    renderEntryError(json, result.error);
+    return result.status;
+  }
+  const data = result.data;
+  if (json) {
+    printJson(data);
+    return result.status;
+  }
+  const fields = [`${data.type} ${data.id}`];
+  for (const key of [
+    "name",
+    "description",
+    "key",
+    "system",
+    "status",
+    "owner",
+    "tags",
+    "provider",
+    "kind",
+    "remote",
+    "default-branch",
+    "depends-on",
+    "local_path",
+    "local_path_status",
+  ]) {
+    if (key in data && data[key] !== null) fields.push(`${key}=${compact(data[key])}`);
+  }
+  console.log(fields.join(" — "));
+  return result.status;
+}
+
+/** Prints `deps` (reverse = false) or `rdeps` (reverse = true) results. */
+export function renderEdges(json: boolean, result: EntryResult, reverse: boolean): number {
+  if (result.status !== 0) {
+    renderEntryError(json, result.error);
+    return result.status;
+  }
+  const data = result.data;
+  if (json) {
+    printJson(data);
+    return result.status;
+  }
+  const key = reverse ? "dependents" : "dependencies";
+  const edges = data[key] as Data[];
+  const systemDependencies = (data.system_dependencies as Data[] | undefined) ?? [];
+  if (!edges.length && !systemDependencies.length) {
+    console.log(`${data.id}: no ${key}`);
+    return result.status;
+  }
+  for (const edge of edges) {
+    const via = edge.via ? ` via ${compact(edge.via)}` : "";
+    const source = edge.from ? ` from ${compact(edge.from)}` : "";
+    const viaRepositories = Array.isArray(edge.via_repositories)
+      ? ` via repositories ${(edge.via_repositories as string[]).join(", ")}`
+      : "";
+    const arrow = reverse ? "<-" : "->";
+    console.log(`${data.id} ${arrow} ${edge.type} ${edge.id}${via}${source}${viaRepositories}`);
+  }
+  if (!reverse) {
+    for (const edge of systemDependencies) {
+      const repositories = (edge.via_repositories as string[]).join(", ");
+      console.log(`${data.id} -> system ${edge.id} via repositories ${repositories}`);
+    }
+  }
+  return result.status;
+}
+
+export function renderCheck(json: boolean, result: CheckResult): number {
+  const { errors, warnings } = result.finding;
+  if (json) {
+    printJson({ ok: errors.length === 0, errors, warnings });
+  } else {
+    for (const warning of warnings) console.log(`WARNING: ${warning}`);
+    for (const error of errors) console.log(`ERROR: ${error}`);
+    if (!errors.length) console.log("check: ok");
+  }
+  return result.status;
+}
+
+export function renderAdd(json: boolean, result: AddResult): number {
+  if (json) {
+    printJson({
+      ok: result.ok,
+      type: result.type,
+      id: result.id,
+      path: result.path,
+      validation: { ok: result.validation.errors.length === 0, ...result.validation },
+    });
+    return result.status;
+  }
+  for (const warning of result.validation.warnings) console.log(`WARNING: ${warning}`);
+  for (const error of result.validation.errors) console.error(`ERROR: ${error}`);
+  if (result.ok) console.log(`Created ${result.type} ${result.id} at ${result.path}; validation ok`);
+  else console.error(`Could not add ${result.type} ${result.id} at ${result.path}; validation failed`);
+  return result.status;
+}

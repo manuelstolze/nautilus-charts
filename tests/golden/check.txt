@@ -1,0 +1,196 @@
+## ok
+$ charts "check"
+exit: 0
+--- stdout
+check: ok
+--- stderr
+
+## ok (--json)
+$ charts "check" "--json"
+exit: 0
+--- stdout
+{
+  "ok": true,
+  "errors": [],
+  "warnings": []
+}
+--- stderr
+
+## with warnings
+$ charts "check"
+exit: 0
+--- stdout
+WARNING: local/paths.toml is missing; local path checks were skipped
+WARNING: repositories/delta-app.toml: depends-on[0] points to deprecated entry "gamma-app"
+WARNING: repositories/delta-app.toml: depends-on[1] points to archived entry "old-api"
+WARNING: repositories/delta-app.toml: depends-on[2] points to archived entry "old-tool"
+check: ok
+--- stderr
+
+## with warnings (--json)
+$ charts "check" "--json"
+exit: 0
+--- stdout
+{
+  "ok": true,
+  "errors": [],
+  "warnings": [
+    "local/paths.toml is missing; local path checks were skipped",
+    "repositories/delta-app.toml: depends-on[0] points to deprecated entry \"gamma-app\"",
+    "repositories/delta-app.toml: depends-on[1] points to archived entry \"old-api\"",
+    "repositories/delta-app.toml: depends-on[2] points to archived entry \"old-tool\""
+  ]
+}
+--- stderr
+
+## with entry errors
+$ charts "check"
+exit: 1
+--- stdout
+ERROR: systems/broken.toml: invalid TOML: Invalid TOML document: invalid value
+
+1:  description = [
+
+ERROR: systems/unknown.toml: unknown field(s): extra
+ERROR: repositories/Bad_ID.toml: ID "Bad_ID" is not lowercase kebab-case
+ERROR: repositories/bad-key.toml: key must be 2–5 characters: an uppercase letter, then uppercase letters or digits
+ERROR: repositories/bad-lists.toml: system must be a string
+ERROR: repositories/bad-lists.toml: tags must be a list of strings
+ERROR: repositories/bad-lists.toml: depends-on must be a list
+ERROR: repositories/dup-key.toml: duplicate key "ALP"; also used by repositories/alpha-app.toml
+ERROR: repositories/messy.toml: description must be a string
+ERROR: repositories/messy.toml: name must be a string
+ERROR: repositories/messy.toml: invalid status "paused"
+ERROR: repositories/messy.toml: remote must not contain credentials
+ERROR: repositories/messy.toml: system "missing-system" does not name a system
+ERROR: repositories/messy.toml: tag "unknown" is not defined in tags.toml
+ERROR: repositories/messy.toml: depends-on[0] cannot point to the same repository
+ERROR: repositories/messy.toml: depends-on[1] ID "missing-repo" does not exist
+ERROR: repositories/messy.toml: depends-on[2] has unknown field(s): extra
+ERROR: repositories/messy.toml: depends-on[2] ID "alpha" is not a repository or external
+ERROR: repositories/messy.toml: depends-on[2] via must be a string
+ERROR: repositories/messy.toml: depends-on[3] must be a table
+ERROR: repositories/messy.toml: depends-on[4] requires a string id
+ERROR: externals/no-description.toml: missing required field: description
+ERROR: externals/no-description.toml: provider must be a string
+ERROR: externals/no-description.toml: kind must be a string
+ERROR: externals/stripe.toml: duplicate ID "stripe"; also used by repositories/stripe.toml
+ERROR: tags.toml: description for "library" must be a string
+--- stderr
+
+## with entry errors (--json)
+$ charts "check" "--json"
+exit: 1
+--- stdout
+{
+  "ok": false,
+  "errors": [
+    "systems/broken.toml: invalid TOML: Invalid TOML document: invalid value\n\n1:  description = [\n",
+    "systems/unknown.toml: unknown field(s): extra",
+    "repositories/Bad_ID.toml: ID \"Bad_ID\" is not lowercase kebab-case",
+    "repositories/bad-key.toml: key must be 2–5 characters: an uppercase letter, then uppercase letters or digits",
+    "repositories/bad-lists.toml: system must be a string",
+    "repositories/bad-lists.toml: tags must be a list of strings",
+    "repositories/bad-lists.toml: depends-on must be a list",
+    "repositories/dup-key.toml: duplicate key \"ALP\"; also used by repositories/alpha-app.toml",
+    "repositories/messy.toml: description must be a string",
+    "repositories/messy.toml: name must be a string",
+    "repositories/messy.toml: invalid status \"paused\"",
+    "repositories/messy.toml: remote must not contain credentials",
+    "repositories/messy.toml: system \"missing-system\" does not name a system",
+    "repositories/messy.toml: tag \"unknown\" is not defined in tags.toml",
+    "repositories/messy.toml: depends-on[0] cannot point to the same repository",
+    "repositories/messy.toml: depends-on[1] ID \"missing-repo\" does not exist",
+    "repositories/messy.toml: depends-on[2] has unknown field(s): extra",
+    "repositories/messy.toml: depends-on[2] ID \"alpha\" is not a repository or external",
+    "repositories/messy.toml: depends-on[2] via must be a string",
+    "repositories/messy.toml: depends-on[3] must be a table",
+    "repositories/messy.toml: depends-on[4] requires a string id",
+    "externals/no-description.toml: missing required field: description",
+    "externals/no-description.toml: provider must be a string",
+    "externals/no-description.toml: kind must be a string",
+    "externals/stripe.toml: duplicate ID \"stripe\"; also used by repositories/stripe.toml",
+    "tags.toml: description for \"library\" must be a string"
+  ],
+  "warnings": []
+}
+--- stderr
+
+## with local path errors
+$ charts "check"
+exit: 1
+--- stdout
+ERROR: local/paths.toml: path does not exist: <TMP>/work/absent for "alpha-app"
+ERROR: local/paths.toml: remote does not match "ssh://example.com/beta.git" for "beta-lib"
+ERROR: local/paths.toml: not a Git repository root: <TMP>/work/plain for "gamma-app"
+ERROR: local/paths.toml: path for "old-tool" must be a string
+ERROR: local/paths.toml: "stripe" does not name a repository
+ERROR: local/paths.toml: "missing" does not name a repository
+--- stderr
+
+## with local path errors (--json)
+$ charts "check" "--json"
+exit: 1
+--- stdout
+{
+  "ok": false,
+  "errors": [
+    "local/paths.toml: path does not exist: <TMP>/work/absent for \"alpha-app\"",
+    "local/paths.toml: remote does not match \"ssh://example.com/beta.git\" for \"beta-lib\"",
+    "local/paths.toml: not a Git repository root: <TMP>/work/plain for \"gamma-app\"",
+    "local/paths.toml: path for \"old-tool\" must be a string",
+    "local/paths.toml: \"stripe\" does not name a repository",
+    "local/paths.toml: \"missing\" does not name a repository"
+  ],
+  "warnings": []
+}
+--- stderr
+
+## with invalid local paths TOML
+$ charts "check"
+exit: 1
+--- stdout
+ERROR: local/paths.toml: invalid TOML: Invalid TOML document: invalid value
+
+1:  alpha-app = [
+
+--- stderr
+
+## with invalid local paths TOML (--json)
+$ charts "check" "--json"
+exit: 1
+--- stdout
+{
+  "ok": false,
+  "errors": [
+    "local/paths.toml: invalid TOML: Invalid TOML document: invalid value\n\n1:  alpha-app = [\n"
+  ],
+  "warnings": []
+}
+--- stderr
+
+## with an unignored local paths file and no tags
+$ charts "check"
+exit: 1
+--- stdout
+ERROR: repositories/alpha-app.toml: tag "utility" is not defined in tags.toml
+ERROR: repositories/beta-lib.toml: tag "library" is not defined in tags.toml
+ERROR: tags.toml is missing
+ERROR: local/paths.toml is not ignored by Git
+--- stderr
+
+## with an unignored local paths file and no tags (--json)
+$ charts "check" "--json"
+exit: 1
+--- stdout
+{
+  "ok": false,
+  "errors": [
+    "repositories/alpha-app.toml: tag \"utility\" is not defined in tags.toml",
+    "repositories/beta-lib.toml: tag \"library\" is not defined in tags.toml",
+    "tags.toml is missing",
+    "local/paths.toml is not ignored by Git"
+  ],
+  "warnings": []
+}
+--- stderr
