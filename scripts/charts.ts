@@ -1,12 +1,9 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { parse as parseToml } from "smol-toml";
-
-import { CatalogIndex, type Snapshot } from "../src/domain/catalog.ts";
+import { GitCli } from "../src/adapters/git-cli.ts";
+import { TomlStore } from "../src/adapters/toml-store.ts";
+import { CatalogIndex } from "../src/domain/catalog.ts";
 import {
   dependenciesFor as domainDependenciesFor,
   reverseDependencies as domainReverseDependencies,
@@ -20,7 +17,6 @@ import {
   entryName,
   entryStatus,
   errorMessage,
-  FIELD_ORDER,
   ID_PATTERN,
   isRecord,
   isString,
@@ -54,123 +50,28 @@ type Options = {
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-function loadSnapshot(root: string): Snapshot {
-  const snapshot: Snapshot = {
-    entries: [],
-    tags: {},
-    tagsExists: existsSync(join(root, "tags.toml")),
-    localPaths: null,
-    localPathsExists: existsSync(join(root, "local/paths.toml")),
-    loadErrors: [],
-  };
-  const readToml = (path: string, label: string): Data | null => {
-    try {
-      const value: unknown = parseToml(readFileSync(path, "utf8"));
-      if (!isRecord(value)) {
-        snapshot.loadErrors.push(`${label}: expected a TOML table`);
-        return null;
-      }
-      return value;
-    } catch (error) {
-      snapshot.loadErrors.push(`${label}: invalid TOML: ${errorMessage(error)}`);
-      return null;
-    }
-  };
-  for (const [kind, directory] of ENTRY_DIRS) {
-    const folder = join(root, directory);
-    if (!existsSync(folder)) continue;
-    let files: string[];
-    try {
-      files = readdirSync(folder).filter((file) => file.endsWith(".toml")).sort();
-    } catch (error) {
-      snapshot.loadErrors.push(`${directory}: cannot read entries: ${errorMessage(error)}`);
-      continue;
-    }
-    for (const file of files) {
-      const label = `${directory}/${file}`;
-      const data = readToml(join(folder, file), label);
-      if (data) snapshot.entries.push({ kind, id: file.slice(0, -5), data, file: label });
-    }
-  }
-  if (snapshot.tagsExists) Object.assign(snapshot.tags, readToml(join(root, "tags.toml"), "tags.toml") ?? {});
-  if (snapshot.localPathsExists) snapshot.localPaths = readToml(join(root, "local/paths.toml"), "local/paths.toml");
-  return snapshot;
-}
-
 export class Catalog extends CatalogIndex {
   readonly root: string;
+  readonly store: TomlStore;
+  readonly git: GitCli;
 
   constructor(root: string) {
-    const resolved = resolve(root);
-    super(loadSnapshot(resolved));
-    this.root = resolved;
+    const store = new TomlStore(root);
+    super(store.load());
+    this.root = store.root;
+    this.store = store;
+    this.git = new GitCli(store.root);
   }
-}
-
-function resolveLocalPath(root: string, rawPath: string): string {
-  if (rawPath === "~") return homedir();
-  if (rawPath.startsWith("~/")) return resolve(homedir(), rawPath.slice(2));
-  return isAbsolute(rawPath) ? resolve(rawPath) : resolve(root, rawPath);
-}
-
-function gitOutput(path: string, ...args: string[]): string | null {
-  const result = spawnSync("git", ["-C", path, ...args], {
-    encoding: "utf8",
-    timeout: 5000,
-  });
-  return result.status === 0 ? result.stdout.trim() : null;
-}
-
-function gitRemotes(path: string): Set<string> {
-  const output = gitOutput(path, "remote", "-v");
-  if (!output) return new Set();
-  const remotes = new Set<string>();
-  for (const line of output.split("\n")) {
-    const match = line.match(/^\S+\s+(\S+)\s+\(/);
-    if (match) remotes.add(match[1]);
-  }
-  return remotes;
-}
-
-function localPathError(path: string, remote?: unknown): string | null {
-  if (!existsSync(path)) return `path does not exist: ${path}`;
-  try {
-    if (!statSync(path).isDirectory()) return `not a Git repository root: ${path}`;
-  } catch {
-    return `cannot read local path: ${path}`;
-  }
-  const gitRoot = gitOutput(path, "rev-parse", "--show-toplevel");
-  try {
-    if (!gitRoot || realpathSync(gitRoot) !== realpathSync(path)) return `not a Git repository root: ${path}`;
-  } catch {
-    return `not a Git repository root: ${path}`;
-  }
-  if (isString(remote) && !gitRemotes(path).has(remote)) return `remote does not match ${JSON.stringify(remote)}`;
-  return null;
-}
-
-function inspectLocalPath(root: string, rawPath: string, remote: unknown): LocalPathFact {
-  const resolved = resolveLocalPath(root, rawPath);
-  return { resolved, error: localPathError(resolved, remote) };
 }
 
 function localPathFacts(catalog: Catalog, only?: string): Map<string, LocalPathFact> {
   const facts = new Map<string, LocalPathFact>();
   for (const target of localPathTargets(catalog.snapshot)) {
     if (only === undefined || target.id === only) {
-      facts.set(target.id, inspectLocalPath(catalog.root, target.rawPath, target.remote));
+      facts.set(target.id, catalog.git.inspectLocalPath(target.rawPath, target.remote));
     }
   }
   return facts;
-}
-
-function gitIgnored(root: string, relativePath: string): { ignored: boolean } | { error: string } {
-  const ignored = spawnSync("git", ["check-ignore", "-q", relativePath], {
-    cwd: root,
-    encoding: "utf8",
-  });
-  if (ignored.error) return { error: ignored.error.message };
-  return { ignored: ignored.status === 0 };
 }
 
 export function showEntry(catalog: Catalog, entry: Entry): Data {
@@ -188,44 +89,8 @@ export function reverseDependencies(catalog: Catalog, entry: Entry): Data {
 export function validateCatalog(catalog: Catalog): Finding {
   return domainValidateCatalog(catalog.snapshot, {
     localPaths: localPathFacts(catalog),
-    localPathsIgnored: gitIgnored(catalog.root, "local/paths.toml"),
+    localPathsIgnored: catalog.git.isIgnored("local/paths.toml"),
   });
-}
-
-function tomlKey(value: string): string {
-  return /^[A-Za-z0-9_-]+$/.test(value) ? value : JSON.stringify(value);
-}
-
-function tomlValue(value: unknown): string {
-  if (value === null || value === undefined) throw new Error("JSON null values cannot be written to TOML");
-  if (typeof value === "string") return JSON.stringify(value);
-  if (typeof value === "boolean") return String(value);
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new Error("number is outside the TOML range");
-    return String(value);
-  }
-  if (Array.isArray(value)) return `[${value.map(tomlValue).join(", ")}]`;
-  if (isRecord(value)) {
-    const pairs = Object.entries(value).map(([key, item]) => `${tomlKey(key)} = ${tomlValue(item)}`);
-    return `{ ${pairs.join(", ")} }`;
-  }
-  throw new Error(`unsupported TOML value: ${String(value)}`);
-}
-
-function tomlTable(data: Data, order: string[] = Object.keys(data)): string {
-  return order
-    .filter((key) => Object.prototype.hasOwnProperty.call(data, key))
-    .map((key) => `${tomlKey(key)} = ${tomlValue(data[key])}`)
-    .join("\n") + "\n";
-}
-
-function renderEntry(root: string, kind: Kind, data: Data): string {
-  const templatePath = join(root, "templates", `${kind}.toml`);
-  const templateValue: unknown = parseToml(readFileSync(templatePath, "utf8"));
-  if (!isRecord(templateValue)) throw new Error(`templates/${kind}.toml must contain a TOML table`);
-  // Use the template's field order, but never copy its sample values.
-  const order = [...new Set([...Object.keys(templateValue), ...FIELD_ORDER[kind]])];
-  return tomlTable(data, order);
 }
 
 function printAddResult(
@@ -248,50 +113,11 @@ function printAddResult(
   else console.error(`Could not add ${result.type} ${result.id} at ${result.path}; validation failed`);
 }
 
-function rollbackAdd(
-  entryPath: string,
-  entryText: string,
-  entryCreated: boolean,
-  localPathFile: string,
-  localPathText: string | null,
-  localPathWritten: boolean,
-  previousLocalPathText: string | null,
-): string[] {
-  const errors: string[] = [];
-  if (entryCreated && existsSync(entryPath)) {
-    try {
-      if (readFileSync(entryPath, "utf8") !== entryText) {
-        errors.push("new entry changed during rollback and was not removed");
-      } else {
-        unlinkSync(entryPath);
-      }
-    } catch (error) {
-      errors.push(`could not remove new entry: ${errorMessage(error)}`);
-    }
-  }
-  if (localPathWritten && existsSync(localPathFile)) {
-    try {
-      if (readFileSync(localPathFile, "utf8") !== localPathText) {
-        errors.push("local/paths.toml changed during rollback and was not restored");
-      } else if (previousLocalPathText === null) {
-        unlinkSync(localPathFile);
-      } else {
-        writeFileSync(localPathFile, previousLocalPathText, "utf8");
-      }
-    } catch (error) {
-      errors.push(`could not restore local/paths.toml: ${errorMessage(error)}`);
-    }
-  }
-  return errors;
-}
-
 function addEntry(catalog: Catalog, options: Options): number {
   const kind = options.kind!;
   const id = options.id!;
   const data = options.data!;
   const relativeEntryPath = entryFile(kind, id);
-  const entryPath = join(catalog.root, relativeEntryPath);
-  const localPathFile = join(catalog.root, "local/paths.toml");
   const failure = (errors: string[], status = 2, warnings: string[] = []): number => {
     printAddResult(options.json, {
       ok: false,
@@ -303,14 +129,11 @@ function addEntry(catalog: Catalog, options: Options): number {
     return status;
   };
 
-  const duplicatePaths = ENTRY_DIRS
-    .map(([, directory]) => join(catalog.root, directory, `${id}.toml`))
-    .filter((path) => existsSync(path));
-  if (catalog.entries.some((entry) => entry.id === id) || duplicatePaths.length) {
+  if (catalog.entries.some((entry) => entry.id === id) || catalog.store.entryFileExists(id)) {
     return failure([`ID ${JSON.stringify(id)} already exists`]);
   }
 
-  const ignored = gitIgnored(catalog.root, relativeEntryPath);
+  const ignored = catalog.git.isIgnored(relativeEntryPath);
   if ("error" in ignored) return failure([`could not check Git ignore rule: ${ignored.error}`]);
   if (!ignored.ignored) return failure([`${relativeEntryPath} is not ignored by Git`]);
 
@@ -319,79 +142,18 @@ function addEntry(catalog: Catalog, options: Options): number {
   const inputFinding = validateEntryData(catalog, candidate, maps.seen, maps.keys);
   if (inputFinding.errors.length) return failure(inputFinding.errors, 2, inputFinding.warnings);
 
-  let entryText: string;
-  try {
-    entryText = renderEntry(catalog.root, kind, data);
-  } catch (error) {
-    return failure([`cannot create entry from template: ${errorMessage(error)}`]);
-  }
-
-  let previousLocalPathText: string | null = null;
-  let localPathText: string | null = null;
-  if (options.localPath !== undefined) {
-    try {
-      if (existsSync(localPathFile)) {
-        previousLocalPathText = readFileSync(localPathFile, "utf8");
-        const parsed: unknown = parseToml(previousLocalPathText);
-        if (!isRecord(parsed)) return failure(["local/paths.toml must contain a TOML table"]);
-        localPathText = tomlTable({ ...parsed, [id]: options.localPath });
-      } else {
-        localPathText = tomlTable({ [id]: options.localPath });
-      }
-    } catch (error) {
-      return failure([`cannot update local/paths.toml: ${errorMessage(error)}`]);
-    }
-  }
-
-  let entryCreated = false;
-  let localPathWritten = false;
-  try {
-    writeFileSync(entryPath, entryText, { encoding: "utf8", flag: "wx" });
-    entryCreated = true;
-    if (localPathText !== null) {
-      mkdirSync(dirname(localPathFile), { recursive: true });
-      writeFileSync(localPathFile, localPathText, "utf8");
-      localPathWritten = true;
-    }
-  } catch (error) {
-    const rollbackErrors = rollbackAdd(
-      entryPath,
-      entryText,
-      entryCreated,
-      localPathFile,
-      localPathText,
-      localPathWritten,
-      previousLocalPathText,
-    );
-    return failure([`could not write entry: ${errorMessage(error)}`, ...rollbackErrors], 1);
-  }
+  const created = catalog.store.createEntry(kind, id, data, options.localPath);
+  if (created.status === "invalid") return failure(created.errors);
+  if (created.status === "failed") return failure(created.errors, 1);
 
   let validation: Finding;
   try {
     validation = validateCatalog(new Catalog(catalog.root));
   } catch (error) {
-    const rollbackErrors = rollbackAdd(
-      entryPath,
-      entryText,
-      entryCreated,
-      localPathFile,
-      localPathText,
-      localPathWritten,
-      previousLocalPathText,
-    );
-    return failure([`catalog validation failed: ${errorMessage(error)}`, ...rollbackErrors], 1);
+    return failure([`catalog validation failed: ${errorMessage(error)}`, ...created.rollback()], 1);
   }
   if (validation.errors.length) {
-    const rollbackErrors = rollbackAdd(
-      entryPath,
-      entryText,
-      entryCreated,
-      localPathFile,
-      localPathText,
-      localPathWritten,
-      previousLocalPathText,
-    );
-    return failure([...validation.errors, ...rollbackErrors], 1, validation.warnings);
+    return failure([...validation.errors, ...created.rollback()], 1, validation.warnings);
   }
 
   printAddResult(options.json, {
