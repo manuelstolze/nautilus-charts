@@ -1,19 +1,18 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import { parse as parseToml } from "smol-toml";
-import {
-  Catalog,
-  dependenciesFor,
-  main,
-  reverseDependencies,
-  showEntry,
-  validateCatalog,
-} from "../scripts/charts.ts";
+import { main } from "../scripts/charts.ts";
+import { GitCli } from "../src/adapters/git-cli.ts";
+import { TomlStore } from "../src/adapters/toml-store.ts";
+import { checkCatalog as validateCatalog } from "../src/commands/check.ts";
+import { showEntry } from "../src/commands/show.ts";
+import { CatalogIndex } from "../src/domain/catalog.ts";
+import { dependenciesFor, reverseDependencies } from "../src/domain/dependencies.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const TSX = join(REPO_ROOT, "node_modules/.bin/tsx");
@@ -83,7 +82,7 @@ afterEach(() => rmSync(temporary, { recursive: true, force: true }));
 
 describe("catalog validation", () => {
   test("accepts a missing local paths file", () => {
-    const result = validateCatalog(new Catalog(root));
+    const result = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
     assert.deepEqual(result.errors, []);
     assert.ok(result.warnings.some((warning) => warning.includes("local/paths.toml is missing")));
   });
@@ -92,7 +91,7 @@ describe("catalog validation", () => {
     write("systems/broken.toml", "description = [\n");
     write("systems/unknown.toml", 'description = "Extra field."\nextra = true\n');
     write("externals/no-description.toml", 'provider = "vendor"\n');
-    const { errors } = validateCatalog(new Catalog(root));
+    const { errors } = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
     assert.ok(errors.some((error) => error.includes("systems/broken.toml: invalid TOML")));
     assert.ok(errors.some((error) => error.includes("unknown field(s): extra")));
     assert.ok(errors.some((error) => error.includes("missing required field: description")));
@@ -102,7 +101,7 @@ describe("catalog validation", () => {
     write("repositories/Bad_ID.toml", 'description = "Bad ID."\n');
     write("repositories/shared-id.toml", 'description = "A repository."\n');
     write("externals/shared-id.toml", 'description = "An external."\n');
-    const { errors } = validateCatalog(new Catalog(root));
+    const { errors } = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
     assert.ok(errors.some((error) => error.includes("ID \"Bad_ID\" is not lowercase kebab-case")));
     assert.ok(errors.some((error) => error.includes("duplicate ID \"shared-id\"")));
   });
@@ -112,7 +111,7 @@ describe("catalog validation", () => {
       "repositories/alpha-app.toml",
       'description = "Alpha application."\nsystem = "alpha"\nstatus = "paused"\ntags = ["unknown"]\n',
     );
-    const { errors } = validateCatalog(new Catalog(root));
+    const { errors } = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
     assert.ok(errors.some((error) => error.includes("invalid status \"paused\"")));
     assert.ok(errors.some((error) => error.includes("tag \"unknown\" is not defined")));
   });
@@ -123,7 +122,7 @@ describe("catalog validation", () => {
       'description = "Alpha application."\nsystem = "missing-system"\n' +
         'depends-on = [{ id = "alpha-app" }, { id = "missing-repo" }, { id = "beta-lib", extra = true, via = 4 }]\n',
     );
-    const { errors } = validateCatalog(new Catalog(root));
+    const { errors } = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
     assert.ok(errors.some((error) => error.includes("system \"missing-system\" does not name a system")));
     assert.ok(errors.some((error) => error.includes("cannot point to the same repository")));
     assert.ok(errors.some((error) => error.includes("ID \"missing-repo\" does not exist")));
@@ -140,7 +139,7 @@ describe("catalog validation", () => {
       'description = "Alpha application."\nsystem = "alpha"\n' +
         'depends-on = [{ id = "beta-lib" }, { id = "old-lib" }, { id = "old-api" }]\n',
     );
-    const result = validateCatalog(new Catalog(root));
+    const result = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
     assert.deepEqual(result.errors, []);
     assert.ok(result.warnings.some((warning) => warning.includes("deprecated entry \"beta-lib\"")));
     assert.ok(result.warnings.some((warning) => warning.includes("archived entry \"old-lib\"")));
@@ -159,7 +158,7 @@ describe("catalog validation", () => {
       "local/paths.toml",
       `alpha-app = "${nonRepo}"\nbeta-lib = "${join(root, "absent")}"\ngamma-app = "${work}"\n`,
     );
-    const { errors } = validateCatalog(new Catalog(root));
+    const { errors } = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
     assert.ok(errors.some((error) => error.includes("not a Git repository root")));
     assert.ok(errors.some((error) => error.includes("path does not exist")));
     assert.ok(errors.some((error) => error.includes("remote does not match") && error.includes("gamma-app")));
@@ -169,13 +168,13 @@ describe("catalog validation", () => {
   test("requires Git to ignore local/paths.toml", () => {
     writeFileSync(join(root, ".gitignore"), "", "utf8");
     write("local/paths.toml", 'alpha-app = "/missing"\n');
-    const { errors } = validateCatalog(new Catalog(root));
+    const { errors } = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
     assert.ok(errors.some((error) => error.includes("local/paths.toml is not ignored")));
   });
 
   test("accepts a repository key and returns it from show and find", () => {
     write("repositories/alpha-app.toml", 'description = "Alpha application."\nkey = "NBR"\nsystem = "alpha"\n');
-    assert.deepEqual(validateCatalog(new Catalog(root)).errors, []);
+    assert.deepEqual(validateCatalog({ store: new TomlStore(root), git: new GitCli(root) }).errors, []);
 
     const shown = capture(() => main(["show", "alpha-app", "--json"], root));
     assert.equal(shown.result, 0);
@@ -197,7 +196,7 @@ describe("catalog validation", () => {
     write("repositories/first-key.toml", 'description = "First key."\nkey = "NBR"\n');
     write("repositories/second-key.toml", 'description = "Second key."\nkey = "NBR"\n');
     write("systems/system-key.toml", 'description = "System key."\nkey = "SYS"\n');
-    const { errors } = validateCatalog(new Catalog(root));
+    const { errors } = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
 
     for (const id of ["lower-key", "short-key", "long-key", "digit-key", "number-key"]) {
       assert.deepEqual(errors.filter((error) => error.startsWith(`repositories/${id}.toml:`)), [`repositories/${id}.toml: ${form}`]);
@@ -455,7 +454,7 @@ describe("charts add", () => {
 
 describe("catalog commands", () => {
   test("derives system dependencies from repository dependencies", () => {
-    const catalog = new Catalog(root);
+    const catalog = new CatalogIndex(new TomlStore(root).load());
     const result = dependenciesFor(catalog, catalog.get("alpha")!);
     assert.deepEqual(result.system_dependencies, [
       { id: "beta", type: "system", via_repositories: ["alpha-app"] },
@@ -464,7 +463,7 @@ describe("catalog commands", () => {
   });
 
   test("finds reverse dependencies for repositories, externals, and systems", () => {
-    const catalog = new Catalog(root);
+    const catalog = new CatalogIndex(new TomlStore(root).load());
     const repository = reverseDependencies(catalog, catalog.get("beta-lib")!);
     const external = reverseDependencies(catalog, catalog.get("stripe")!);
     const system = reverseDependencies(catalog, catalog.get("beta")!);
@@ -482,7 +481,7 @@ describe("catalog commands", () => {
     mkdirSync(work);
     execFileSync("git", ["init", "-q", work]);
     write("local/paths.toml", `alpha-app = "${work}"\n`);
-    const result = showEntry(new Catalog(root), new Catalog(root).get("alpha-app")!);
+    const result = showEntry({ index: new CatalogIndex(new TomlStore(root).load()), git: new GitCli(root) }, new CatalogIndex(new TomlStore(root).load()).get("alpha-app")!);
     assert.equal(result.local_path, work);
     assert.equal(result.local_path_status, "ok");
   });
@@ -510,6 +509,7 @@ describe("catalog commands", () => {
     // The catalog is git-ignored, so run a copy of the script inside the fixture.
     mkdirSync(join(root, "scripts"));
     copyFileSync(join(REPO_ROOT, "scripts/charts.ts"), join(root, "scripts/charts.ts"));
+    cpSync(join(REPO_ROOT, "src"), join(root, "src"), { recursive: true });
     symlinkSync(join(REPO_ROOT, "node_modules"), join(root, "node_modules"));
     const otherDirectory = mkdtempSync(join(tmpdir(), "charts-cwd-"));
     try {
