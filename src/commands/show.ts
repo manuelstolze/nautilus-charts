@@ -8,7 +8,7 @@ export type EntryResult = { status: 0; data: Data } | { status: 2; error: string
 
 /** Shows an entry, with a repository's local path only when its check passes. */
 export function showEntry({ index, git }: { index: CatalogIndex; git: GitInspector }, entry: Entry): Data {
-  return showWithFacts(index, entry, localPathFacts(index.snapshot, git, entry.id));
+  return showWithFacts(index, entry, localPathFacts(index, git, entry.id));
 }
 
 export function unknownEntry(id: string): EntryResult {

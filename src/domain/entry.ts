@@ -12,6 +12,8 @@ export const ENTRY_DIRS: Array<[Kind, string]> = [
   ["repository", "repositories"],
   ["external", "externals"],
 ];
+/** The root-relative file that maps repository IDs to local paths. */
+export const LOCAL_PATHS_FILE = "local/paths.toml";
 export const STATUSES = new Set(["planned", "active", "deprecated", "archived"]);
 export const FIELD_ORDER: Record<Kind, string[]> = {
   system: ["name", "description", "owner", "status"],

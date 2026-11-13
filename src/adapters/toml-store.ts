@@ -2,10 +2,17 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFile
 import { dirname, join, resolve } from "node:path";
 import { parse as parseToml } from "smol-toml";
 import type { Snapshot } from "../domain/catalog.ts";
-import { ENTRY_DIRS, entryFile, errorMessage, FIELD_ORDER, isRecord, type Data, type Kind } from "../domain/entry.ts";
+import {
+  ENTRY_DIRS,
+  entryFile,
+  errorMessage,
+  FIELD_ORDER,
+  isRecord,
+  LOCAL_PATHS_FILE as LOCAL_PATHS,
+  type Data,
+  type Kind,
+} from "../domain/entry.ts";
 import type { CatalogStore } from "../commands/ports.ts";
-
-const LOCAL_PATHS = "local/paths.toml";
 
 function tomlKey(value: string): string {
   return /^[A-Za-z0-9_-]+$/.test(value) ? value : JSON.stringify(value);

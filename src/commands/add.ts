@@ -24,7 +24,8 @@ export function add(ports: Ports, { kind, id, data, localPath }: AddOptions): Ad
   });
 
   const index = new CatalogIndex(store.load());
-  if (index.entries.some((entry) => entry.id === id) || store.entryFileExists(id)) {
+  // Every loaded entry has a file, and unreadable files count too.
+  if (store.entryFileExists(id)) {
     return failure([`ID ${JSON.stringify(id)} already exists`]);
   }
 

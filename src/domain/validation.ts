@@ -143,10 +143,9 @@ export function validationMaps(index: CatalogIndex): { seen: Map<string, Entry>;
 }
 
 /** The configured local paths that name a repository and so need a check on this machine. */
-export function localPathTargets(snapshot: Snapshot): LocalPathTarget[] {
-  const index = new CatalogIndex(snapshot);
+export function localPathTargets(index: CatalogIndex): LocalPathTarget[] {
   const targets: LocalPathTarget[] = [];
-  for (const [id, rawPath] of Object.entries(snapshot.localPaths ?? {})) {
+  for (const [id, rawPath] of Object.entries(index.snapshot.localPaths ?? {})) {
     const target = index.get(id);
     if (isString(rawPath) && target?.kind === "repository") targets.push({ id, rawPath, remote: target.data.remote });
   }
