@@ -2,15 +2,42 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse as parseToml } from "smol-toml";
 
-type Kind = "system" | "repository" | "external";
-type Data = Record<string, unknown>;
-type Dependency = { id: string; via?: unknown; [key: string]: unknown };
-type Entry = { kind: Kind; id: string; data: Data; path: string };
-type Finding = { errors: string[]; warnings: string[] };
+import { CatalogIndex, type Snapshot } from "../src/domain/catalog.ts";
+import {
+  dependenciesFor as domainDependenciesFor,
+  reverseDependencies as domainReverseDependencies,
+  showEntry as domainShowEntry,
+} from "../src/domain/dependencies.ts";
+import {
+  compact,
+  ENTRY_DIRS,
+  entryFile,
+  entryJson,
+  entryName,
+  entryStatus,
+  errorMessage,
+  FIELD_ORDER,
+  ID_PATTERN,
+  isRecord,
+  isString,
+  STATUSES,
+  type Data,
+  type Entry,
+  type Finding,
+  type Kind,
+} from "../src/domain/entry.ts";
+import {
+  localPathTargets,
+  validateCatalog as domainValidateCatalog,
+  validateEntryData,
+  validationMaps,
+  type LocalPathFact,
+} from "../src/domain/validation.ts";
+
 type Options = {
   command: "find" | "show" | "deps" | "rdeps" | "check" | "add";
   json: boolean;
@@ -26,149 +53,57 @@ type Options = {
 };
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const KEY_PATTERN = /^[A-Z][A-Z0-9]{1,4}$/;
-const ENTRY_DIRS: Array<[Kind, string]> = [
-  ["system", "systems"],
-  ["repository", "repositories"],
-  ["external", "externals"],
-];
-const STATUSES = new Set(["planned", "active", "deprecated", "archived"]);
-const FIELD_ORDER: Record<Kind, string[]> = {
-  system: ["name", "description", "owner", "status"],
-  repository: [
-    "name",
-    "description",
-    "key",
-    "system",
-    "status",
-    "owner",
-    "tags",
-    "remote",
-    "default-branch",
-    "depends-on",
-  ],
-  external: ["name", "description", "provider", "kind", "status"],
-};
-const FIELDS: Record<Kind, Set<string>> = {
-  system: new Set(FIELD_ORDER.system),
-  repository: new Set(FIELD_ORDER.repository),
-  external: new Set(FIELD_ORDER.external),
-};
 
-function isRecord(value: unknown): value is Data {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function isString(value: unknown): value is string {
-  return typeof value === "string";
-}
-
-function entryName(entry: Entry): string {
-  return isString(entry.data.name) ? entry.data.name : entry.id;
-}
-
-function entryStatus(entry: Entry): unknown {
-  return entry.data.status ?? "active";
-}
-
-function compact(value: unknown): string {
-  if (Array.isArray(value)) return value.map(compact).join(", ");
-  if (isRecord(value)) return Object.entries(value).map(([key, item]) => `${key}=${compact(item)}`).join(", ");
-  return String(value).replace(/\s+/g, " ").trim();
-}
-
-function entryJson(entry: Entry): Data {
-  return { ...entry.data, type: entry.kind, id: entry.id, name: entryName(entry) };
-}
-
-function validDependencies(value: unknown): Dependency[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is Dependency => isRecord(item) && isString(item.id));
-}
-
-export class Catalog {
-  readonly root: string;
-  readonly entries: Entry[] = [];
-  readonly loadErrors: string[] = [];
-  readonly tags: Data = {};
-  localPaths: Data | null = null;
-  readonly localPathsExists: boolean;
-  readonly byId = new Map<string, Entry>();
-
-  constructor(root: string) {
-    this.root = resolve(root);
-    this.localPathsExists = existsSync(join(this.root, "local/paths.toml"));
-    this.load();
-    for (const entry of this.entries) {
-      if (!this.byId.has(entry.id)) this.byId.set(entry.id, entry);
-    }
-  }
-
-  private readToml(path: string, label: string): Data | null {
+function loadSnapshot(root: string): Snapshot {
+  const snapshot: Snapshot = {
+    entries: [],
+    tags: {},
+    tagsExists: existsSync(join(root, "tags.toml")),
+    localPaths: null,
+    localPathsExists: existsSync(join(root, "local/paths.toml")),
+    loadErrors: [],
+  };
+  const readToml = (path: string, label: string): Data | null => {
     try {
       const value: unknown = parseToml(readFileSync(path, "utf8"));
       if (!isRecord(value)) {
-        this.loadErrors.push(`${label}: expected a TOML table`);
+        snapshot.loadErrors.push(`${label}: expected a TOML table`);
         return null;
       }
       return value;
     } catch (error) {
-      this.loadErrors.push(`${label}: invalid TOML: ${errorMessage(error)}`);
+      snapshot.loadErrors.push(`${label}: invalid TOML: ${errorMessage(error)}`);
       return null;
     }
-  }
-
-  private load(): void {
-    for (const [kind, directory] of ENTRY_DIRS) {
-      const folder = join(this.root, directory);
-      if (!existsSync(folder)) continue;
-      let files: string[];
-      try {
-        files = readdirSync(folder).filter((file) => file.endsWith(".toml")).sort();
-      } catch (error) {
-        this.loadErrors.push(`${directory}: cannot read entries: ${errorMessage(error)}`);
-        continue;
-      }
-      for (const file of files) {
-        const path = join(folder, file);
-        const data = this.readToml(path, relative(this.root, path));
-        if (data) this.entries.push({ kind, id: file.slice(0, -5), data, path });
-      }
+  };
+  for (const [kind, directory] of ENTRY_DIRS) {
+    const folder = join(root, directory);
+    if (!existsSync(folder)) continue;
+    let files: string[];
+    try {
+      files = readdirSync(folder).filter((file) => file.endsWith(".toml")).sort();
+    } catch (error) {
+      snapshot.loadErrors.push(`${directory}: cannot read entries: ${errorMessage(error)}`);
+      continue;
     }
-
-    const tagsPath = join(this.root, "tags.toml");
-    if (existsSync(tagsPath)) Object.assign(this.tags, this.readToml(tagsPath, "tags.toml") ?? {});
-
-    const localPath = join(this.root, "local/paths.toml");
-    if (this.localPathsExists) this.localPaths = this.readToml(localPath, "local/paths.toml");
-  }
-
-  entriesFor(kind: Kind): Entry[] {
-    return this.entries.filter((entry) => entry.kind === kind);
-  }
-
-  get(id: string): Entry | undefined {
-    return this.byId.get(id);
-  }
-
-  systemEdges(): Map<string, Map<string, Set<string>>> {
-    const edges = new Map<string, Map<string, Set<string>>>();
-    for (const repository of this.entriesFor("repository")) {
-      const sourceSystem = repository.data.system;
-      if (!isString(sourceSystem)) continue;
-      for (const dependency of validDependencies(repository.data["depends-on"])) {
-        const target = this.get(dependency.id);
-        if (!target || target.kind !== "repository" || !isString(target.data.system)) continue;
-        const targetSystem = target.data.system;
-        if (targetSystem === sourceSystem) continue;
-        if (!edges.has(sourceSystem)) edges.set(sourceSystem, new Map());
-        const sourceEdges = edges.get(sourceSystem)!;
-        if (!sourceEdges.has(targetSystem)) sourceEdges.set(targetSystem, new Set());
-        sourceEdges.get(targetSystem)!.add(repository.id);
-      }
+    for (const file of files) {
+      const label = `${directory}/${file}`;
+      const data = readToml(join(folder, file), label);
+      if (data) snapshot.entries.push({ kind, id: file.slice(0, -5), data, file: label });
     }
-    return edges;
+  }
+  if (snapshot.tagsExists) Object.assign(snapshot.tags, readToml(join(root, "tags.toml"), "tags.toml") ?? {});
+  if (snapshot.localPathsExists) snapshot.localPaths = readToml(join(root, "local/paths.toml"), "local/paths.toml");
+  return snapshot;
+}
+
+export class Catalog extends CatalogIndex {
+  readonly root: string;
+
+  constructor(root: string) {
+    const resolved = resolve(root);
+    super(loadSnapshot(resolved));
+    this.root = resolved;
   }
 }
 
@@ -197,21 +132,6 @@ function gitRemotes(path: string): Set<string> {
   return remotes;
 }
 
-function remoteHasCredentials(remote: string): boolean {
-  if (!remote.includes("://")) return false;
-  try {
-    const url = new URL(remote);
-    if (url.password || ((url.protocol === "http:" || url.protocol === "https:") && url.username)) return true;
-    const sensitive = ["token", "password", "secret", "credential", "api_key", "apikey", "auth"];
-    for (const key of url.searchParams.keys()) {
-      if (sensitive.some((word) => key.toLowerCase().includes(word))) return true;
-    }
-  } catch {
-    return false;
-  }
-  return false;
-}
-
 function localPathError(path: string, remote?: unknown): string | null {
   if (!existsSync(path)) return `path does not exist: ${path}`;
   try {
@@ -229,249 +149,47 @@ function localPathError(path: string, remote?: unknown): string | null {
   return null;
 }
 
-export function showEntry(catalog: Catalog, entry: Entry): Data {
-  const result = entryJson(entry);
-  if (entry.kind !== "repository") return result;
-  const configured = catalog.localPaths?.[entry.id];
-  if (!isString(configured)) {
-    return { ...result, local_path: null, local_path_status: "not configured" };
-  }
-  const path = resolveLocalPath(catalog.root, configured);
-  const error = localPathError(path, entry.data.remote);
-  return {
-    ...result,
-    local_path: error ? null : path,
-    local_path_status: error ?? "ok",
-  };
+function inspectLocalPath(root: string, rawPath: string, remote: unknown): LocalPathFact {
+  const resolved = resolveLocalPath(root, rawPath);
+  return { resolved, error: localPathError(resolved, remote) };
 }
 
-function repositoryDependencies(catalog: Catalog, repository: Entry): Data[] {
-  const result: Data[] = [];
-  for (const dependency of validDependencies(repository.data["depends-on"])) {
-    const target = catalog.get(dependency.id);
-    const item: Data = { id: dependency.id, type: target?.kind ?? "unknown" };
-    if (target) item.name = entryName(target);
-    if ("via" in dependency) item.via = dependency.via;
-    result.push(item);
+function localPathFacts(catalog: Catalog, only?: string): Map<string, LocalPathFact> {
+  const facts = new Map<string, LocalPathFact>();
+  for (const target of localPathTargets(catalog.snapshot)) {
+    if (only === undefined || target.id === only) {
+      facts.set(target.id, inspectLocalPath(catalog.root, target.rawPath, target.remote));
+    }
   }
-  return result;
+  return facts;
+}
+
+function gitIgnored(root: string, relativePath: string): { ignored: boolean } | { error: string } {
+  const ignored = spawnSync("git", ["check-ignore", "-q", relativePath], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  if (ignored.error) return { error: ignored.error.message };
+  return { ignored: ignored.status === 0 };
+}
+
+export function showEntry(catalog: Catalog, entry: Entry): Data {
+  return domainShowEntry(catalog, entry, localPathFacts(catalog, entry.id));
 }
 
 export function dependenciesFor(catalog: Catalog, entry: Entry): Data {
-  if (entry.kind === "repository") {
-    return { id: entry.id, type: entry.kind, dependencies: repositoryDependencies(catalog, entry) };
-  }
-  const members = catalog.entriesFor("repository")
-    .filter((repository) => repository.data.system === entry.id)
-    .sort((left, right) => left.id.localeCompare(right.id));
-  const dependencies: Data[] = [];
-  for (const repository of members) {
-    for (const dependency of repositoryDependencies(catalog, repository)) {
-      dependencies.push({ ...dependency, from: repository.id });
-    }
-  }
-
-  const systemDependencies: Data[] = [];
-  const edges = catalog.systemEdges().get(entry.id);
-  if (edges) {
-    for (const [id, repositories] of [...edges.entries()].sort(([left], [right]) => left.localeCompare(right))) {
-      systemDependencies.push({ id, type: "system", via_repositories: [...repositories].sort() });
-    }
-  }
-  return {
-    id: entry.id,
-    type: entry.kind,
-    dependencies,
-    system_dependencies: systemDependencies,
-  };
+  return domainDependenciesFor(catalog, entry);
 }
 
 export function reverseDependencies(catalog: Catalog, entry: Entry): Data {
-  let targetIds = new Set([entry.id]);
-  if (entry.kind === "system") {
-    targetIds = new Set(
-      catalog.entriesFor("repository")
-        .filter((repository) => repository.data.system === entry.id)
-        .map((repository) => repository.id),
-    );
-  }
-
-  const direct = new Map<string, Entry>();
-  for (const repository of catalog.entriesFor("repository")) {
-    if (validDependencies(repository.data["depends-on"]).some((dependency) => targetIds.has(dependency.id))) {
-      direct.set(repository.id, repository);
-    }
-  }
-  const dependents: Data[] = [...direct.values()]
-    .sort((left, right) => left.id.localeCompare(right.id))
-    .map((item) => ({ id: item.id, type: item.kind, name: entryName(item) }));
-
-  if (entry.kind === "system") {
-    for (const [systemId, targets] of [...catalog.systemEdges().entries()].sort(([left], [right]) => left.localeCompare(right))) {
-      const repositories = targets.get(entry.id);
-      if (!repositories) continue;
-      const source = catalog.get(systemId);
-      dependents.push({
-        id: systemId,
-        type: "system",
-        name: source ? entryName(source) : systemId,
-        via_repositories: [...repositories].sort(),
-      });
-    }
-  }
-  return { id: entry.id, type: entry.kind, dependents };
-}
-
-function validateEntryData(
-  catalog: Catalog,
-  entry: Entry,
-  seen: Map<string, Entry>,
-  keys: Map<string, Entry>,
-): Finding {
-  const errors: string[] = [];
-  const warnings: string[] = [];
-  const file = relative(catalog.root, entry.path);
-  if (!ID_PATTERN.test(entry.id)) errors.push(`${file}: ID ${JSON.stringify(entry.id)} is not lowercase kebab-case`);
-  const prior = seen.get(entry.id);
-  if (prior) errors.push(`${file}: duplicate ID ${JSON.stringify(entry.id)}; also used by ${relative(catalog.root, prior.path)}`);
-  else seen.set(entry.id, entry);
-
-  const unknown = Object.keys(entry.data).filter((field) => !FIELDS[entry.kind].has(field)).sort();
-  if (unknown.length) errors.push(`${file}: unknown field(s): ${unknown.join(", ")}`);
-  if (!("description" in entry.data)) errors.push(`${file}: missing required field: description`);
-  else if (!isString(entry.data.description)) errors.push(`${file}: description must be a string`);
-
-  for (const field of ["name", "owner", "remote", "default-branch"]) {
-    if (field in entry.data && !isString(entry.data[field])) errors.push(`${file}: ${field} must be a string`);
-  }
-  if (entry.kind === "external") {
-    for (const field of ["provider", "kind"]) {
-      if (field in entry.data && !isString(entry.data[field])) errors.push(`${file}: ${field} must be a string`);
-    }
-  }
-
-  const status = entryStatus(entry);
-  if (!isString(status) || !STATUSES.has(status)) errors.push(`${file}: invalid status ${JSON.stringify(status)}`);
-  if (isString(entry.data.remote) && remoteHasCredentials(entry.data.remote)) {
-    errors.push(`${file}: remote must not contain credentials`);
-  }
-
-  if (entry.kind !== "repository") return { errors, warnings };
-  const key = entry.data.key;
-  if (key !== undefined && (!isString(key) || !KEY_PATTERN.test(key))) {
-    errors.push(`${file}: key must be 2–5 characters: an uppercase letter, then uppercase letters or digits`);
-  } else if (isString(key)) {
-    const priorKey = keys.get(key);
-    if (priorKey) errors.push(`${file}: duplicate key ${JSON.stringify(key)}; also used by ${relative(catalog.root, priorKey.path)}`);
-    else keys.set(key, entry);
-  }
-
-  const systemId = entry.data.system;
-  if (systemId !== undefined && !isString(systemId)) {
-    errors.push(`${file}: system must be a string`);
-  } else if (isString(systemId)) {
-    const target = catalog.get(systemId);
-    if (!target || target.kind !== "system") errors.push(`${file}: system ${JSON.stringify(systemId)} does not name a system`);
-  }
-
-  const tags = entry.data.tags ?? [];
-  if (!Array.isArray(tags) || tags.some((tag) => !isString(tag))) {
-    errors.push(`${file}: tags must be a list of strings`);
-  } else {
-    for (const tag of tags) {
-      if (!(tag in catalog.tags)) errors.push(`${file}: tag ${JSON.stringify(tag)} is not defined in tags.toml`);
-    }
-  }
-
-  const rawDependencies = entry.data["depends-on"] ?? [];
-  if (!Array.isArray(rawDependencies)) {
-    errors.push(`${file}: depends-on must be a list`);
-    return { errors, warnings };
-  }
-  for (const [index, rawDependency] of rawDependencies.entries()) {
-    const label = `${file}: depends-on[${index}]`;
-    if (!isRecord(rawDependency)) {
-      errors.push(`${label} must be a table`);
-      continue;
-    }
-    const extra = Object.keys(rawDependency).filter((field) => !["id", "via"].includes(field)).sort();
-    if (extra.length) errors.push(`${label} has unknown field(s): ${extra.join(", ")}`);
-    const dependencyId = rawDependency.id;
-    if (!isString(dependencyId)) {
-      errors.push(`${label} requires a string id`);
-      continue;
-    }
-    if (dependencyId === entry.id) errors.push(`${label} cannot point to the same repository`);
-    const target = catalog.get(dependencyId);
-    if (!target) errors.push(`${label} ID ${JSON.stringify(dependencyId)} does not exist`);
-    else if (target.kind !== "repository" && target.kind !== "external") {
-      errors.push(`${label} ID ${JSON.stringify(dependencyId)} is not a repository or external`);
-    }
-    if ("via" in rawDependency && !isString(rawDependency.via)) errors.push(`${label} via must be a string`);
-    const dependencyStatus = target ? entryStatus(target) : "active";
-    if (target && (dependencyStatus === "deprecated" || dependencyStatus === "archived")) {
-      warnings.push(`${label} points to ${dependencyStatus} entry ${JSON.stringify(dependencyId)}`);
-    }
-  }
-  return { errors, warnings };
-}
-
-function validationMaps(catalog: Catalog): { seen: Map<string, Entry>; keys: Map<string, Entry> } {
-  const seen = new Map<string, Entry>();
-  const keys = new Map<string, Entry>();
-  for (const entry of catalog.entries) {
-    if (!seen.has(entry.id)) seen.set(entry.id, entry);
-    const key = entry.kind === "repository" ? entry.data.key : undefined;
-    if (isString(key) && KEY_PATTERN.test(key) && !keys.has(key)) keys.set(key, entry);
-  }
-  return { seen, keys };
+  return domainReverseDependencies(catalog, entry);
 }
 
 export function validateCatalog(catalog: Catalog): Finding {
-  const errors = [...catalog.loadErrors];
-  const warnings: string[] = [];
-  const seen = new Map<string, Entry>();
-  const keys = new Map<string, Entry>();
-
-  for (const entry of catalog.entries) {
-    const result = validateEntryData(catalog, entry, seen, keys);
-    errors.push(...result.errors);
-    warnings.push(...result.warnings);
-  }
-
-  const tagsPath = join(catalog.root, "tags.toml");
-  if (!existsSync(tagsPath)) errors.push("tags.toml is missing");
-  for (const [tag, description] of Object.entries(catalog.tags)) {
-    if (!isString(description)) errors.push(`tags.toml: description for ${JSON.stringify(tag)} must be a string`);
-  }
-
-  if (catalog.localPaths === null) {
-    if (!catalog.localPathsExists) warnings.push("local/paths.toml is missing; local path checks were skipped");
-  } else {
-    for (const [repositoryId, rawPath] of Object.entries(catalog.localPaths)) {
-      if (!isString(rawPath)) {
-        errors.push(`local/paths.toml: path for ${JSON.stringify(repositoryId)} must be a string`);
-        continue;
-      }
-      const target = catalog.get(repositoryId);
-      if (!target || target.kind !== "repository") {
-        errors.push(`local/paths.toml: ${JSON.stringify(repositoryId)} does not name a repository`);
-        continue;
-      }
-      const path = resolveLocalPath(catalog.root, rawPath);
-      const pathError = localPathError(path, target.data.remote);
-      if (pathError) errors.push(`local/paths.toml: ${pathError} for ${JSON.stringify(repositoryId)}`);
-    }
-  }
-
-  const ignored = spawnSync("git", ["check-ignore", "-q", "local/paths.toml"], {
-    cwd: catalog.root,
-    encoding: "utf8",
+  return domainValidateCatalog(catalog.snapshot, {
+    localPaths: localPathFacts(catalog),
+    localPathsIgnored: gitIgnored(catalog.root, "local/paths.toml"),
   });
-  if (ignored.error) errors.push(`could not check Git ignore rule: ${ignored.error.message}`);
-  else if (ignored.status !== 0) errors.push("local/paths.toml is not ignored by Git");
-
-  return { errors, warnings: [...new Set(warnings)].sort() };
 }
 
 function tomlKey(value: string): string {
@@ -499,11 +217,6 @@ function tomlTable(data: Data, order: string[] = Object.keys(data)): string {
     .filter((key) => Object.prototype.hasOwnProperty.call(data, key))
     .map((key) => `${tomlKey(key)} = ${tomlValue(data[key])}`)
     .join("\n") + "\n";
-}
-
-function entryPathFor(root: string, kind: Kind, id: string): string {
-  const directory = ENTRY_DIRS.find(([entryKind]) => entryKind === kind)![1];
-  return join(root, directory, `${id}.toml`);
 }
 
 function renderEntry(root: string, kind: Kind, data: Data): string {
@@ -576,8 +289,8 @@ function addEntry(catalog: Catalog, options: Options): number {
   const kind = options.kind!;
   const id = options.id!;
   const data = options.data!;
-  const entryPath = entryPathFor(catalog.root, kind, id);
-  const relativeEntryPath = relative(catalog.root, entryPath);
+  const relativeEntryPath = entryFile(kind, id);
+  const entryPath = join(catalog.root, relativeEntryPath);
   const localPathFile = join(catalog.root, "local/paths.toml");
   const failure = (errors: string[], status = 2, warnings: string[] = []): number => {
     printAddResult(options.json, {
@@ -597,14 +310,11 @@ function addEntry(catalog: Catalog, options: Options): number {
     return failure([`ID ${JSON.stringify(id)} already exists`]);
   }
 
-  const ignored = spawnSync("git", ["check-ignore", "-q", relativeEntryPath], {
-    cwd: catalog.root,
-    encoding: "utf8",
-  });
-  if (ignored.error) return failure([`could not check Git ignore rule: ${ignored.error.message}`]);
-  if (ignored.status !== 0) return failure([`${relativeEntryPath} is not ignored by Git`]);
+  const ignored = gitIgnored(catalog.root, relativeEntryPath);
+  if ("error" in ignored) return failure([`could not check Git ignore rule: ${ignored.error}`]);
+  if (!ignored.ignored) return failure([`${relativeEntryPath} is not ignored by Git`]);
 
-  const candidate: Entry = { kind, id, data, path: entryPath };
+  const candidate: Entry = { kind, id, data, file: relativeEntryPath };
   const maps = validationMaps(catalog);
   const inputFinding = validateEntryData(catalog, candidate, maps.seen, maps.keys);
   if (inputFinding.errors.length) return failure(inputFinding.errors, 2, inputFinding.warnings);
@@ -844,10 +554,6 @@ function printEdges(result: Data, reverse = false): void {
       console.log(`${result.id} -> system ${edge.id} via repositories ${repositories}`);
     }
   }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 export function main(argv = process.argv.slice(2), root = ROOT): number {
