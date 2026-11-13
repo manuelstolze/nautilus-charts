@@ -93,7 +93,7 @@ export function validateEntryData(
     errors.push(`${file}: tags must be a list of strings`);
   } else {
     for (const tag of tags) {
-      if (!(tag in index.snapshot.tags)) errors.push(`${file}: tag ${JSON.stringify(tag)} is not defined in tags.toml`);
+      if (!Object.hasOwn(index.snapshot.tags, tag)) errors.push(`${file}: tag ${JSON.stringify(tag)} is not defined in tags.toml`);
     }
   }
 
