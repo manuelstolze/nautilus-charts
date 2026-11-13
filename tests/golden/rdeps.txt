@@ -1,0 +1,135 @@
+## repository
+$ charts "rdeps" "beta-lib"
+exit: 0
+--- stdout
+beta-lib <- repository alpha-app
+beta-lib <- repository gamma-app
+--- stderr
+
+## repository (--json)
+$ charts "rdeps" "beta-lib" "--json"
+exit: 0
+--- stdout
+{
+  "id": "beta-lib",
+  "type": "repository",
+  "dependents": [
+    {
+      "id": "alpha-app",
+      "type": "repository",
+      "name": "Alpha App"
+    },
+    {
+      "id": "gamma-app",
+      "type": "repository",
+      "name": "gamma-app"
+    }
+  ]
+}
+--- stderr
+
+## repository without dependents
+$ charts "rdeps" "alpha-app"
+exit: 0
+--- stdout
+alpha-app: no dependents
+--- stderr
+
+## repository without dependents (--json)
+$ charts "rdeps" "alpha-app" "--json"
+exit: 0
+--- stdout
+{
+  "id": "alpha-app",
+  "type": "repository",
+  "dependents": []
+}
+--- stderr
+
+## external
+$ charts "rdeps" "stripe"
+exit: 0
+--- stdout
+stripe <- repository alpha-app
+--- stderr
+
+## external (--json)
+$ charts "rdeps" "stripe" "--json"
+exit: 0
+--- stdout
+{
+  "id": "stripe",
+  "type": "external",
+  "dependents": [
+    {
+      "id": "alpha-app",
+      "type": "repository",
+      "name": "Alpha App"
+    }
+  ]
+}
+--- stderr
+
+## system
+$ charts "rdeps" "beta"
+exit: 0
+--- stdout
+beta <- repository alpha-app
+beta <- repository gamma-app
+beta <- system alpha via repositories alpha-app
+beta <- system gamma via repositories gamma-app
+--- stderr
+
+## system (--json)
+$ charts "rdeps" "beta" "--json"
+exit: 0
+--- stdout
+{
+  "id": "beta",
+  "type": "system",
+  "dependents": [
+    {
+      "id": "alpha-app",
+      "type": "repository",
+      "name": "Alpha App"
+    },
+    {
+      "id": "gamma-app",
+      "type": "repository",
+      "name": "gamma-app"
+    },
+    {
+      "id": "alpha",
+      "type": "system",
+      "name": "Alpha",
+      "via_repositories": [
+        "alpha-app"
+      ]
+    },
+    {
+      "id": "gamma",
+      "type": "system",
+      "name": "gamma",
+      "via_repositories": [
+        "gamma-app"
+      ]
+    }
+  ]
+}
+--- stderr
+
+## unknown ID
+$ charts "rdeps" "missing"
+exit: 2
+--- stdout
+--- stderr
+unknown entry ID: missing
+
+## unknown ID (--json)
+$ charts "rdeps" "missing" "--json"
+exit: 2
+--- stdout
+{
+  "error": "unknown entry ID: missing"
+}
+--- stderr
