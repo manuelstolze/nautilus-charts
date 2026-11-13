@@ -82,6 +82,26 @@ describe("validation", () => {
     ]);
   });
 
+  test("rejects tags that the tags table only inherits", () => {
+    const inherited = ["toString", "constructor", "hasOwnProperty", "__proto__"];
+    // A plain object built without a __proto__ literal, so no inherited name is an own key.
+    const tags: Record<string, unknown> = { utility: "Shared tools." };
+    assert.deepEqual(inherited.filter((name) => Object.hasOwn(tags, name)), []);
+    const { errors } = validateCatalog(snapshot([
+      entry("repository", "tagged", { description: "Tagged.", tags: [...inherited, "utility"] }),
+    ], { tags }), NO_FACTS);
+    assert.deepEqual(errors, inherited.map((name) => `repositories/tagged.toml: tag ${JSON.stringify(name)} is not defined in tags.toml`));
+  });
+
+  test("accepts an inherited name that the tags table defines as its own key", () => {
+    const tags: Record<string, unknown> = { utility: "Shared tools." };
+    Object.defineProperty(tags, "constructor", { value: "Builds things.", enumerable: true });
+    const { errors } = validateCatalog(snapshot([
+      entry("repository", "builder", { description: "Builder.", tags: ["constructor", "utility"] }),
+    ], { tags }), NO_FACTS);
+    assert.deepEqual(errors, []);
+  });
+
   test("checks system references, dependency references, and self-dependencies", () => {
     const { errors } = validateCatalog(snapshot([
       ...BASE,
