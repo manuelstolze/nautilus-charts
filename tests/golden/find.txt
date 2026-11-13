@@ -374,6 +374,7 @@ exit: 0
 $ charts "find" "--status" "archived"
 exit: 0
 --- stdout
+external old-api — old-api — Retired API.
 repository old-tool — old-tool — Old tool.
 --- stderr
 
@@ -383,6 +384,13 @@ exit: 0
 --- stdout
 {
   "entries": [
+    {
+      "description": "Retired API.",
+      "status": "archived",
+      "type": "external",
+      "id": "old-api",
+      "name": "old-api"
+    },
     {
       "description": "Old tool.",
       "system": "alpha",
