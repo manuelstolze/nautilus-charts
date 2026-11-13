@@ -236,6 +236,14 @@ describe("catalog validation", () => {
       'ERROR: repositories/inherited-tags.toml: tag "__proto__" is not defined in tags.toml',
     ]);
   });
+
+  test("accepts inherited names that tags.toml defines", () => {
+    write("tags.toml", 'utility = "Shared tools."\nlibrary = "Reusable code."\n__proto__ = "Proto tag."\nconstructor = "Builds things."\n');
+    write("repositories/inherited-tags.toml", 'description = "Inherited tags."\ntags = ["__proto__", "constructor", "utility"]\n');
+    const { result, output } = capture(() => main(["check"], root));
+    assert.deepEqual(output.filter((line) => line.startsWith("ERROR:")), []);
+    assert.equal(result, 0);
+  });
 });
 
 describe("charts add", () => {
