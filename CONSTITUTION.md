@@ -1,6 +1,14 @@
 <!--
 Sync Impact Report
 
+1.2.1 (2026-11-13)
+- Version: 1.2.0 → 1.2.1
+- Changed rules: rule VI reworded; terminal output is rendered by the CLI
+  adapter, not reached through a core port. The meaning is unchanged.
+- Affected guidance: none. The "Code structure" section of docs/structure.md
+  already matches.
+- Open follow-up: none.
+
 1.2.0 (2026-11-13)
 - Version: 1.1.0 → 1.2.0
 - Changed rules: new rule VI. The core does no I/O; Charts uses lean hexagonal
@@ -26,7 +34,7 @@ Sync Impact Report
 
 # nautilus-charts Constitution
 
-Version 1.2.0
+Version 1.2.1
 
 These are the mandatory rules for Charts. They bind every change to this repository and every agent that runs its skills. Other guidance in this repository links to these rules instead of repeating them. Conventions, such as branch names, commit messages, and checks, are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -71,7 +79,7 @@ Other modules reach Charts's data only through its commands, with text in and ou
 
 ### VI. The core does no I/O
 
-Charts uses lean hexagonal architecture (ADR 0001). The core, in `src/domain/` and `src/commands/`, imports only other core files and does not use `console` or `process`. Files, Git, and terminal output are reached only through ports that the core defines, implemented by adapters in `src/adapters/`. Add a port only at a real boundary. `scripts/charts.ts` wires the adapters to the commands. A test enforces this rule.
+Charts uses lean hexagonal architecture (ADR 0001). The core, in `src/domain/` and `src/commands/`, imports only other core files and does not use `console` or `process`. Files and Git are reached only through ports that the core defines, implemented by adapters in `src/adapters/`. The CLI adapter renders the data that use cases return; the core never writes output. Add a port only at a real boundary. `scripts/charts.ts` wires the adapters to the commands. A test enforces this rule.
 
 ## Governance
 

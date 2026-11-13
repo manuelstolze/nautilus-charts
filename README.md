@@ -67,7 +67,7 @@ Ask an agent, for example Pi or Claude, from this repository. The `charts` skill
 Or run the script directly from the Charts root:
 
 ```bash
-npm run --silent charts -- find [text]   # filters: --system, --tag, --status, --owner
+npm run --silent charts -- find [text]   # filters: --system, --tag, --status (all entry types), --owner
 npm run --silent charts -- show <id>
 npm run --silent charts -- deps <id>
 npm run --silent charts -- rdeps <id>

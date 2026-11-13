@@ -150,7 +150,7 @@ shop-common-lib = "~/code/shop/shop-common-lib"
 
 | Command | Purpose |
 | --- | --- |
-| `find [text]` | Find entries by text. Filters: `--system`, `--tag`, `--status`, `--owner`. |
+| `find [text]` | Find entries by text. Filters: `--system`, `--tag`, `--status`, `--owner`. `--status` applies to all entry types. |
 | `show <id>` | Show one entry and, for a repository, its checked local path. |
 | `deps <id>` | Show what a repository or system depends on. For a system, also the derived system dependencies. |
 | `rdeps <id>` | Show what depends on a repository, external, or system. |
