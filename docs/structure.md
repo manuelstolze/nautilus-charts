@@ -16,8 +16,13 @@ nautilus-charts/
 ├── tags.toml
 ├── local/paths.toml          # git-ignored, one per machine
 ├── templates/                # entry templates
-├── scripts/charts.ts         # find, show, deps, rdeps, check, add
-├── tests/                    # TypeScript tests
+├── scripts/charts.ts         # entry point and composition root
+├── src/
+│   ├── domain/               # catalog rules, no I/O
+│   ├── commands/             # one use case per command, and the ports
+│   └── adapters/             # TOML store, Git, command line
+├── tests/                    # TypeScript tests, with fakes in tests/fakes/
+├── docs/adr/                 # architecture decisions
 ├── package.json              # commands and dependencies
 ├── package-lock.json
 ├── tsconfig.json
@@ -25,6 +30,15 @@ nautilus-charts/
 ```
 
 One file per entry keeps lookups small. An agent reads only the entries it needs, and edits touch one file each.
+
+## Code structure
+
+Charts uses lean hexagonal architecture ([ADR 0001](adr/0001-hexagonal-architecture.md)). [Rule VI of the constitution](../CONSTITUTION.md#vi-the-core-does-no-io) sets the dependency rule, and `tests/architecture.test.ts` enforces it.
+
+- **Core.** `src/domain/` holds the catalog rules: entry types, IDs and keys, statuses, fields, validation, and dependencies. `src/commands/` holds one use case per command (`find`, `show`, `deps` and `rdeps`, `check`, `add`). Each use case returns data and an exit status.
+- **Ports.** `src/commands/ports.ts` defines the two boundaries: the catalog store (entry files, `tags.toml`, the templates, and `local/paths.toml`) and Git (repository roots, remotes, and ignore checks).
+- **Adapters.** `src/adapters/` implements the ports with TOML files and local Git, and holds the command-line adapter that parses arguments and prints text or JSON. The tests use in-memory fakes from `tests/fakes/` instead.
+- **Composition root.** `scripts/charts.ts` parses the arguments, builds the adapters, runs the use case, and prints its result.
 
 ## IDs
 
