@@ -28,7 +28,7 @@ Use `--silent` so npm messages do not mix with JSON output. From another directo
 ## Find and show entries
 
 1. Search by ID, name, or description with `find [text]`.
-2. Narrow repository results with `--system`, `--tag`, `--status`, or `--owner`.
+2. Narrow results with `--system`, `--tag`, `--status`, or `--owner`. `--status` applies to all entry types; the other filters match only the entries that have that field.
 3. Use `show <id>` to read one entry. For a repository, use its local path only when `local_path_status` is `ok`.
 4. Use `deps <id>` to see direct dependencies. For a system, this also shows system dependencies derived from repository dependencies.
 5. Use `rdeps <id>` to find entries that depend on the target.
