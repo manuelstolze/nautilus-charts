@@ -52,7 +52,8 @@ export class TomlStore implements CatalogStore {
   load(): Snapshot {
     const snapshot: Snapshot = {
       entries: [],
-      tags: {},
+      // No prototype, so the tags table holds only names that tags.toml defines.
+      tags: Object.create(null) as Data,
       tagsExists: existsSync(join(this.root, "tags.toml")),
       localPaths: null,
       localPathsExists: existsSync(join(this.root, LOCAL_PATHS)),
@@ -88,7 +89,8 @@ export class TomlStore implements CatalogStore {
         if (data) snapshot.entries.push({ kind, id: file.slice(0, -5), data, file: label });
       }
     }
-    if (snapshot.tagsExists) Object.assign(snapshot.tags, readToml("tags.toml") ?? {});
+    // Assign, not copy: copying into an object runs the __proto__ setter.
+    if (snapshot.tagsExists) snapshot.tags = readToml("tags.toml") ?? snapshot.tags;
     if (snapshot.localPathsExists) snapshot.localPaths = readToml(LOCAL_PATHS);
     return snapshot;
   }

@@ -225,6 +225,25 @@ describe("catalog validation", () => {
     assert.equal(invalidPayload.ok, false);
     assert.ok(invalidPayload.errors.length > 0);
   });
+
+  test("rejects tags that tags.toml does not define, even inherited names", () => {
+    write("repositories/inherited-tags.toml", 'description = "Inherited tags."\ntags = ["toString", "constructor", "__proto__", "utility"]\n');
+    const { result, output } = capture(() => main(["check"], root));
+    assert.notEqual(result, 0);
+    assert.deepEqual(output.filter((line) => line.includes("repositories/inherited-tags.toml")), [
+      'ERROR: repositories/inherited-tags.toml: tag "toString" is not defined in tags.toml',
+      'ERROR: repositories/inherited-tags.toml: tag "constructor" is not defined in tags.toml',
+      'ERROR: repositories/inherited-tags.toml: tag "__proto__" is not defined in tags.toml',
+    ]);
+  });
+
+  test("accepts inherited names that tags.toml defines", () => {
+    write("tags.toml", 'utility = "Shared tools."\nlibrary = "Reusable code."\n__proto__ = "Proto tag."\nconstructor = "Builds things."\n');
+    write("repositories/inherited-tags.toml", 'description = "Inherited tags."\ntags = ["__proto__", "constructor", "utility"]\n');
+    const { result, output } = capture(() => main(["check"], root));
+    assert.deepEqual(output.filter((line) => line.startsWith("ERROR:")), []);
+    assert.equal(result, 0);
+  });
 });
 
 describe("charts add", () => {
