@@ -24,7 +24,7 @@ export function upsertSimpleLine(text: string, key: string, valueLine: string): 
   const token = `(?:${escapedKey}|"${escapedKey}"|'${escapedKey}')`;
   const assignment = new RegExp(`^\\s*${token}\\s*=`);
   const simpleLine = new RegExp(`^\\s*${token}\\s*=\\s*(?:"(?:[^"\\\\]|\\\\.)*"|'[^']*')\\s*(?:#.*)?$`);
-  const dotted = new RegExp(`^\\s*${token}\\s*\\.`);
+  const dotted = new RegExp(`^\\s*(?:${token}\\s*\\.|\\[\\[?\\s*${token}\\s*\\.)`);
   const table = new RegExp(`^\\s*(?:\\[\\s*${token}\\s*\\]|\\[\\[\\s*${token}\\s*\\]\\])\\s*(?:#.*)?$`);
   const lines = splitLines(text);
   const matches: number[] = [];
