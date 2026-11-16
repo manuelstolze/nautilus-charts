@@ -127,7 +127,9 @@ kind = "cloud-service"
 
 ### Tags
 
-`tags.toml` holds the allowed tags. A repository may use only these.
+`tags.toml` holds the allowed repository tags. It is shared and tracked by Git. Charts counts only names written as keys in this file. A repository may use only defined tags.
+
+When adding a repository, use `--new-tag <name>=<description>` once for each new tag. The name and description must be non-empty. The name must be lowercase kebab-case, must not already be a key in `tags.toml`, and must appear in the repository's `tags` list. Charts rejects a tag that the entry does not use. Existing tag descriptions are not changed.
 
 ```toml
 utility = "Shared tools, configuration, or helper code."
@@ -155,7 +157,7 @@ shop-common-lib = "~/code/shop/shop-common-lib"
 | `deps <id>` | Show what a repository or system depends on. For a system, also the derived system dependencies. |
 | `rdeps <id>` | Show what depends on a repository, external, or system. |
 | `check` | Validate all entries and the local paths. |
-| `add <system|repository|external> <id> --data '<JSON>' [--local-path <path>] [--json]` | Create one entry from its template and validate the catalog. `--local-path` is for repositories only. |
+| `add <system|repository|external> <id> --data '<JSON>' [--local-path <path>] [--new-tag <name>=<description>]... [--json]` | Create one entry from its template and validate the catalog. `--local-path` is for repositories only. `--new-tag` is for repository entries only. |
 
 `check` reports:
 
@@ -183,9 +185,11 @@ npm run --silent charts -- add repository shop-api \
 
 Charts reads the matching file in `templates/` to set the field order. It writes only supplied values, so optional template examples do not appear in the new entry. A repository can omit `--local-path`; when supplied, the path is added to ignored `local/paths.toml`. Charts checks that it is a Git repository root and that its local remote matches the entry's `remote`, if set. It uses local Git data only and does not connect to remote servers.
 
-After writing, Charts validates the full catalog. If validation fails, it removes only the new entry and restores the previous `local/paths.toml` contents. It does not change existing entry files, stage files, or commit catalog data. Entry and path files stay ignored by Git. The Charts skill asks the owner to confirm a proposed remote before adding it.
+For a missing repository tag, propose a lowercase kebab-case name and a description. Ask the owner to confirm both before passing `--new-tag`. The entry must use each new tag. Charts appends new tags to `tags.toml` and keeps all prior text unchanged.
 
-Use `--json` for machine-readable results. Success reports the type, ID, path, and validation result. Failure reports the errors and returns a non-zero status.
+After writing, Charts validates the full catalog. If a write or validation fails, it removes the new entry and restores `local/paths.toml` and `tags.toml` to their prior contents. It does not overwrite a file that changed after Charts wrote it; it reports a rollback error instead. `tags.toml` is shared and tracked by Git. A successful add leaves it uncommitted. Charts never stages or commits it; the owner decides whether to commit it. Entry and path files stay ignored by Git. The Charts skill asks the owner to confirm a proposed remote before adding it.
+
+Use `--json` for machine-readable results. Success reports the type, ID, path, and validation result. When new tags are added, it also reports `new_tags` in option order. Text output names the tags and says that the shared tag list has uncommitted changes. Failure reports the errors and returns a non-zero status.
 
 ## Updating and removing entries
 
@@ -193,7 +197,7 @@ The `charts` command does not update or remove entries. Follow the skill in `.ag
 
 ## Catalog data
 
-Git ignores the entries in `systems/`, `repositories/`, and `externals/`. Each user keeps their own catalog on their machine, so it can name private systems and remotes without publishing them. Only `templates/` and `tags.toml` are shared.
+Git ignores the entries in `systems/`, `repositories/`, and `externals/`. Each user keeps their own catalog on their machine, so it can name private systems and remotes without publishing them. Only `templates/` and the tracked `tags.toml` are shared. Charts never stages or commits `tags.toml`; its owner decides whether to commit changes.
 
 ## Not in version 1
 
