@@ -449,6 +449,152 @@ describe("charts add", () => {
     assert.equal(existsSync(join(root, "local/paths.toml")), false);
   });
 
+  test("adds repository tags and appends them without changing prior tag text", () => {
+    const originalTags = readFileSync(join(root, "tags.toml"), "utf8");
+    const result = add(
+      "repository",
+      "demo",
+      { description: "Demo.", tags: ["data-pipeline"] },
+      ["--new-tag", "data-pipeline=Moves data between systems."],
+    );
+    assert.equal(result.result, 0, JSON.stringify({ output: result.output, errors: result.errors }));
+    assert.equal(
+      readFileSync(join(root, "tags.toml"), "utf8"),
+      `${originalTags}data-pipeline = "Moves data between systems."\n`,
+    );
+    assert.equal(existsSync(join(root, "repositories/demo.toml")), true);
+    assert.equal(capture(() => main(["check"], root)).result, 0);
+    assert.ok(result.output.some((line) => line.includes("New tags: data-pipeline. The shared tag list has uncommitted changes.")));
+  });
+
+  test("adds a separator when tags.toml has no final newline", () => {
+    const originalTags = 'utility = "Shared tools."\nlibrary = "Reusable code."';
+    write("tags.toml", originalTags);
+    const result = add(
+      "repository",
+      "newline-tag",
+      { description: "Newline tag.", tags: ["data-pipeline"] },
+      ["--new-tag", "data-pipeline=Moves data."],
+    );
+    assert.equal(result.result, 0, JSON.stringify({ output: result.output, errors: result.errors }));
+    assert.equal(
+      readFileSync(join(root, "tags.toml"), "utf8"),
+      `${originalTags}\ndata-pipeline = "Moves data."\n`,
+    );
+  });
+
+  test("rejects an undefined tag without --new-tag and writes nothing", () => {
+    const originalTags = readFileSync(join(root, "tags.toml"), "utf8");
+    const result = add("repository", "missing-tag", { description: "Missing tag.", tags: ["data-pipeline"] }, ["--json"]);
+    const payload = JSON.parse(result.output.join("\\n"));
+    assert.equal(result.result, 2);
+    assert.ok(payload.validation.errors.includes('repositories/missing-tag.toml: tag "data-pipeline" is not defined in tags.toml'));
+    assert.equal(existsSync(join(root, "repositories/missing-tag.toml")), false);
+    assert.equal(readFileSync(join(root, "tags.toml"), "utf8"), originalTags);
+    assert.equal(existsSync(join(root, "local/paths.toml")), false);
+  });
+
+  test("rejects invalid and already-defined new tags without writing", () => {
+    write("tags.toml", 'utility = "Shared tools."\nlibrary = "Reusable code."\nconstructor = "Builds things."\n');
+    const originalTags = readFileSync(join(root, "tags.toml"), "utf8");
+    const cases = [
+      { id: "bad-tag-case", name: "Data_Pipeline", tags: ["Data_Pipeline"] },
+      { id: "inherited-tag", name: "toString", tags: ["toString"] },
+      { id: "existing-utility", name: "utility", tags: ["utility"] },
+      { id: "existing-constructor", name: "constructor", tags: ["constructor"] },
+      { id: "unused-tag", name: "unused-tag", tags: [] },
+    ];
+    for (const item of cases) {
+      const result = add(
+        "repository",
+        item.id,
+        { description: "Invalid new tag.", tags: item.tags },
+        ["--new-tag", `${item.name}=New description.`, "--json"],
+      );
+      assert.equal(result.result, 2, item.name);
+      assert.equal(existsSync(join(root, `repositories/${item.id}.toml`)), false);
+      assert.equal(readFileSync(join(root, "tags.toml"), "utf8"), originalTags);
+    }
+  });
+
+  test("rejects invalid --new-tag usage without writing files", () => {
+    const originalTags = readFileSync(join(root, "tags.toml"), "utf8");
+    const cases = [
+      { kind: "system", id: "tag-system", extra: ["--new-tag", "new-tag=Description."] },
+      { kind: "external", id: "tag-external", extra: ["--new-tag", "new-tag=Description."] },
+      { kind: "repository", id: "missing-equals", extra: ["--new-tag", "new-tag"] },
+      { kind: "repository", id: "empty-name", extra: ["--new-tag", "=Description."] },
+      { kind: "repository", id: "empty-description", extra: ["--new-tag", "new-tag="] },
+      {
+        kind: "repository",
+        id: "duplicate-tag",
+        extra: ["--new-tag", "new-tag=First.", "--new-tag", "new-tag=Second."],
+      },
+    ];
+    for (const item of cases) {
+      const result = add(item.kind, item.id, { description: "Usage error." }, item.extra);
+      assert.equal(result.result, 2, item.id);
+      assert.equal(existsSync(join(root, `${item.kind === "system" ? "systems" : item.kind === "external" ? "externals" : "repositories"}/${item.id}.toml`)), false);
+      assert.equal(readFileSync(join(root, "tags.toml"), "utf8"), originalTags);
+      assert.equal(existsSync(join(root, "local/paths.toml")), false);
+    }
+  });
+
+  test("restores tags and local paths after a remote mismatch", () => {
+    const existingRepository = join(temporary, "existing-repository");
+    mkdirSync(existingRepository);
+    execFileSync("git", ["init", "-q", existingRepository]);
+    const originalPaths = `# Existing path\nalpha-app = ${JSON.stringify(existingRepository)}\n`;
+    write("local/paths.toml", originalPaths);
+    const originalTags = readFileSync(join(root, "tags.toml"), "utf8");
+
+    const mismatchedRepository = join(temporary, "mismatched-repository");
+    mkdirSync(mismatchedRepository);
+    execFileSync("git", ["init", "-q", mismatchedRepository]);
+    execFileSync("git", ["-C", mismatchedRepository, "remote", "add", "origin", "https://example.com/other.git"]);
+    const result = add(
+      "repository",
+      "rollback-new-tag",
+      { description: "Rollback.", remote: "https://example.com/wanted.git", tags: ["data-pipeline"] },
+      ["--local-path", mismatchedRepository, "--new-tag", "data-pipeline=Moves data."],
+    );
+    assert.equal(result.result, 1);
+    assert.ok(result.errors.join("\\n").includes("remote does not match"));
+    assert.equal(existsSync(join(root, "repositories/rollback-new-tag.toml")), false);
+    assert.equal(readFileSync(join(root, "tags.toml"), "utf8"), originalTags);
+    assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), originalPaths);
+  });
+
+  test("escapes a new tag description and returns exact text from show", () => {
+    const description = 'Moves "quoted" data with \\ paths, café, and key=value.';
+    const result = add(
+      "repository",
+      "escaped-tag",
+      { description, tags: ["escaped-tag"] },
+      ["--new-tag", `escaped-tag=${description}`],
+    );
+    assert.equal(result.result, 0, JSON.stringify({ output: result.output, errors: result.errors }));
+    assert.equal(capture(() => main(["check"], root)).result, 0);
+    const tags = parseToml(readFileSync(join(root, "tags.toml"), "utf8")) as Record<string, unknown>;
+    assert.equal(tags["escaped-tag"], description);
+    const shown = capture(() => main(["show", "escaped-tag", "--json"], root));
+    assert.equal(shown.result, 0);
+    assert.equal(JSON.parse(shown.output.join("\\n")).description, description);
+  });
+
+  test("returns new tag names in JSON order without adding a path field", () => {
+    const result = add(
+      "repository",
+      "json-tags",
+      { description: "JSON tags.", tags: ["first-tag", "second-tag"] },
+      ["--new-tag", "first-tag=First.", "--new-tag", "second-tag=Second.", "--json"],
+    );
+    const payload = JSON.parse(result.output.join("\\n"));
+    assert.equal(result.result, 0);
+    assert.deepEqual(payload.new_tags, ["first-tag", "second-tag"]);
+    assert.deepEqual(Object.keys(payload), ["ok", "type", "id", "path", "validation", "new_tags"]);
+  });
+
   test("reports text success and JSON argument errors", () => {
     const text = add("external", "text-entry", { description: "Text output." });
     assert.equal(text.result, 0);

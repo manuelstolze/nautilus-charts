@@ -27,6 +27,85 @@ function catalog(localPaths: Record<string, string> | null = { "alpha-app": "/wo
 }
 
 describe("add use case", () => {
+  test("fake store appends new tags and restores them on rollback", () => {
+    const store = new MemoryStore({ tags: { utility: "Shared tools." } });
+    const originalTags = structuredClone(store.tags);
+    const created = store.createEntry(
+      "repository",
+      "tagged-repo",
+      { description: "Tagged repository.", tags: ["data-pipeline"] },
+      undefined,
+      [{ name: "data-pipeline", description: "Moves data." }],
+    );
+    assert.equal(created.status, "created");
+    assert.deepEqual(store.tags, { utility: "Shared tools.", "data-pipeline": "Moves data." });
+    assert.deepEqual(created.rollback(), []);
+    assert.deepEqual(store.tags, originalTags);
+    assert.equal(store.entries.some((entry) => entry.id === "tagged-repo"), false);
+  });
+
+  test("creates an entry and adds its new tags", () => {
+    const ports = catalog();
+    const result = add(ports, {
+      kind: "repository",
+      id: "tagged-repo",
+      data: { description: "Tagged repository.", tags: ["data-pipeline", "event-stream"] },
+      newTags: [
+        { name: "data-pipeline", description: "Moves data." },
+        { name: "event-stream", description: "Processes events." },
+      ],
+    });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.newTags, ["data-pipeline", "event-stream"]);
+    assert.deepEqual(ports.store.tags, {
+      utility: "Shared tools.",
+      "data-pipeline": "Moves data.",
+      "event-stream": "Processes events.",
+    });
+    assert.equal(check(ports).status, 0);
+  });
+
+  test("rejects invalid new tags without changing the store", () => {
+    const ports = catalog();
+    Object.defineProperty(ports.store.tags!, "constructor", { value: "Builds things.", enumerable: true });
+    const originalTags = structuredClone(ports.store.tags);
+    const cases = [
+      { name: "Data_Pipeline", tags: ["Data_Pipeline"] },
+      { name: "toString", tags: ["toString"] },
+      { name: "utility", tags: ["utility"] },
+      { name: "constructor", tags: ["constructor"] },
+      { name: "unused-tag", tags: [] },
+    ];
+    for (const item of cases) {
+      const result = add(ports, {
+        kind: "repository",
+        id: `bad-${item.name.toLowerCase().replaceAll("_", "-")}`,
+        data: { description: "Invalid tag.", tags: item.tags },
+        newTags: [{ name: item.name, description: "New description." }],
+      });
+      assert.equal(result.status, 2, item.name);
+      assert.equal(result.ok, false, item.name);
+      assert.ok(result.validation.errors.length > 0, item.name);
+      assert.equal(ports.store.entries.some((entry) => entry.id === result.id), false);
+      assert.deepEqual(ports.store.tags, originalTags);
+    }
+  });
+
+  test("fake store does not restore tags changed before rollback", () => {
+    const store = new MemoryStore({ tags: { utility: "Shared tools." } });
+    store.changeBeforeRollback = new Set(["tags"]);
+    const created = store.createEntry(
+      "repository",
+      "tagged-repo",
+      { description: "Tagged repository.", tags: ["data-pipeline"] },
+      undefined,
+      [{ name: "data-pipeline", description: "Moves data." }],
+    );
+    assert.equal(created.status, "created");
+    assert.deepEqual(created.rollback(), ["tags.toml changed during rollback and was not restored"]);
+    assert.deepEqual(store.tags, { utility: "Shared tools.", "data-pipeline": "Moves data.", other: "changed" });
+  });
+
   test("creates an entry and records its local path", () => {
     const ports = catalog();
     const result = add(ports, {
@@ -41,6 +120,7 @@ describe("add use case", () => {
       id: "new-repo",
       path: "repositories/new-repo.toml",
       validation: { errors: [], warnings: [] },
+      newTags: [],
       status: 0,
     });
     assert.ok(ports.store.files.has("repositories/new-repo.toml"));
@@ -102,13 +182,15 @@ describe("add use case", () => {
     assert.deepEqual(ports.store.localPaths, { "alpha-app": "/work/alpha-app" });
   });
 
-  test("rolls back a failed revalidation and restores the previous local paths", () => {
+  test("rolls back a failed revalidation and restores tags and local paths", () => {
     const ports = catalog();
+    const originalTags = structuredClone(ports.store.tags);
     const result = add(ports, {
       kind: "repository",
       id: "rollback-repo",
-      data: { description: "Rollback." },
+      data: { description: "Rollback.", tags: ["data-pipeline"] },
       localPath: "/work/absent",
+      newTags: [{ name: "data-pipeline", description: "Moves data." }],
     });
     assert.equal(result.status, 1);
     assert.equal(result.ok, false);
@@ -116,6 +198,7 @@ describe("add use case", () => {
     assert.ok(!ports.store.entries.some((entry) => entry.id === "rollback-repo"));
     assert.equal(ports.store.files.size, 0);
     assert.deepEqual(ports.store.localPaths, { "alpha-app": "/work/alpha-app" });
+    assert.deepEqual(ports.store.tags, originalTags);
   });
 
   test("rolls back a failed revalidation when no local paths existed", () => {
@@ -144,8 +227,8 @@ describe("add use case", () => {
     assert.equal(result.status, 1);
     assert.deepEqual(result.validation.errors, [
       'local/paths.toml: path does not exist: /work/absent for "changed"',
-      "new entry changed during rollback and was not removed",
       "local/paths.toml changed during rollback and was not restored",
+      "new entry changed during rollback and was not removed",
     ]);
     assert.ok(ports.store.entries.some((entry) => entry.id === "changed"));
   });

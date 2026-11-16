@@ -3,7 +3,7 @@ import { describe, test } from "node:test";
 import { CatalogIndex, type Snapshot } from "../src/domain/catalog.ts";
 import { dependenciesFor, reverseDependencies, showEntry } from "../src/domain/dependencies.ts";
 import { entryFile, type Data, type Kind } from "../src/domain/entry.ts";
-import { remoteHasCredentials, validateCatalog, type CatalogFacts } from "../src/domain/validation.ts";
+import { remoteHasCredentials, validateCatalog, validateNewTags, type CatalogFacts } from "../src/domain/validation.ts";
 
 // Pure domain tests: snapshot literals, no temporary folders and no Git.
 
@@ -41,6 +41,34 @@ const BASE = [
 ];
 
 describe("validation", () => {
+  test("validates new tags in input order against own keys and entry tags", () => {
+    const tags: Record<string, unknown> = { utility: "Shared tools." };
+    Object.defineProperty(tags, "constructor", { value: "Builds things.", enumerable: true });
+    const newTags = [
+      { name: "data-pipeline", description: "Moves data." },
+      { name: "Data_Pipeline", description: "Bad name." },
+      { name: "toString", description: "Bad name." },
+      { name: "utility", description: "Existing." },
+      { name: "constructor", description: "Existing own key." },
+      { name: "unused-tag", description: "Not used." },
+    ];
+    assert.deepEqual(validateNewTags(tags, newTags, ["data-pipeline", "Data_Pipeline", "toString", "utility", "constructor"]), [
+      'new tag "Data_Pipeline" must be lowercase kebab-case',
+      'new tag "toString" must be lowercase kebab-case',
+      'tag "utility" is already defined in tags.toml',
+      'tag "constructor" is already defined in tags.toml',
+      'new tag "unused-tag" is not used by the entry',
+    ]);
+    assert.deepEqual(validateNewTags(tags, [newTags[0]], ["data-pipeline"]), []);
+  });
+
+  test("does not treat inherited names as tags unless tags.toml defines them", () => {
+    assert.deepEqual(
+      validateNewTags({}, [{ name: "constructor", description: "Builds things." }], ["constructor"]),
+      [],
+    );
+  });
+
   test("accepts a valid catalog", () => {
     assert.deepEqual(validateCatalog(snapshot(BASE), NO_FACTS), { errors: [], warnings: [] });
   });

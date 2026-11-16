@@ -7,12 +7,14 @@ import {
   isString,
   KEY_PATTERN,
   STATUSES,
+  type Data,
   type Entry,
   type Finding,
 } from "./entry.ts";
 
 /** The result of checking one configured local path. `resolved` is the absolute path. */
 export type LocalPathFact = { resolved: string; error: string | null };
+export type NewTag = { name: string; description: string };
 /** Local path facts per repository ID. */
 export type LocalPathFacts = ReadonlyMap<string, LocalPathFact>;
 export type IgnoreCheck = { ignored: boolean } | { error: string };
@@ -34,6 +36,18 @@ export function remoteHasCredentials(remote: string): boolean {
     return false;
   }
   return false;
+}
+
+export function validateNewTags(tags: Data, newTags: readonly NewTag[], entryTags: unknown): string[] {
+  const errors: string[] = [];
+  for (const { name } of newTags) {
+    if (!ID_PATTERN.test(name)) errors.push(`new tag ${JSON.stringify(name)} must be lowercase kebab-case`);
+    if (Object.hasOwn(tags, name)) errors.push(`tag ${JSON.stringify(name)} is already defined in tags.toml`);
+    if (!Array.isArray(entryTags) || !entryTags.includes(name)) {
+      errors.push(`new tag ${JSON.stringify(name)} is not used by the entry`);
+    }
+  }
+  return errors;
 }
 
 export function validateEntryData(
