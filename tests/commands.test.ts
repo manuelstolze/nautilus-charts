@@ -27,6 +27,38 @@ function catalog(localPaths: Record<string, string> | null = { "alpha-app": "/wo
 }
 
 describe("add use case", () => {
+  test("fake store appends new tags and restores them on rollback", () => {
+    const store = new MemoryStore({ tags: { utility: "Shared tools." } });
+    const originalTags = structuredClone(store.tags);
+    const created = store.createEntry(
+      "repository",
+      "tagged-repo",
+      { description: "Tagged repository.", tags: ["data-pipeline"] },
+      undefined,
+      [{ name: "data-pipeline", description: "Moves data." }],
+    );
+    assert.equal(created.status, "created");
+    assert.deepEqual(store.tags, { utility: "Shared tools.", "data-pipeline": "Moves data." });
+    assert.deepEqual(created.rollback(), []);
+    assert.deepEqual(store.tags, originalTags);
+    assert.equal(store.entries.some((entry) => entry.id === "tagged-repo"), false);
+  });
+
+  test("fake store does not restore tags changed before rollback", () => {
+    const store = new MemoryStore({ tags: { utility: "Shared tools." } });
+    store.changeBeforeRollback = new Set(["tags"]);
+    const created = store.createEntry(
+      "repository",
+      "tagged-repo",
+      { description: "Tagged repository.", tags: ["data-pipeline"] },
+      undefined,
+      [{ name: "data-pipeline", description: "Moves data." }],
+    );
+    assert.equal(created.status, "created");
+    assert.deepEqual(created.rollback(), ["tags.toml changed during rollback and was not restored"]);
+    assert.deepEqual(store.tags, { utility: "Shared tools.", "data-pipeline": "Moves data.", other: "changed" });
+  });
+
   test("creates an entry and records its local path", () => {
     const ports = catalog();
     const result = add(ports, {
@@ -144,8 +176,8 @@ describe("add use case", () => {
     assert.equal(result.status, 1);
     assert.deepEqual(result.validation.errors, [
       'local/paths.toml: path does not exist: /work/absent for "changed"',
-      "new entry changed during rollback and was not removed",
       "local/paths.toml changed during rollback and was not restored",
+      "new entry changed during rollback and was not removed",
     ]);
     assert.ok(ports.store.entries.some((entry) => entry.id === "changed"));
   });
