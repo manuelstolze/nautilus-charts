@@ -88,7 +88,10 @@ done
 
 ## Tooling
 
-The tooling is written in TypeScript. It needs Node 20 or later. Install dependencies once with:
+The tooling is written in TypeScript. It needs Node 26 or later. The TypeScript,
+Node.js, and tooling package versions follow the
+[shared Nautilus toolchain](https://github.com/manuelstolze/nautilus-bridge/blob/main/docs/overview.md#toolchain).
+Install dependencies once with:
 
 ```bash
 npm install
