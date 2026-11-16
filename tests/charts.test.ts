@@ -457,9 +457,57 @@ describe("charts add", () => {
     );
     const payload = JSON.parse(result.output.join("\\n"));
     assert.equal(result.result, 0);
-    assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), `stale-json = ${JSON.stringify(localRepository)}\n`);
+    assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), `stale-json = ${JSON.stringify(localRepository)}  # note\n`);
     assert.deepEqual(payload.validation.warnings, ['replaced the existing local path for "stale-json" in local/paths.toml']);
     assert.equal(capture(() => main(["check"], root)).result, 0);
+  });
+
+  test("keeps BOM, quoted key, comment, and CRLF when replacing a path", () => {
+    const oldRepository = join(temporary, "old-bom-repository");
+    const newRepository = join(temporary, "new-bom-repository");
+    for (const repository of [oldRepository, newRepository]) {
+      mkdirSync(repository);
+      execFileSync("git", ["init", "-q", repository]);
+    }
+    const original = `\uFEFF"bom-path" = ${JSON.stringify(oldRepository)} # note\r\n`;
+    write("local/paths.toml", original);
+
+    const result = add(
+      "repository",
+      "bom-path",
+      { description: "Keeps path file formatting." },
+      ["--local-path", newRepository, "--json"],
+    );
+    const payload = JSON.parse(result.output.join("\\n"));
+    assert.equal(result.result, 0);
+    assert.equal(
+      readFileSync(join(root, "local/paths.toml"), "utf8"),
+      `\uFEFF"bom-path" = ${JSON.stringify(newRepository)} # note\r\n`,
+    );
+    assert.deepEqual(payload.validation.warnings, ['replaced the existing local path for "bom-path" in local/paths.toml']);
+  });
+
+  test("keeps CRLF when it appends a local path", () => {
+    const existingRepository = join(temporary, "existing-crlf-repository");
+    const newRepository = join(temporary, "new-crlf-repository");
+    for (const repository of [existingRepository, newRepository]) {
+      mkdirSync(repository);
+      execFileSync("git", ["init", "-q", repository]);
+    }
+    const original = `# Existing paths\r\n"alpha-app" = ${JSON.stringify(existingRepository)}\r\n`;
+    write("local/paths.toml", original);
+
+    const result = add(
+      "repository",
+      "crlf-path",
+      { description: "Keeps CRLF line endings." },
+      ["--local-path", newRepository],
+    );
+    assert.equal(result.result, 0, JSON.stringify({ output: result.output, errors: result.errors }));
+    assert.equal(
+      readFileSync(join(root, "local/paths.toml"), "utf8"),
+      `${original}crlf-path = ${JSON.stringify(newRepository)}\r\n`,
+    );
   });
 
   test("reports a stale local path warning in text", () => {
@@ -505,6 +553,71 @@ describe("charts add", () => {
       assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), text);
       assert.equal(existsSync(join(root, `repositories/${id}.toml`)), false);
     }
+  });
+
+  test("does not replace a path-like key inside a table section", () => {
+    const original = '[other]\nsection-path = "/old"\n';
+    write("local/paths.toml", original);
+
+    const result = new TomlStore(root).createEntry(
+      "repository",
+      "section-path",
+      { description: "Does not replace a nested path." },
+      "/work/new",
+    );
+    assert.equal(result.status, "invalid");
+    assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), original);
+    assert.equal(existsSync(join(root, "repositories/section-path.toml")), false);
+  });
+
+  test("does not rewrite target-like text inside a multi-line string", () => {
+    const original = 'b = """\nhidden-path = "/old"\n"""\n';
+    write("local/paths.toml", original);
+
+    const result = new TomlStore(root).createEntry(
+      "repository",
+      "hidden-path",
+      { description: "Ignores text inside a string." },
+      "/work/new",
+    );
+    assert.equal(result.status, "created");
+    if (result.status !== "created") return;
+    assert.deepEqual(result.warnings, []);
+    assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), `${original}hidden-path = "/work/new"\n`);
+  });
+
+  test("does not append a path inside a table section", () => {
+    const original = 'b = "/x"\n[meta]\nv = 1';
+    write("local/paths.toml", original);
+
+    const result = new TomlStore(root).createEntry(
+      "repository",
+      "new-after-section",
+      { description: "Does not append inside a table." },
+      "/work/new",
+    );
+    assert.equal(result.status, "invalid");
+    assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), original);
+    assert.equal(existsSync(join(root, "repositories/new-after-section.toml")), false);
+  });
+
+  test("keeps the existing mapping and skips the warning when the path is unchanged", () => {
+    const localRepository = join(temporary, "same-path-repository");
+    mkdirSync(localRepository);
+    execFileSync("git", ["init", "-q", localRepository]);
+    const original = `"same-path" = ${JSON.stringify(localRepository)} # note\n`;
+    write("local/paths.toml", original);
+
+    const result = add(
+      "repository",
+      "same-path",
+      { description: "Keeps the existing local path." },
+      ["--local-path", localRepository, "--json"],
+    );
+    const payload = JSON.parse(result.output.join("\\n"));
+    assert.equal(result.result, 0);
+    assert.deepEqual(payload.validation.warnings, []);
+    assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), original);
   });
 
   test("restores appended path text exactly after remote mismatch", () => {
