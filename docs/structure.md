@@ -148,7 +148,7 @@ shop-common-lib = "~/code/shop/shop-common-lib"
 
 ## The `charts` script
 
-`charts.ts` uses Node.js 20 or newer and TypeScript. Node.js is the JavaScript runtime. The `smol-toml` package reads TOML files, and `tsx` runs the TypeScript script. Run `npm ci` from the Charts root to install the locked packages. Use `npm run --silent charts -- <command>` from the Charts root. The `--silent` option keeps npm messages out of JSON output. Commands print compact text with one line per entry by default. `--json` prints JSON for other modules.
+`charts.ts` uses Node.js 26 or newer and TypeScript. Node.js is the JavaScript runtime. The `smol-toml` package reads TOML files, and `tsx` runs the TypeScript script. Run `npm ci` from the Charts root to install the locked packages. Use `npm run --silent charts -- <command>` from the Charts root. The `--silent` option keeps npm messages out of JSON output. Commands print compact text with one line per entry by default. `--json` prints JSON for other modules.
 
 | Command | Purpose |
 | --- | --- |
