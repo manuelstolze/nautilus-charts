@@ -18,7 +18,7 @@ export interface CatalogStore {
    *   include any rollback errors.
    * - `created`: `rollback()` removes the entry and restores the previous
    *   `local/paths.toml` and `tags.toml`, unless a file changed in the meantime.
-   *   It returns the rollback errors.
+   *   It returns the rollback errors. `warnings` reports any replaced local path.
    */
   createEntry(
     kind: Kind,
@@ -29,7 +29,7 @@ export interface CatalogStore {
   ):
     | { status: "invalid"; path: string; errors: string[] }
     | { status: "failed"; path: string; errors: string[] }
-    | { status: "created"; path: string; rollback(): string[] };
+    | { status: "created"; path: string; warnings: string[]; rollback(): string[] };
 }
 
 /** Local Git data: repository roots, remotes, and ignore rules. Never remote access. */

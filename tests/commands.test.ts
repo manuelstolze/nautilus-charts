@@ -128,6 +128,45 @@ describe("add use case", () => {
     assert.equal(check(ports).status, 0);
   });
 
+  test("reports a stale local path after catalog warnings", () => {
+    const ports = catalog({ "alpha-app": "/work/alpha-app", "new-repo": "/work/old-repo" });
+    ports.store.entries.push({
+      kind: "external",
+      id: "old-service",
+      data: { description: "Old service.", status: "deprecated" },
+      file: "externals/old-service.toml",
+    });
+    const result = add(ports, {
+      kind: "repository",
+      id: "new-repo",
+      data: { description: "New.", "depends-on": [{ id: "old-service" }] },
+      localPath: "/work/new-repo",
+    });
+    const catalogWarning = result.validation.warnings.findIndex((warning) => warning.includes('deprecated entry "old-service"'));
+    const pathWarning = result.validation.warnings.findIndex((warning) => warning === 'replaced the existing local path for "new-repo" in local/paths.toml');
+    assert.equal(result.ok, true);
+    assert.ok(catalogWarning >= 0);
+    assert.ok(pathWarning > catalogWarning);
+    assert.deepEqual(ports.store.localPaths, { "alpha-app": "/work/alpha-app", "new-repo": "/work/new-repo" });
+    assert.equal(check(ports).status, 0);
+  });
+
+  test("rolls back a replaced local path after failed revalidation", () => {
+    const ports = catalog({ "alpha-app": "/work/alpha-app", "rollback-repo": "/work/old-repo" });
+    const original = structuredClone(ports.store.localPaths);
+    const result = add(ports, {
+      kind: "repository",
+      id: "rollback-repo",
+      data: { description: "Rollback." },
+      localPath: "/work/absent",
+    });
+    assert.equal(result.status, 1);
+    assert.ok(result.validation.errors.some((error) => error.includes("path does not exist")));
+    assert.deepEqual(result.validation.warnings, ['replaced the existing local path for "rollback-repo" in local/paths.toml']);
+    assert.deepEqual(ports.store.localPaths, original);
+    assert.equal(ports.store.entries.some((entry) => entry.id === "rollback-repo"), false);
+  });
+
   test("rejects an ID used by another entry type", () => {
     const ports = catalog();
     const result = add(ports, { kind: "external", id: "alpha-app", data: { description: "Duplicate." } });

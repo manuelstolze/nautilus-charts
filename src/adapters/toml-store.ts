@@ -10,14 +10,23 @@ import {
   FIELD_ORDER,
   isRecord,
   LOCAL_PATHS_FILE as LOCAL_PATHS,
+  localPathReplacementWarning,
   type Data,
   type Kind,
 } from "../domain/entry.ts";
 import type { CatalogStore } from "../commands/ports.ts";
 import type { NewTag } from "../domain/validation.ts";
+import { appendTomlLines, upsertSingleLineMapping } from "./toml-lines.ts";
 
 function tomlKey(value: string): string {
   return /^[A-Za-z0-9_-]+$/.test(value) ? value : JSON.stringify(value);
+}
+
+function localPathUpdateError(id: string, reason: "unsafe-mapping" | "table-section"): string {
+  if (reason === "unsafe-mapping") {
+    return `${LOCAL_PATHS}: cannot replace the existing local path for ${JSON.stringify(id)}; edit the file by hand`;
+  }
+  return `${LOCAL_PATHS}: cannot safely update the local path for ${JSON.stringify(id)} while the file contains a table section; edit the file by hand`;
 }
 
 function tomlValue(value: unknown): string {
@@ -145,18 +154,32 @@ export class TomlStore implements CatalogStore {
 
     let previousLocalPathText: string | null = null;
     let localPathText: string | null = null;
+    let localPathReplaced = false;
     if (localPath !== undefined) {
-      try {
-        if (existsSync(localPathFile)) {
+      const valueLine = `${tomlKey(id)} = ${JSON.stringify(localPath)}`;
+      if (existsSync(localPathFile)) {
+        try {
           previousLocalPathText = readFileSync(localPathFile, "utf8");
-          const parsed: unknown = parseToml(previousLocalPathText);
-          if (!isRecord(parsed)) return invalid([`${LOCAL_PATHS} must contain a TOML table`]);
-          localPathText = tomlTable({ ...parsed, [id]: localPath });
-        } else {
-          localPathText = tomlTable({ [id]: localPath });
+        } catch (error) {
+          return invalid([`cannot update ${LOCAL_PATHS}: ${errorMessage(error)}`]);
         }
-      } catch (error) {
-        return invalid([`cannot update ${LOCAL_PATHS}: ${errorMessage(error)}`]);
+        const update = upsertSingleLineMapping(previousLocalPathText, id, valueLine);
+        if ("error" in update) return invalid([localPathUpdateError(id, update.error)]);
+        let parsed: unknown;
+        try {
+          parsed = parseToml(previousLocalPathText);
+        } catch (error) {
+          return invalid([`cannot update ${LOCAL_PATHS}: ${errorMessage(error)}`]);
+        }
+        if (!isRecord(parsed)) return invalid([`${LOCAL_PATHS} must contain a TOML table`]);
+        if (Object.hasOwn(parsed, id) && parsed[id] === localPath) {
+          localPathText = null;
+        } else {
+          localPathText = update.text;
+          localPathReplaced = update.replaced;
+        }
+      } else {
+        localPathText = appendTomlLines("", [valueLine]);
       }
     }
 
@@ -167,9 +190,8 @@ export class TomlStore implements CatalogStore {
       try {
         previousTagsText = existsSync(tagsFile) ? readFileSync(tagsFile, "utf8") : null;
         const existingText = previousTagsText ?? "";
-        const separator = existingText.length > 0 && !existingText.endsWith("\n") ? "\n" : "";
-        const appended = newTags.map(({ name, description }) => `${name} = ${JSON.stringify(description)}`).join("\n");
-        tagsText = `${existingText}${separator}${appended}\n`;
+        const appended = newTags.map(({ name, description }) => `${name} = ${JSON.stringify(description)}`);
+        tagsText = appendTomlLines(existingText, appended);
       } catch (error) {
         return invalid([`cannot update tags.toml: ${errorMessage(error)}`]);
       }
@@ -240,6 +262,7 @@ export class TomlStore implements CatalogStore {
     } catch (error) {
       return { status: "failed", path, errors: [`could not write entry: ${errorMessage(error)}`, ...rollback()] };
     }
-    return { status: "created", path, rollback };
+    const warnings = localPathReplaced ? [localPathReplacementWarning(id)] : [];
+    return { status: "created", path, warnings, rollback };
   }
 }
