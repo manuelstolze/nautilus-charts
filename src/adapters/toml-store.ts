@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { parse as parseToml } from "smol-toml";
 import type { Snapshot } from "../domain/catalog.ts";
@@ -40,6 +41,21 @@ function tomlTable(data: Data, order: string[] = Object.keys(data)): string {
     .filter((key) => Object.prototype.hasOwnProperty.call(data, key))
     .map((key) => `${tomlKey(key)} = ${tomlValue(data[key])}`)
     .join("\n") + "\n";
+}
+
+function replaceTextFile(path: string, text: string): void {
+  const temporaryPath = `${path}.${randomUUID()}.tmp`;
+  const mode = existsSync(path) ? statSync(path).mode & 0o777 : undefined;
+  try {
+    writeFileSync(temporaryPath, text, {
+      encoding: "utf8",
+      flag: "wx",
+      ...(mode === undefined ? {} : { mode }),
+    });
+    renameSync(temporaryPath, path);
+  } finally {
+    if (existsSync(temporaryPath)) unlinkSync(temporaryPath);
+  }
 }
 
 /** The catalog store on disk: TOML files under the catalog root. */
@@ -172,7 +188,7 @@ export class TomlStore implements CatalogStore {
           } else if (previousTagsText === null) {
             unlinkSync(tagsFile);
           } else {
-            writeFileSync(tagsFile, previousTagsText, "utf8");
+            replaceTextFile(tagsFile, previousTagsText);
           }
         } catch (error) {
           errors.push(`could not restore tags.toml: ${errorMessage(error)}`);
@@ -214,8 +230,12 @@ export class TomlStore implements CatalogStore {
         localPathWritten = true;
       }
       if (tagsText !== null) {
-        writeFileSync(tagsFile, tagsText, "utf8");
-        tagsWritten = true;
+        try {
+          replaceTextFile(tagsFile, tagsText);
+          tagsWritten = true;
+        } catch (error) {
+          return { status: "failed", path, errors: [`could not write tags.toml: ${errorMessage(error)}`, ...rollback()] };
+        }
       }
     } catch (error) {
       return { status: "failed", path, errors: [`could not write entry: ${errorMessage(error)}`, ...rollback()] };

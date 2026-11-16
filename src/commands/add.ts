@@ -16,7 +16,7 @@ export type AddResult = {
 };
 
 /**
- * Adds an entry: checks the input, writes the entry and its local path,
+ * Adds an entry: checks the input, writes the entry, its local path and new tags,
  * revalidates the whole catalog, and rolls back when that fails.
  */
 export function add(ports: Ports, { kind, id, data, localPath, newTags = [] }: AddOptions): AddResult {

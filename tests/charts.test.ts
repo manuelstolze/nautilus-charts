@@ -467,6 +467,22 @@ describe("charts add", () => {
     assert.ok(result.output.some((line) => line.includes("New tags: data-pipeline. The shared tag list has uncommitted changes.")));
   });
 
+  test("adds a separator when tags.toml has no final newline", () => {
+    const originalTags = 'utility = "Shared tools."\nlibrary = "Reusable code."';
+    write("tags.toml", originalTags);
+    const result = add(
+      "repository",
+      "newline-tag",
+      { description: "Newline tag.", tags: ["data-pipeline"] },
+      ["--new-tag", "data-pipeline=Moves data."],
+    );
+    assert.equal(result.result, 0, JSON.stringify({ output: result.output, errors: result.errors }));
+    assert.equal(
+      readFileSync(join(root, "tags.toml"), "utf8"),
+      `${originalTags}\ndata-pipeline = "Moves data."\n`,
+    );
+  });
+
   test("rejects an undefined tag without --new-tag and writes nothing", () => {
     const originalTags = readFileSync(join(root, "tags.toml"), "utf8");
     const result = add("repository", "missing-tag", { description: "Missing tag.", tags: ["data-pipeline"] }, ["--json"]);
