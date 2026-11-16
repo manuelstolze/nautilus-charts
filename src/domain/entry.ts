@@ -14,6 +14,11 @@ export const ENTRY_DIRS: Array<[Kind, string]> = [
 ];
 /** The root-relative file that maps repository IDs to local paths. */
 export const LOCAL_PATHS_FILE = "local/paths.toml";
+
+export function localPathReplacementWarning(id: string): string {
+  return `replaced the existing local path for ${JSON.stringify(id)} in ${LOCAL_PATHS_FILE}`;
+}
+
 export const STATUSES = new Set(["planned", "active", "deprecated", "archived"]);
 export const FIELD_ORDER: Record<Kind, string[]> = {
   system: ["name", "description", "owner", "status"],

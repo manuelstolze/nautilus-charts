@@ -183,7 +183,7 @@ npm run --silent charts -- add repository shop-api \
   --data '{"description":"The shop API.","system":"shop"}'
 ```
 
-Charts reads the matching file in `templates/` to set the field order. It writes only supplied values, so optional template examples do not appear in the new entry. A repository can omit `--local-path`; when supplied, the path is added to ignored `local/paths.toml`. Charts checks that it is a Git repository root and that its local remote matches the entry's `remote`, if set. It uses local Git data only and does not connect to remote servers. When adding a local path, Charts appends new mappings without changing the rest of `local/paths.toml`, replaces one stale simple line for the same ID with a warning, and fails without writing when it cannot replace that line safely.
+Charts reads the matching file in `templates/` to set the field order. It writes only supplied values, so optional template examples do not appear in the new entry. A repository can omit `--local-path`; when supplied, the path is added to ignored `local/paths.toml`. Charts checks that it is a Git repository root and that its local remote matches the entry's `remote`, if set. It uses local Git data only and does not connect to remote servers. When adding a local path, Charts appends new mappings without changing the rest of `local/paths.toml`, replaces one stale mapping written on a single line for the same ID with a warning, and fails without writing when it cannot replace that mapping safely.
 
 For a missing repository tag, propose a lowercase kebab-case name and a description. Ask the owner to confirm both before passing `--new-tag`. The entry must use each new tag. Charts appends new tags to `tags.toml` and keeps all prior text unchanged.
 

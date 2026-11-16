@@ -1,8 +1,8 @@
 type Line = { text: string; ending: string };
 
-export type UpsertLineResult =
+export type UpsertMappingResult =
   | { text: string; replaced: boolean }
-  | { error: string };
+  | { error: "unsafe-mapping" };
 
 function splitLines(text: string): Line[] {
   const lines: Line[] = [];
@@ -18,12 +18,19 @@ function splitLines(text: string): Line[] {
   return lines;
 }
 
-/** Appends a TOML key or replaces one simple, single-line string mapping. */
-export function upsertSimpleLine(text: string, key: string, valueLine: string): UpsertLineResult {
+/** Appends TOML text on a new line, adding a final newline. */
+export function appendTomlText(text: string, addition: string): string {
+  const separator = text.length > 0 && !text.endsWith("\n") ? "\n" : "";
+  const ending = addition.endsWith("\n") ? "" : "\n";
+  return `${text}${separator}${addition}${ending}`;
+}
+
+/** Appends TOML text or replaces one single-line string mapping. */
+export function upsertSingleLineMapping(text: string, key: string, valueLine: string): UpsertMappingResult {
   const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const token = `(?:${escapedKey}|"${escapedKey}"|'${escapedKey}')`;
   const assignment = new RegExp(`^\\s*${token}\\s*=`);
-  const simpleLine = new RegExp(`^\\s*${token}\\s*=\\s*(?:"(?:[^"\\\\]|\\\\.)*"|'[^']*')\\s*(?:#.*)?$`);
+  const singleLineMapping = new RegExp(`^\\s*${token}\\s*=\\s*(?:"(?:[^"\\\\]|\\\\.)*"|'[^']*')\\s*(?:#.*)?$`);
   const dotted = new RegExp(`^\\s*(?:${token}\\s*\\.|\\[\\[?\\s*${token}\\s*\\.)`);
   const table = new RegExp(`^\\s*(?:\\[\\s*${token}\\s*\\]|\\[\\[\\s*${token}\\s*\\]\\])\\s*(?:#.*)?$`);
   const lines = splitLines(text);
@@ -32,17 +39,14 @@ export function upsertSimpleLine(text: string, key: string, valueLine: string): 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index].text;
     if (dotted.test(line) || table.test(line)) {
-      return { error: `cannot safely replace the existing mapping for "${key}"` };
+      return { error: "unsafe-mapping" };
     }
     if (assignment.test(line)) matches.push(index);
   }
 
-  if (matches.length === 0) {
-    const separator = text.length > 0 && !text.endsWith("\n") ? "\n" : "";
-    return { text: `${text}${separator}${valueLine}\n`, replaced: false };
-  }
-  if (matches.length !== 1 || !simpleLine.test(lines[matches[0]].text)) {
-    return { error: `cannot safely replace the existing mapping for "${key}"` };
+  if (matches.length === 0) return { text: appendTomlText(text, valueLine), replaced: false };
+  if (matches.length !== 1 || !singleLineMapping.test(lines[matches[0]].text)) {
+    return { error: "unsafe-mapping" };
   }
 
   const match = matches[0];
