@@ -1,7 +1,14 @@
 import type { CatalogStore } from "../../src/commands/ports.ts";
 import type { Snapshot } from "../../src/domain/catalog.ts";
 import type { NewTag } from "../../src/domain/validation.ts";
-import { ENTRY_DIRS, entryFile, type Data, type Entry, type Kind } from "../../src/domain/entry.ts";
+import {
+  ENTRY_DIRS,
+  entryFile,
+  localPathReplacementWarning,
+  type Data,
+  type Entry,
+  type Kind,
+} from "../../src/domain/entry.ts";
 
 type FakeEntry = { kind: Kind; id: string; data: Data };
 
@@ -89,9 +96,7 @@ export class MemoryStore implements CatalogStore {
       }
       return errors;
     };
-    const warnings = localPathReplaced
-      ? [`replaced the existing local path for ${JSON.stringify(id)} in local/paths.toml`]
-      : [];
+    const warnings = localPathReplaced ? [localPathReplacementWarning(id)] : [];
     return { status: "created", path, warnings, rollback };
   }
 }
