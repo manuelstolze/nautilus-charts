@@ -93,7 +93,7 @@ Find prints one line per entry. Add `--json` when another tool reads a result. T
 
 | Needs | Without it |
 | --- | --- |
-| Node 20 or later | The `charts` script does not run. The TOML files stay readable. |
+| Node 26 or later | The `charts` script does not run. The TOML files stay readable. |
 | `local/paths.toml` | `show` reports no local path. Everything else works. |
 
 ## Setup
