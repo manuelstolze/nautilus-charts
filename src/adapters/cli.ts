@@ -2,6 +2,7 @@ import type { AddResult } from "../commands/add.ts";
 import type { CheckResult } from "../commands/check.ts";
 import type { FindResult } from "../commands/find.ts";
 import type { EntryResult } from "../commands/show.ts";
+import type { NewTag } from "../domain/validation.ts";
 import {
   compact,
   entryJson,
@@ -25,6 +26,7 @@ export type Options = {
   kind?: Kind;
   data?: Data;
   localPath?: string;
+  newTags?: NewTag[];
   system?: string;
   tag?: string;
   status?: string;
@@ -43,23 +45,35 @@ export function parseArgs(argv: string[]): Options {
   if (command === "add") {
     let dataText: string | undefined;
     let localPathSet = false;
+    const newTags: NewTag[] = [];
+    const newTagNames = new Set<string>();
     for (let index = 0; index < rest.length; index += 1) {
       const argument = rest[index];
       if (argument === "--json") {
         options.json = true;
         continue;
       }
-      if (argument === "--data" || argument === "--local-path") {
+      if (argument === "--data" || argument === "--local-path" || argument === "--new-tag") {
         const value = rest[index + 1];
         if (value === undefined) throw new Error(`${argument} requires a value`);
         index += 1;
         if (argument === "--data") {
           if (dataText !== undefined) throw new Error("--data can be used only once");
           dataText = value;
-        } else {
+        } else if (argument === "--local-path") {
           if (localPathSet) throw new Error("--local-path can be used only once");
           localPathSet = true;
           options.localPath = value;
+        } else {
+          const separator = value.indexOf("=");
+          if (separator < 0) throw new Error("--new-tag must use <name>=<description>");
+          const name = value.slice(0, separator);
+          const description = value.slice(separator + 1);
+          if (!name) throw new Error("--new-tag name must not be empty");
+          if (!description) throw new Error("--new-tag description must not be empty");
+          if (newTagNames.has(name)) throw new Error(`--new-tag name ${JSON.stringify(name)} was used more than once`);
+          newTagNames.add(name);
+          newTags.push({ name, description });
         }
         continue;
       }
@@ -72,6 +86,8 @@ export function parseArgs(argv: string[]): Options {
       throw new Error(`invalid entry type: ${kind}`);
     }
     options.kind = kind;
+    if (newTags.length && kind !== "repository") throw new Error("--new-tag is valid only for repository entries");
+    options.newTags = newTags;
     options.id = positional[1];
     if (!ID_PATTERN.test(options.id)) throw new Error(`invalid ID ${JSON.stringify(options.id)}; use lowercase kebab-case`);
     if (dataText === undefined) throw new Error("add requires --data '<JSON>'");
@@ -237,18 +253,24 @@ export function renderCheck(json: boolean, result: CheckResult): number {
 
 export function renderAdd(json: boolean, result: AddResult): number {
   if (json) {
-    printJson({
+    const output: Data = {
       ok: result.ok,
       type: result.type,
       id: result.id,
       path: result.path,
       validation: { ok: result.validation.errors.length === 0, ...result.validation },
-    });
+    };
+    if (result.ok && result.newTags.length) output.new_tags = result.newTags;
+    printJson(output);
     return result.status;
   }
   for (const warning of result.validation.warnings) console.log(`WARNING: ${warning}`);
   for (const error of result.validation.errors) console.error(`ERROR: ${error}`);
-  if (result.ok) console.log(`Created ${result.type} ${result.id} at ${result.path}; validation ok`);
-  else console.error(`Could not add ${result.type} ${result.id} at ${result.path}; validation failed`);
+  if (result.ok) {
+    console.log(`Created ${result.type} ${result.id} at ${result.path}; validation ok`);
+    if (result.newTags.length) {
+      console.log(`New tags: ${result.newTags.join(", ")}. The shared tag list has uncommitted changes.`);
+    }
+  } else console.error(`Could not add ${result.type} ${result.id} at ${result.path}; validation failed`);
   return result.status;
 }

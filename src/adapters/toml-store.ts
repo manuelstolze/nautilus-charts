@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { parse as parseToml } from "smol-toml";
 import type { Snapshot } from "../domain/catalog.ts";
@@ -13,6 +14,7 @@ import {
   type Kind,
 } from "../domain/entry.ts";
 import type { CatalogStore } from "../commands/ports.ts";
+import type { NewTag } from "../domain/validation.ts";
 
 function tomlKey(value: string): string {
   return /^[A-Za-z0-9_-]+$/.test(value) ? value : JSON.stringify(value);
@@ -39,6 +41,21 @@ function tomlTable(data: Data, order: string[] = Object.keys(data)): string {
     .filter((key) => Object.prototype.hasOwnProperty.call(data, key))
     .map((key) => `${tomlKey(key)} = ${tomlValue(data[key])}`)
     .join("\n") + "\n";
+}
+
+function replaceTextFile(path: string, text: string): void {
+  const temporaryPath = `${path}.${randomUUID()}.tmp`;
+  const mode = existsSync(path) ? statSync(path).mode & 0o777 : undefined;
+  try {
+    writeFileSync(temporaryPath, text, {
+      encoding: "utf8",
+      flag: "wx",
+      ...(mode === undefined ? {} : { mode }),
+    });
+    renameSync(temporaryPath, path);
+  } finally {
+    if (existsSync(temporaryPath)) unlinkSync(temporaryPath);
+  }
 }
 
 /** The catalog store on disk: TOML files under the catalog root. */
@@ -107,7 +124,13 @@ export class TomlStore implements CatalogStore {
     return tomlTable(data, order);
   }
 
-  createEntry(kind: Kind, id: string, data: Data, localPath?: string): ReturnType<CatalogStore["createEntry"]> {
+  createEntry(
+    kind: Kind,
+    id: string,
+    data: Data,
+    localPath?: string,
+    newTags: readonly NewTag[] = [],
+  ): ReturnType<CatalogStore["createEntry"]> {
     const path = entryFile(kind, id);
     const entryPath = join(this.root, path);
     const localPathFile = join(this.root, LOCAL_PATHS);
@@ -137,20 +160,38 @@ export class TomlStore implements CatalogStore {
       }
     }
 
+    const tagsFile = join(this.root, "tags.toml");
+    let previousTagsText: string | null = null;
+    let tagsText: string | null = null;
+    if (newTags.length) {
+      try {
+        previousTagsText = existsSync(tagsFile) ? readFileSync(tagsFile, "utf8") : null;
+        const existingText = previousTagsText ?? "";
+        const separator = existingText.length > 0 && !existingText.endsWith("\n") ? "\n" : "";
+        const appended = newTags.map(({ name, description }) => `${name} = ${JSON.stringify(description)}`).join("\n");
+        tagsText = `${existingText}${separator}${appended}\n`;
+      } catch (error) {
+        return invalid([`cannot update tags.toml: ${errorMessage(error)}`]);
+      }
+    }
+
     let entryCreated = false;
     let localPathWritten = false;
+    let tagsWritten = false;
     // Never remove or restore a file that changed after this command wrote it.
     const rollback = (): string[] => {
       const errors: string[] = [];
-      if (entryCreated && existsSync(entryPath)) {
+      if (tagsWritten) {
         try {
-          if (readFileSync(entryPath, "utf8") !== entryText) {
-            errors.push("new entry changed during rollback and was not removed");
+          if (!existsSync(tagsFile) || readFileSync(tagsFile, "utf8") !== tagsText) {
+            errors.push("tags.toml changed during rollback and was not restored");
+          } else if (previousTagsText === null) {
+            unlinkSync(tagsFile);
           } else {
-            unlinkSync(entryPath);
+            replaceTextFile(tagsFile, previousTagsText);
           }
         } catch (error) {
-          errors.push(`could not remove new entry: ${errorMessage(error)}`);
+          errors.push(`could not restore tags.toml: ${errorMessage(error)}`);
         }
       }
       if (localPathWritten && existsSync(localPathFile)) {
@@ -166,6 +207,17 @@ export class TomlStore implements CatalogStore {
           errors.push(`could not restore ${LOCAL_PATHS}: ${errorMessage(error)}`);
         }
       }
+      if (entryCreated && existsSync(entryPath)) {
+        try {
+          if (readFileSync(entryPath, "utf8") !== entryText) {
+            errors.push("new entry changed during rollback and was not removed");
+          } else {
+            unlinkSync(entryPath);
+          }
+        } catch (error) {
+          errors.push(`could not remove new entry: ${errorMessage(error)}`);
+        }
+      }
       return errors;
     };
 
@@ -176,6 +228,14 @@ export class TomlStore implements CatalogStore {
         mkdirSync(dirname(localPathFile), { recursive: true });
         writeFileSync(localPathFile, localPathText, "utf8");
         localPathWritten = true;
+      }
+      if (tagsText !== null) {
+        try {
+          replaceTextFile(tagsFile, tagsText);
+          tagsWritten = true;
+        } catch (error) {
+          return { status: "failed", path, errors: [`could not write tags.toml: ${errorMessage(error)}`, ...rollback()] };
+        }
       }
     } catch (error) {
       return { status: "failed", path, errors: [`could not write entry: ${errorMessage(error)}`, ...rollback()] };
