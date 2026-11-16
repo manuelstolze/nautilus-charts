@@ -15,6 +15,7 @@ import {
 } from "../domain/entry.ts";
 import type { CatalogStore } from "../commands/ports.ts";
 import type { NewTag } from "../domain/validation.ts";
+import { upsertSimpleLine } from "./toml-lines.ts";
 
 function tomlKey(value: string): string {
   return /^[A-Za-z0-9_-]+$/.test(value) ? value : JSON.stringify(value);
@@ -145,18 +146,36 @@ export class TomlStore implements CatalogStore {
 
     let previousLocalPathText: string | null = null;
     let localPathText: string | null = null;
+    let localPathReplaced = false;
     if (localPath !== undefined) {
-      try {
-        if (existsSync(localPathFile)) {
+      const valueLine = `${id} = ${JSON.stringify(localPath)}`;
+      if (existsSync(localPathFile)) {
+        try {
           previousLocalPathText = readFileSync(localPathFile, "utf8");
-          const parsed: unknown = parseToml(previousLocalPathText);
-          if (!isRecord(parsed)) return invalid([`${LOCAL_PATHS} must contain a TOML table`]);
-          localPathText = tomlTable({ ...parsed, [id]: localPath });
-        } else {
-          localPathText = tomlTable({ [id]: localPath });
+        } catch (error) {
+          return invalid([`cannot update ${LOCAL_PATHS}: ${errorMessage(error)}`]);
         }
-      } catch (error) {
-        return invalid([`cannot update ${LOCAL_PATHS}: ${errorMessage(error)}`]);
+        let parsed: unknown;
+        try {
+          parsed = parseToml(previousLocalPathText);
+        } catch (error) {
+          const update = upsertSimpleLine(previousLocalPathText, id, valueLine);
+          if ("error" in update) {
+            return invalid([`${LOCAL_PATHS}: cannot replace the existing local path for ${JSON.stringify(id)}; edit the file by hand`]);
+          }
+          return invalid([`cannot update ${LOCAL_PATHS}: ${errorMessage(error)}`]);
+        }
+        if (!isRecord(parsed)) return invalid([`${LOCAL_PATHS} must contain a TOML table`]);
+        const update = upsertSimpleLine(previousLocalPathText, id, valueLine);
+        if ("error" in update) {
+          return invalid([`${LOCAL_PATHS}: cannot replace the existing local path for ${JSON.stringify(id)}; edit the file by hand`]);
+        }
+        localPathText = update.text;
+        localPathReplaced = update.replaced;
+      } else {
+        const update = upsertSimpleLine("", id, valueLine);
+        if ("error" in update) return invalid([`cannot update ${LOCAL_PATHS}: ${update.error}`]);
+        localPathText = update.text;
       }
     }
 
@@ -240,6 +259,9 @@ export class TomlStore implements CatalogStore {
     } catch (error) {
       return { status: "failed", path, errors: [`could not write entry: ${errorMessage(error)}`, ...rollback()] };
     }
-    return { status: "created", path, rollback };
+    const warnings = localPathReplaced
+      ? [`replaced the existing local path for ${JSON.stringify(id)} in ${LOCAL_PATHS}`]
+      : [];
+    return { status: "created", path, warnings, rollback };
   }
 }

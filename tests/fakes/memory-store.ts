@@ -58,6 +58,7 @@ export class MemoryStore implements CatalogStore {
     const text = JSON.stringify(data);
     const previousLocalPaths = this.localPaths;
     const previousTags = this.tags;
+    const localPathReplaced = localPath !== undefined && Object.hasOwn(previousLocalPaths ?? {}, id);
     this.entries.push(entry);
     this.files.set(path, text);
     if (localPath !== undefined) this.localPaths = { ...(previousLocalPaths ?? {}), [id]: localPath };
@@ -88,6 +89,9 @@ export class MemoryStore implements CatalogStore {
       }
       return errors;
     };
-    return { status: "created", path, rollback };
+    const warnings = localPathReplaced
+      ? [`replaced the existing local path for ${JSON.stringify(id)} in local/paths.toml`]
+      : [];
+    return { status: "created", path, warnings, rollback };
   }
 }

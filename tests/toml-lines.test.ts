@@ -37,9 +37,10 @@ describe("TOML line updates", () => {
     }
   });
 
-  test("rejects dotted keys, multi-line values, and duplicate mappings", () => {
+  test("rejects dotted and table keys, multi-line values, and duplicate mappings", () => {
     const cases = [
       '"new-repo".x = "old"\n',
+      '[new-repo]\npath = "old"\n',
       'new-repo = """old\nvalue"""\n',
       'new-repo = "/old-one"\n"new-repo" = "/old-two"\n',
     ];
