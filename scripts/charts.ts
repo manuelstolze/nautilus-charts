@@ -38,6 +38,7 @@ export function main(argv = process.argv.slice(2), root = ROOT): number {
         id: options.id!,
         data: options.data!,
         localPath: options.localPath,
+        newTags: options.newTags,
       }));
     case "check":
       return renderCheck(options.json, check(ports));
