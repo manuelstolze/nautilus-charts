@@ -60,10 +60,15 @@ export function add(ports: Ports, { kind, id, data, localPath, newTags = [] }: A
   try {
     validation = checkCatalog(ports);
   } catch (error) {
-    return failure([`catalog validation failed: ${errorMessage(error)}`, ...created.rollback()], 1);
+    return failure([`catalog validation failed: ${errorMessage(error)}`, ...created.rollback()], 1, created.warnings);
   }
   if (validation.errors.length) {
-    return failure([...validation.errors, ...created.rollback()], 1, validation.warnings);
+    return failure(
+      [...validation.errors, ...created.rollback()],
+      1,
+      [...validation.warnings, ...created.warnings],
+    );
   }
+  validation = { ...validation, warnings: [...validation.warnings, ...created.warnings] };
   return { ok: true, type: kind, id, path, validation, newTags: newTags.map(({ name }) => name), status: 0 };
 }

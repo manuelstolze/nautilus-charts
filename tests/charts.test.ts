@@ -394,6 +394,277 @@ describe("charts add", () => {
     execFileSync("git", ["-C", root, "diff", "--cached", "--quiet"]);
   });
 
+  test("appends a local path without changing existing comments or formatting", () => {
+    const existingRepository = join(temporary, "existing-path-repository");
+    mkdirSync(existingRepository);
+    execFileSync("git", ["init", "-q", existingRepository]);
+    const newRepository = join(temporary, "new-path-repository");
+    mkdirSync(newRepository);
+    execFileSync("git", ["init", "-q", newRepository]);
+    const original = `# Existing paths\n\n"alpha-app" = ${JSON.stringify(existingRepository)}\n`;
+    write("local/paths.toml", original);
+
+    const result = add(
+      "repository",
+      "path-preservation",
+      { description: "Preserves local path text." },
+      ["--local-path", newRepository],
+    );
+    assert.equal(result.result, 0, JSON.stringify({ output: result.output, errors: result.errors }));
+    assert.equal(
+      readFileSync(join(root, "local/paths.toml"), "utf8"),
+      `${original}path-preservation = ${JSON.stringify(newRepository)}\n`,
+    );
+  });
+
+  test("adds a newline before appending and keeps the paths file parseable", () => {
+    const existingRepository = join(temporary, "existing-path-repository");
+    mkdirSync(existingRepository);
+    execFileSync("git", ["init", "-q", existingRepository]);
+    const newRepository = join(temporary, "new-path-repository");
+    mkdirSync(newRepository);
+    execFileSync("git", ["init", "-q", newRepository]);
+    const original = `# Existing path\n"alpha-app" = ${JSON.stringify(existingRepository)}`;
+    write("local/paths.toml", original);
+
+    const result = add(
+      "repository",
+      "newline-path",
+      { description: "Adds a local path." },
+      ["--local-path", newRepository],
+    );
+    const pathsText = readFileSync(join(root, "local/paths.toml"), "utf8");
+    assert.equal(result.result, 0, JSON.stringify({ output: result.output, errors: result.errors }));
+    assert.equal(pathsText, `${original}\nnewline-path = ${JSON.stringify(newRepository)}\n`);
+    assert.deepEqual(JSON.parse(JSON.stringify(parseToml(pathsText))), {
+      "alpha-app": existingRepository,
+      "newline-path": newRepository,
+    });
+  });
+
+  test("replaces a stale local path and reports a warning in JSON", () => {
+    const localRepository = join(temporary, "replacement-repository");
+    mkdirSync(localRepository);
+    execFileSync("git", ["init", "-q", localRepository]);
+    const original = 'stale-json = "/old"  # note\n';
+    write("local/paths.toml", original);
+
+    const result = add(
+      "repository",
+      "stale-json",
+      { description: "Replaces a stale local path." },
+      ["--local-path", localRepository, "--json"],
+    );
+    const payload = JSON.parse(result.output.join("\\n"));
+    assert.equal(result.result, 0);
+    assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), `stale-json = ${JSON.stringify(localRepository)}  # note\n`);
+    assert.deepEqual(payload.validation.warnings, ['replaced the existing local path for "stale-json" in local/paths.toml']);
+    assert.equal(capture(() => main(["check"], root)).result, 0);
+  });
+
+  test("keeps BOM, quoted key, comment, and CRLF when replacing a path", () => {
+    const oldRepository = join(temporary, "old-bom-repository");
+    const newRepository = join(temporary, "new-bom-repository");
+    for (const repository of [oldRepository, newRepository]) {
+      mkdirSync(repository);
+      execFileSync("git", ["init", "-q", repository]);
+    }
+    const original = `\uFEFF"bom-path" = ${JSON.stringify(oldRepository)} # note\r\n`;
+    write("local/paths.toml", original);
+
+    const result = add(
+      "repository",
+      "bom-path",
+      { description: "Keeps path file formatting." },
+      ["--local-path", newRepository, "--json"],
+    );
+    const payload = JSON.parse(result.output.join("\\n"));
+    assert.equal(result.result, 0);
+    assert.equal(
+      readFileSync(join(root, "local/paths.toml"), "utf8"),
+      `\uFEFF"bom-path" = ${JSON.stringify(newRepository)} # note\r\n`,
+    );
+    assert.deepEqual(payload.validation.warnings, ['replaced the existing local path for "bom-path" in local/paths.toml']);
+  });
+
+  test("keeps CRLF when it appends a local path", () => {
+    const existingRepository = join(temporary, "existing-crlf-repository");
+    const newRepository = join(temporary, "new-crlf-repository");
+    for (const repository of [existingRepository, newRepository]) {
+      mkdirSync(repository);
+      execFileSync("git", ["init", "-q", repository]);
+    }
+    const original = `# Existing paths\r\n"alpha-app" = ${JSON.stringify(existingRepository)}\r\n`;
+    write("local/paths.toml", original);
+
+    const result = add(
+      "repository",
+      "crlf-path",
+      { description: "Keeps CRLF line endings." },
+      ["--local-path", newRepository],
+    );
+    assert.equal(result.result, 0, JSON.stringify({ output: result.output, errors: result.errors }));
+    assert.equal(
+      readFileSync(join(root, "local/paths.toml"), "utf8"),
+      `${original}crlf-path = ${JSON.stringify(newRepository)}\r\n`,
+    );
+  });
+
+  test("reports a stale local path warning in text", () => {
+    const localRepository = join(temporary, "replacement-repository");
+    mkdirSync(localRepository);
+    execFileSync("git", ["init", "-q", localRepository]);
+    write("local/paths.toml", 'stale-text = "/old"  # note\n');
+
+    const result = add(
+      "repository",
+      "stale-text",
+      { description: "Replaces a stale local path." },
+      ["--local-path", localRepository],
+    );
+    assert.equal(result.result, 0);
+    assert.ok(result.output.includes('WARNING: replaced the existing local path for "stale-text" in local/paths.toml'));
+    assert.equal(capture(() => main(["check"], root)).result, 0);
+  });
+
+  test("rejects dotted, table, multi-line, and duplicate stale mappings without writing", () => {
+    const localRepository = join(temporary, "invalid-mapping-repository");
+    mkdirSync(localRepository);
+    execFileSync("git", ["init", "-q", localRepository]);
+    const cases = [
+      { id: "dotted-path", text: '"dotted-path".x = "/old"\n' },
+      { id: "table-path", text: '[table-path]\npath = "/old"\n' },
+      { id: "multiline-path", text: 'multiline-path = """old\npath"""\n' },
+      { id: "duplicate-path", text: 'duplicate-path = "/old"\nduplicate-path = "/other"\n' },
+    ];
+    for (const { id, text } of cases) {
+      write("local/paths.toml", text);
+      const result = add(
+        "repository",
+        id,
+        { description: "Rejects an unsafe local path mapping." },
+        ["--local-path", localRepository, "--json"],
+      );
+      const payload = JSON.parse(result.output.join("\\n"));
+      assert.equal(result.result, 2, id);
+      assert.deepEqual(payload.validation.errors, [
+        `local/paths.toml: cannot replace the existing local path for ${JSON.stringify(id)}; edit the file by hand`,
+      ]);
+      assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), text);
+      assert.equal(existsSync(join(root, `repositories/${id}.toml`)), false);
+    }
+  });
+
+  test("does not replace a path-like key inside a table section", () => {
+    const original = '[other]\nsection-path = "/old"\n';
+    write("local/paths.toml", original);
+
+    const result = new TomlStore(root).createEntry(
+      "repository",
+      "section-path",
+      { description: "Does not replace a nested path." },
+      "/work/new",
+    );
+    assert.equal(result.status, "invalid");
+    assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), original);
+    assert.equal(existsSync(join(root, "repositories/section-path.toml")), false);
+  });
+
+  test("does not rewrite target-like text inside a multi-line string", () => {
+    const original = 'b = """\nhidden-path = "/old"\n"""\n';
+    write("local/paths.toml", original);
+
+    const result = new TomlStore(root).createEntry(
+      "repository",
+      "hidden-path",
+      { description: "Ignores text inside a string." },
+      "/work/new",
+    );
+    assert.equal(result.status, "created");
+    if (result.status !== "created") return;
+    assert.deepEqual(result.warnings, []);
+    assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), `${original}hidden-path = "/work/new"\n`);
+  });
+
+  test("does not append a path inside a table section", () => {
+    const original = 'b = "/x"\n[meta]\nv = 1';
+    write("local/paths.toml", original);
+
+    const result = new TomlStore(root).createEntry(
+      "repository",
+      "new-after-section",
+      { description: "Does not append inside a table." },
+      "/work/new",
+    );
+    assert.equal(result.status, "invalid");
+    assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), original);
+    assert.equal(existsSync(join(root, "repositories/new-after-section.toml")), false);
+  });
+
+  test("keeps the existing mapping and skips the warning when the path is unchanged", () => {
+    const localRepository = join(temporary, "same-path-repository");
+    mkdirSync(localRepository);
+    execFileSync("git", ["init", "-q", localRepository]);
+    const original = `"same-path" = ${JSON.stringify(localRepository)} # note\n`;
+    write("local/paths.toml", original);
+
+    const result = add(
+      "repository",
+      "same-path",
+      { description: "Keeps the existing local path." },
+      ["--local-path", localRepository, "--json"],
+    );
+    const payload = JSON.parse(result.output.join("\\n"));
+    assert.equal(result.result, 0);
+    assert.deepEqual(payload.validation.warnings, []);
+    assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), original);
+  });
+
+  test("restores appended path text exactly after remote mismatch", () => {
+    const existingRepository = join(temporary, "existing-path-repository");
+    mkdirSync(existingRepository);
+    execFileSync("git", ["init", "-q", existingRepository]);
+    const mismatchedRepository = join(temporary, "mismatched-repository");
+    mkdirSync(mismatchedRepository);
+    execFileSync("git", ["init", "-q", mismatchedRepository]);
+    execFileSync("git", ["-C", mismatchedRepository, "remote", "add", "origin", "https://example.com/other.git"]);
+    const original = `# Existing paths\n\n"alpha-app" = ${JSON.stringify(existingRepository)}\n`;
+    write("local/paths.toml", original);
+
+    const result = add(
+      "repository",
+      "rollback-append",
+      { description: "Rolls back an appended path.", remote: "https://example.com/wanted.git" },
+      ["--local-path", mismatchedRepository, "--json"],
+    );
+    const payload = JSON.parse(result.output.join("\\n"));
+    assert.equal(result.result, 1);
+    assert.ok(payload.validation.errors.some((error: string) => error.includes("remote does not match")));
+    assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), original);
+    assert.equal(existsSync(join(root, "repositories/rollback-append.toml")), false);
+  });
+
+  test("restores replaced path text exactly after remote mismatch", () => {
+    const mismatchedRepository = join(temporary, "mismatched-repository");
+    mkdirSync(mismatchedRepository);
+    execFileSync("git", ["init", "-q", mismatchedRepository]);
+    execFileSync("git", ["-C", mismatchedRepository, "remote", "add", "origin", "https://example.com/other.git"]);
+    const original = 'rollback-replace = "/old"  # note\n';
+    write("local/paths.toml", original);
+
+    const result = add(
+      "repository",
+      "rollback-replace",
+      { description: "Rolls back a replaced path.", remote: "https://example.com/wanted.git" },
+      ["--local-path", mismatchedRepository, "--json"],
+    );
+    const payload = JSON.parse(result.output.join("\\n"));
+    assert.equal(result.result, 1);
+    assert.ok(payload.validation.errors.some((error: string) => error.includes("remote does not match")));
+    assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), original);
+    assert.equal(existsSync(join(root, "repositories/rollback-replace.toml")), false);
+  });
+
   test("rolls back a failed path check and restores an existing map exactly", () => {
     const localRepository = join(temporary, "existing-repository");
     mkdirSync(localRepository);
