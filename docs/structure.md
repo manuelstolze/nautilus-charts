@@ -58,6 +58,7 @@ All files are TOML. Optional fields are omitted when unused.
 | `name` | no | Display name when it differs from the ID, for example "Online Shop". |
 | `description` | yes | Short purpose. |
 | `owner` | no | The system owner: the responsible team or person, as free text. |
+| `ticket-key` | no | Ticket key used by Repositories in this System. 2–10 characters: an uppercase letter, then uppercase letters or digits. |
 | `status` | no | See [Status](#status). Default `active`. |
 
 ```toml
@@ -73,6 +74,7 @@ description = "Storefront, checkout, and the libraries they share."
 | `name` | no | Display name when it differs from the ID. |
 | `description` | yes | Short purpose. |
 | `key` | no | Short uppercase code that starts the IDs of changes to this repository, for example `NBR`. 2–5 characters: an uppercase letter, then uppercase letters or digits. Unique across repositories. Do not change it once used. |
+| `ticket-key` | no | Ticket key used by this Repository. 2–10 characters: an uppercase letter, then uppercase letters or digits. It is not unique and may equal a Repository's `key`. |
 | `system` | no | ID of the system it belongs to. Omitted for independent repositories. |
 | `status` | no | See [Status](#status). Default `active`. |
 | `owner` | no | The repository owner: the responsible team or person, as free text. |
@@ -95,6 +97,12 @@ depends-on = [
 ```
 
 From this entry, Charts derives that system `billing` depends on system `shop`.
+
+### Ticket keys
+
+A ticket key identifies a project in an external ticket tracker. It uses 2–10 characters: an uppercase letter, then uppercase letters or digits. It is not unique. Several Systems and Repositories may share one, and it may equal a Repository's `key`.
+
+For a Repository, Charts resolves its own `ticket-key` first. If it has none, Charts uses the `ticket-key` of the System it names, when that System exists and sets one. Otherwise, no ticket key resolves. Charts checks only the form. It does not check the tracker.
 
 ### External
 
@@ -160,11 +168,14 @@ shop-common-lib = "~/code/shop/shop-common-lib"
 | `add <system|repository|external> <id> --data '<JSON>' [--local-path <path>] [--new-tag <name>=<description>]... [--json]` | Create one entry from its template and validate the catalog. `--local-path` is for repositories only. `--new-tag` is for repository entries only. |
 | `set <id> [--data '<JSON>'] [--local-path <path>] [--new-tag <name>=<description>]... [--replace-key] [--json]` | Add or replace fields on an existing entry. `--local-path` is for repositories only. `--new-tag` is for repository entries only. |
 
+For repository `show --json`, Charts adds `resolved_ticket_key` and `ticket_key_source`. Both are `null` when no ticket key resolves. Text `show` lists the recorded `ticket-key` when set and lists both resolved fields when a value resolves. Systems and externals have no resolved fields.
+
 `check` reports:
 
 - Files that are not valid TOML or have unknown or missing fields.
 - IDs that are not kebab-case or that repeat across entry types.
 - Repository keys with an invalid form or used by more than one repository.
+- `ticket-key` values that do not match the stated form, with the entry file and rule.
 - `system` and `depends-on` IDs that name no entry, and repositories that depend on themselves.
 - Tags missing from `tags.toml` and invalid status values.
 - Local paths that are missing or not Git repositories, and local paths whose Git remotes do not match `remote`.

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { CatalogIndex, type Snapshot } from "../src/domain/catalog.ts";
-import { dependenciesFor, reverseDependencies, showEntry } from "../src/domain/dependencies.ts";
+import { dependenciesFor, resolveTicketKey, reverseDependencies, showEntry } from "../src/domain/dependencies.ts";
 import { entryFile, type Data, type Kind } from "../src/domain/entry.ts";
 import {
   mergeEntryData,
@@ -79,6 +79,43 @@ describe("validation", () => {
 
   test("accepts a valid catalog", () => {
     assert.deepEqual(validateCatalog(snapshot(BASE), NO_FACTS), { errors: [], warnings: [] });
+  });
+
+  test("allows ticket-key on systems and repositories, but not externals", () => {
+    const { errors } = validateCatalog(snapshot([
+      entry("system", "alpha", { description: "Alpha system.", "ticket-key": "ABC" }),
+      entry("repository", "alpha-app", { description: "Alpha application.", "ticket-key": "ABC" }),
+      entry("external", "tracker", { description: "Tracker service.", "ticket-key": "ABC" }),
+    ]), NO_FACTS);
+    assert.deepEqual(errors, ["externals/tracker.toml: unknown field(s): ticket-key"]);
+  });
+
+  test("checks ticket-key form on systems and repositories", () => {
+    const invalidValues: unknown[] = ["A", "abc", "1AB", "AB-C", "ABCDEFGHIJK", 12];
+    const entries = [
+      entry("system", "short-key", { description: "Short key.", "ticket-key": "AB" }),
+      entry("repository", "long-key", { description: "Long key.", "ticket-key": "ABCDEFGHIJ" }),
+      ...invalidValues.flatMap((value, index) => [
+        entry("system", `bad-system-${index}`, { description: "Invalid key.", "ticket-key": value }),
+        entry("repository", `bad-repository-${index}`, { description: "Invalid key.", "ticket-key": value }),
+      ]),
+    ];
+    const form = "ticket-key must be 2–10 characters: an uppercase letter, then uppercase letters or digits";
+    assert.deepEqual(validateCatalog(snapshot(entries), NO_FACTS).errors, invalidValues.flatMap((_, index) => [
+      `systems/bad-system-${index}.toml: ${form}`,
+      `repositories/bad-repository-${index}.toml: ${form}`,
+    ]));
+  });
+
+  test("does not require ticket keys to be unique or different from repository keys", () => {
+    const { errors } = validateCatalog(snapshot([
+      entry("system", "alpha", { description: "Alpha system.", "ticket-key": "ABC" }),
+      entry("system", "beta", { description: "Beta system.", "ticket-key": "ABC" }),
+      entry("repository", "alpha-app", { description: "Alpha app.", system: "alpha", "ticket-key": "ABC" }),
+      entry("repository", "key-owner", { description: "Key owner.", key: "XYZ" }),
+      entry("repository", "ticket-owner", { description: "Ticket owner.", "ticket-key": "XYZ" }),
+    ]), NO_FACTS);
+    assert.deepEqual(errors, []);
   });
 
   test("checks IDs, keys, and duplicate keys", () => {
@@ -329,6 +366,30 @@ describe("dependencies", () => {
     ]);
   });
 
+  test("resolves ticket keys from repositories and their systems", () => {
+    const index = new CatalogIndex(snapshot([
+      entry("system", "alpha", { description: "Alpha.", "ticket-key": "ABC" }),
+      entry("system", "beta", { description: "Beta." }),
+      entry("system", "invalid-system", { description: "Invalid.", "ticket-key": "abc" }),
+      entry("external", "tracker", { description: "Tracker.", "ticket-key": "ABC" }),
+      entry("repository", "own", { description: "Own key.", system: "alpha", "ticket-key": "XYZ" }),
+      entry("repository", "inherited", { description: "Inherited key.", system: "alpha" }),
+      entry("repository", "independent", { description: "Independent." }),
+      entry("repository", "no-key", { description: "No system key.", system: "beta" }),
+      entry("repository", "missing-system", { description: "Missing system.", system: "missing" }),
+      entry("repository", "external-system", { description: "External system.", system: "tracker" }),
+      entry("repository", "invalid-system-key", { description: "Invalid system key.", system: "invalid-system" }),
+      entry("repository", "invalid-own", { description: "Invalid own key.", system: "alpha", "ticket-key": "abc" }),
+    ]));
+    assert.deepEqual(resolveTicketKey(index, index.get("own")!), { key: "XYZ", source: "repository" });
+    assert.deepEqual(resolveTicketKey(index, index.get("inherited")!), { key: "ABC", source: "system" });
+    for (const id of ["independent", "no-key", "missing-system", "external-system", "invalid-system-key"]) {
+      assert.deepEqual(resolveTicketKey(index, index.get(id)!), { key: null, source: null }, id);
+    }
+    assert.deepEqual(resolveTicketKey(index, index.get("invalid-own")!), { key: "ABC", source: "system" });
+    assert.deepEqual(resolveTicketKey(index, index.get("alpha")!), { key: null, source: null });
+  });
+
   test("shows a local path only when its check passed", () => {
     const withPaths = new CatalogIndex(snapshot(BASE, { localPaths: { "alpha-app": "~/alpha", "beta-lib": "/absent" } }));
     const facts = new Map([
@@ -337,6 +398,7 @@ describe("dependencies", () => {
     ]);
     assert.deepEqual(showEntry(withPaths, withPaths.get("alpha-app")!, facts), {
       ...BASE[3].data, type: "repository", id: "alpha-app", name: "alpha-app",
+      resolved_ticket_key: null, ticket_key_source: null,
       local_path: "/home/user/alpha", local_path_status: "ok",
     });
     assert.equal(showEntry(withPaths, withPaths.get("beta-lib")!, facts).local_path, null);

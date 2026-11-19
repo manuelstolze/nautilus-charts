@@ -20,6 +20,10 @@ _Avoid_: Personal system, standalone, misc
 The short uppercase code that starts every change ID of one Repository, for example `NBR`. It never changes once a change uses it.
 _Avoid_: Prefix, project key
 
+**Ticket key**:
+The uppercase code for a project in an external ticket tracker, such as `ABC` in `ABC-1234`. It may be set on a System or Repository; a Repository's own value takes precedence, and several entries may share it.
+_Avoid_: Scope key, project key, ticket prefix
+
 **External**:
 A specific service outside the catalog that a Repository uses, for example Amazon S3. It names the service, not only its provider.
 _Avoid_: Third party, integration, provider

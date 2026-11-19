@@ -186,6 +186,38 @@ describe("catalog validation", () => {
     assert.deepEqual(JSON.parse(found.output.join("\n")).entries.map((entry: { id: string }) => entry.id), ["alpha-app"]);
   });
 
+  test("shows resolved ticket keys in JSON for repositories only", () => {
+    write("systems/alpha.toml", 'description = "Alpha system."\nticket-key = "ABC"\n');
+    write("repositories/alpha-app.toml", 'description = "Alpha application."\nsystem = "alpha"\nticket-key = "XYZ"\n');
+    write("repositories/beta-lib.toml", 'description = "Beta library."\nsystem = "beta"\n');
+    write("repositories/independent.toml", 'description = "Independent repository."\n');
+
+    const own = capture(() => main(["show", "alpha-app", "--json"], root));
+    const ownData = JSON.parse(own.output.join("\n"));
+    assert.equal(ownData["ticket-key"], "XYZ");
+    assert.equal(ownData.resolved_ticket_key, "XYZ");
+    assert.equal(ownData.ticket_key_source, "repository");
+
+    write("repositories/alpha-app.toml", 'description = "Alpha application."\nsystem = "alpha"\n');
+    const inherited = capture(() => main(["show", "alpha-app", "--json"], root));
+    const inheritedData = JSON.parse(inherited.output.join("\n"));
+    assert.equal(inheritedData.resolved_ticket_key, "ABC");
+    assert.equal(inheritedData.ticket_key_source, "system");
+
+    for (const id of ["beta-lib", "independent"]) {
+      const result = capture(() => main(["show", id, "--json"], root));
+      const data = JSON.parse(result.output.join("\n"));
+      assert.equal(data.resolved_ticket_key, null, id);
+      assert.equal(data.ticket_key_source, null, id);
+    }
+    for (const id of ["alpha", "stripe"]) {
+      const result = capture(() => main(["show", id, "--json"], root));
+      const data = JSON.parse(result.output.join("\n"));
+      assert.equal("resolved_ticket_key" in data, false, id);
+      assert.equal("ticket_key_source" in data, false, id);
+    }
+  });
+
   test("checks repository key form, type, uniqueness, and entry type", () => {
     const form = "key must be 2–5 characters: an uppercase letter, then uppercase letters or digits";
     write("repositories/lower-key.toml", 'description = "Lowercase key."\nkey = "nb"\n');
@@ -253,7 +285,12 @@ describe("charts add", () => {
   }
 
   test("creates each entry type from its template with only supplied values", () => {
-    const systemData = { name: 'Quoted "System"', description: "Line one.\nLine two." };
+    const systemData = {
+      name: 'Quoted "System"',
+      description: "Line one.\nLine two.",
+      owner: "Team Example",
+      "ticket-key": "ABC",
+    };
     const system = add("system", "new-system", systemData, ["--json"]);
     const systemPayload = JSON.parse(system.output.join("\\n"));
     assert.equal(system.result, 0, JSON.stringify({ output: system.output, errors: system.errors }));
@@ -261,12 +298,16 @@ describe("charts add", () => {
     assert.equal(systemPayload.id, "new-system");
     assert.equal(systemPayload.path, "systems/new-system.toml");
     assert.equal(systemPayload.validation.ok, true);
-    assert.deepEqual(JSON.parse(JSON.stringify(parseToml(readFileSync(join(root, systemPayload.path), "utf8")))), systemData);
-    assert.ok(!readFileSync(join(root, systemPayload.path), "utf8").includes("Display name"));
+    const systemContent = readFileSync(join(root, systemPayload.path), "utf8");
+    assert.deepEqual(JSON.parse(JSON.stringify(parseToml(systemContent))), systemData);
+    assert.ok(!systemContent.includes("Display name"));
+    assert.ok(systemContent.indexOf('owner = "Team Example"') < systemContent.indexOf('ticket-key = "ABC"'));
+    assert.ok(readFileSync(join(root, "templates/system.toml"), "utf8").includes('# ticket-key = "ABC"'));
 
     const repoData = {
       description: 'Uses a "quoted" name.\nSecond line.',
       key: "NEW",
+      "ticket-key": "ABC",
       system: "alpha",
       tags: ["utility", "library"],
       "depends-on": [{ id: "beta-lib", via: "npm package" }, { id: "stripe", via: "API" }],
@@ -277,6 +318,8 @@ describe("charts add", () => {
     const repositoryContent = readFileSync(repositoryFile, "utf8");
     const repositoryParsed = JSON.parse(JSON.stringify(parseToml(repositoryContent))) as Record<string, unknown>;
     assert.deepEqual(repositoryParsed, repoData);
+    assert.ok(repositoryContent.indexOf('key = "NEW"') < repositoryContent.indexOf('ticket-key = "ABC"'));
+    assert.ok(readFileSync(join(root, "templates/repository.toml"), "utf8").includes('# ticket-key = "ABC"'));
     assert.ok(!("id" in repositoryParsed));
     assert.ok(!repositoryContent.includes("Short purpose of this repository"));
 
@@ -347,6 +390,24 @@ describe("charts add", () => {
     assert.equal(readFileSync(join(root, "systems/alpha.toml"), "utf8"), originalSystem);
     assert.equal(readFileSync(join(root, "repositories/alpha-app.toml"), "utf8"), originalRepository);
     assert.equal(readFileSync(join(root, "externals/stripe.toml"), "utf8"), originalExternal);
+  });
+
+  test("rejects invalid ticket-key values without writing", () => {
+    const values: unknown[] = ["A", "abc", "1AB", "AB-C", "ABCDEFGHIJK", 12];
+    const form = "ticket-key must be 2–10 characters: an uppercase letter, then uppercase letters or digits";
+    let number = 0;
+    for (const kind of ["system", "repository"]) {
+      for (const value of values) {
+        const id = `bad-ticket-key-${number}`;
+        number += 1;
+        const result = add(kind, id, { description: "Invalid ticket key.", "ticket-key": value }, ["--json"]);
+        assert.equal(result.result, 2, `${kind} ${JSON.stringify(value)}`);
+        const payload = JSON.parse(result.output.join("\n"));
+        const directory = kind === "system" ? "systems" : "repositories";
+        assert.deepEqual(payload.validation.errors, [`${directory}/${id}.toml: ${form}`]);
+        assert.equal(existsSync(join(root, `${directory}/${id}.toml`)), false);
+      }
+    }
   });
 
   test("checks keys, tags, dependencies, and remotes before writing", () => {

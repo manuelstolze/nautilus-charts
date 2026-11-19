@@ -7,6 +7,7 @@ import {
   isString,
   KEY_PATTERN,
   STATUSES,
+  TICKET_KEY_PATTERN,
   type Data,
   type Entry,
   type Finding,
@@ -110,6 +111,11 @@ export function validateEntryData(
   if (!isString(status) || !STATUSES.has(status)) errors.push(`${file}: invalid status ${JSON.stringify(status)}`);
   if (isString(entry.data.remote) && remoteHasCredentials(entry.data.remote)) {
     errors.push(`${file}: remote must not contain credentials`);
+  }
+  const ticketKey = entry.data["ticket-key"];
+  if ((entry.kind === "system" || entry.kind === "repository") && ticketKey !== undefined &&
+    (!isString(ticketKey) || !TICKET_KEY_PATTERN.test(ticketKey))) {
+    errors.push(`${file}: ticket-key must be 2–10 characters: an uppercase letter, then uppercase letters or digits`);
   }
 
   if (entry.kind !== "repository") return { errors, warnings };
