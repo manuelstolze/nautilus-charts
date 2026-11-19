@@ -888,6 +888,176 @@ describe("charts add", () => {
   });
 });
 
+describe("charts set", () => {
+  function update(id: string, data?: unknown, extra: string[] = []) {
+    const args = ["set", id];
+    if (data !== undefined) args.push("--data", typeof data === "string" ? data : JSON.stringify(data));
+    return capture(() => main([...args, ...extra], root));
+  }
+
+  test("adds a missing field in template order and keeps all other text", () => {
+    const original = '# header\ndescription = "Alpha application."\n# before system\nsystem = "alpha"\ntags = ["utility"]\n# footer\n';
+    write("repositories/alpha-app.toml", original);
+    const result = update("alpha-app", { key: "NEW" }, ["--json"]);
+    const payload = JSON.parse(result.output.join("\\n"));
+    assert.equal(result.result, 0, JSON.stringify({ output: result.output, errors: result.errors }));
+    assert.deepEqual(payload.changed, ["key"]);
+    assert.equal(
+      readFileSync(join(root, "repositories/alpha-app.toml"), "utf8"),
+      '# header\ndescription = "Alpha application."\nkey = "NEW"\n# before system\nsystem = "alpha"\ntags = ["utility"]\n# footer\n',
+    );
+  });
+
+  test("replaces a multi-line dependency field and keeps outside comments", () => {
+    const original = [
+      'description = "Alpha application."',
+      'system = "alpha"',
+      'tags = ["utility"]',
+      "# before dependencies",
+      "depends-on = [",
+      '  { id = "beta-lib", via = "npm" },',
+      '  { id = "stripe", via = "API" },',
+      "]",
+      "# after dependencies",
+      "",
+    ].join("\n");
+    write("repositories/alpha-app.toml", original);
+    const result = update("alpha-app", { "depends-on": [{ id: "beta-lib", via: "pnpm" }] }, ["--json"]);
+    assert.equal(result.result, 0, JSON.stringify({ output: result.output, errors: result.errors }));
+    assert.equal(
+      readFileSync(join(root, "repositories/alpha-app.toml"), "utf8"),
+      'description = "Alpha application."\nsystem = "alpha"\ntags = ["utility"]\n# before dependencies\ndepends-on = [{ id = "beta-lib", via = "pnpm" }]\n# after dependencies\n',
+    );
+  });
+
+  test("refuses unsafe field layouts and leaves each file unchanged", () => {
+    const cases = [
+      { text: 'description = "One"\ndescription = "Two"\n', reason: "field appears more than once" },
+      { text: 'description.extra = "One"\n', reason: "field uses a dotted key" },
+      { text: 'description = "One"\n[meta]\nvalue = 1\n', reason: "file contains a table section" },
+    ];
+    for (const [index, item] of cases.entries()) {
+      const id = `unsafe-${index}`;
+      const path = `repositories/${id}.toml`;
+      write(path, item.text);
+      const original = readFileSync(join(root, path), "utf8");
+      const store = new TomlStore(root);
+      const result = store.updateEntry("repository", id, { description: "Updated." }, ["description"]);
+      assert.equal(result.status, "invalid", id);
+      if (result.status === "invalid") assert.ok(result.errors.join(" ").includes(item.reason), result.errors.join(" "));
+      assert.equal(readFileSync(join(root, path), "utf8"), original);
+    }
+  });
+
+  test("sets or replaces a repository path and appends a used new tag", () => {
+    const work = join(temporary, "set-path");
+    mkdirSync(work);
+    execFileSync("git", ["init", "-q", work]);
+    write("local/paths.toml", 'alpha-app = "/old/path" # keep note\n');
+    const pathResult = update("alpha-app", undefined, ["--local-path", work, "--json"]);
+    const pathPayload = JSON.parse(pathResult.output.join("\\n"));
+    assert.equal(pathResult.result, 0, JSON.stringify({ output: pathResult.output, errors: pathResult.errors }));
+    assert.ok(pathPayload.validation.warnings.some((warning: string) => warning.includes("replaced the existing local path")));
+    assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), `alpha-app = ${JSON.stringify(work)} # keep note\n`);
+
+    const tagResult = update("alpha-app", { tags: ["utility", "data-pipeline"] }, ["--new-tag", "data-pipeline=Moves data.", "--json"]);
+    const tagPayload = JSON.parse(tagResult.output.join("\\n"));
+    assert.equal(tagResult.result, 0, JSON.stringify({ output: tagResult.output, errors: tagResult.errors }));
+    assert.deepEqual(tagPayload.new_tags, ["data-pipeline"]);
+    assert.equal((parseToml(readFileSync(join(root, "tags.toml"), "utf8")) as Record<string, unknown>)["data-pipeline"], "Moves data.");
+  });
+
+  test("rejects local paths and new tags for non-repositories", () => {
+    for (const id of ["alpha", "stripe"]) {
+      const pathResult = update(id, undefined, ["--local-path", "/work/example", "--json"]);
+      assert.equal(pathResult.result, 2, id);
+      assert.ok(JSON.parse(pathResult.output.join("\\n")).validation.errors[0].includes("only for a repository"));
+      const tagResult = update(id, {}, ["--new-tag", "example-tag=Example.", "--json"]);
+      assert.equal(tagResult.result, 2, id);
+      assert.ok(JSON.parse(tagResult.output.join("\\n")).validation.errors[0].includes("only for a repository"));
+    }
+  });
+
+  test("rejects an unused new tag without writing", () => {
+    const originalEntry = readFileSync(join(root, "repositories/alpha-app.toml"), "utf8");
+    const originalTags = readFileSync(join(root, "tags.toml"), "utf8");
+    const result = update("alpha-app", {}, ["--new-tag", "unused-tag=Unused.", "--json"]);
+    assert.equal(result.result, 2);
+    assert.ok(JSON.parse(result.output.join("\\n")).validation.errors[0].includes("is not used by the entry"));
+    assert.equal(readFileSync(join(root, "repositories/alpha-app.toml"), "utf8"), originalEntry);
+    assert.equal(readFileSync(join(root, "tags.toml"), "utf8"), originalTags);
+  });
+
+  test("rolls back the entry, path map, and tags after full validation fails", () => {
+    const originalEntry = readFileSync(join(root, "repositories/alpha-app.toml"), "utf8");
+    const originalTags = readFileSync(join(root, "tags.toml"), "utf8");
+    const originalPaths = 'alpha-app = "/old/path" # old path\n';
+    write("local/paths.toml", originalPaths);
+    const work = join(temporary, "wrong-remote");
+    mkdirSync(work);
+    execFileSync("git", ["init", "-q", work]);
+    execFileSync("git", ["-C", work, "remote", "add", "origin", "https://example.com/other.git"]);
+    const result = update("alpha-app", { remote: "https://example.com/wanted.git", tags: ["utility", "data-pipeline"] }, [
+      "--local-path", work,
+      "--new-tag", "data-pipeline=Moves data.",
+      "--json",
+    ]);
+    assert.equal(result.result, 1);
+    assert.ok(JSON.parse(result.output.join("\\n")).validation.errors.some((error: string) => error.includes("remote does not match")));
+    assert.equal(readFileSync(join(root, "repositories/alpha-app.toml"), "utf8"), originalEntry);
+    assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), originalPaths);
+    assert.equal(readFileSync(join(root, "tags.toml"), "utf8"), originalTags);
+  });
+
+  test("does not overwrite files changed before rollback", () => {
+    const store = new TomlStore(root);
+    const updated = store.updateEntry(
+      "repository",
+      "alpha-app",
+      { description: "Updated.", tags: ["utility", "data-pipeline"] },
+      ["description", "tags"],
+      "/work/new-path",
+      [{ name: "data-pipeline", description: "Moves data." }],
+    );
+    assert.equal(updated.status, "updated");
+    write("repositories/alpha-app.toml", "external entry change\n");
+    write("local/paths.toml", "external path change\n");
+    write("tags.toml", "external tag change\n");
+    const errors = updated.rollback();
+    assert.ok(errors.includes("repositories/alpha-app.toml changed during rollback and was not restored"));
+    assert.ok(errors.includes("local/paths.toml changed during rollback and was not restored"));
+    assert.ok(errors.includes("tags.toml changed during rollback and was not restored"));
+    assert.equal(readFileSync(join(root, "repositories/alpha-app.toml"), "utf8"), "external entry change\n");
+    assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), "external path change\n");
+    assert.equal(readFileSync(join(root, "tags.toml"), "utf8"), "external tag change\n");
+  });
+
+  test("reports no change and returns JSON usage errors", () => {
+    const noChange = update("alpha-app", { description: "Alpha application." });
+    assert.equal(noChange.result, 0);
+    assert.ok(noChange.output[0].includes("No change"));
+    const emptyData = update("alpha-app", {});
+    assert.equal(emptyData.result, 0);
+    assert.ok(emptyData.output[0].includes("No change"));
+
+    const noOptions = capture(() => main(["set", "alpha-app", "--json"], root));
+    assert.equal(noOptions.result, 2);
+    assert.equal(JSON.parse(noOptions.output.join("\\n")).ok, false);
+    const missingId = capture(() => main(["set", "--json"], root));
+    assert.equal(missingId.result, 2);
+    assert.equal(JSON.parse(missingId.output.join("\\n")).ok, false);
+    const missingKey = capture(() => main(["set", "alpha-app", "--data", "{}", "--replace-key", "--json"], root));
+    assert.equal(missingKey.result, 2);
+    assert.ok(JSON.parse(missingKey.output.join("\\n")).error.includes("requires key"));
+    const repeated = capture(() => main(["set", "alpha-app", "--data", "{}", "--data", "{}", "--json"], root));
+    assert.equal(repeated.result, 2);
+    assert.ok(JSON.parse(repeated.output.join("\\n")).error.includes("used only once"));
+    const badJson = capture(() => main(["set", "alpha-app", "--data", "{", "--json"], root));
+    assert.equal(badJson.result, 2);
+    assert.ok(JSON.parse(badJson.output.join("\\n")).error.includes("not valid JSON"));
+  });
+});
+
 describe("catalog commands", () => {
   test("derives system dependencies from repository dependencies", () => {
     const catalog = new CatalogIndex(new TomlStore(root).load());
