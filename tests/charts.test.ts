@@ -285,7 +285,12 @@ describe("charts add", () => {
   }
 
   test("creates each entry type from its template with only supplied values", () => {
-    const systemData = { name: 'Quoted "System"', description: "Line one.\nLine two." };
+    const systemData = {
+      name: 'Quoted "System"',
+      description: "Line one.\nLine two.",
+      owner: "Team Example",
+      "ticket-key": "ABC",
+    };
     const system = add("system", "new-system", systemData, ["--json"]);
     const systemPayload = JSON.parse(system.output.join("\\n"));
     assert.equal(system.result, 0, JSON.stringify({ output: system.output, errors: system.errors }));
@@ -293,12 +298,16 @@ describe("charts add", () => {
     assert.equal(systemPayload.id, "new-system");
     assert.equal(systemPayload.path, "systems/new-system.toml");
     assert.equal(systemPayload.validation.ok, true);
-    assert.deepEqual(JSON.parse(JSON.stringify(parseToml(readFileSync(join(root, systemPayload.path), "utf8")))), systemData);
-    assert.ok(!readFileSync(join(root, systemPayload.path), "utf8").includes("Display name"));
+    const systemContent = readFileSync(join(root, systemPayload.path), "utf8");
+    assert.deepEqual(JSON.parse(JSON.stringify(parseToml(systemContent))), systemData);
+    assert.ok(!systemContent.includes("Display name"));
+    assert.ok(systemContent.indexOf('owner = "Team Example"') < systemContent.indexOf('ticket-key = "ABC"'));
+    assert.ok(readFileSync(join(root, "templates/system.toml"), "utf8").includes('# ticket-key = "ABC"'));
 
     const repoData = {
       description: 'Uses a "quoted" name.\nSecond line.',
       key: "NEW",
+      "ticket-key": "ABC",
       system: "alpha",
       tags: ["utility", "library"],
       "depends-on": [{ id: "beta-lib", via: "npm package" }, { id: "stripe", via: "API" }],
@@ -309,6 +318,8 @@ describe("charts add", () => {
     const repositoryContent = readFileSync(repositoryFile, "utf8");
     const repositoryParsed = JSON.parse(JSON.stringify(parseToml(repositoryContent))) as Record<string, unknown>;
     assert.deepEqual(repositoryParsed, repoData);
+    assert.ok(repositoryContent.indexOf('key = "NEW"') < repositoryContent.indexOf('ticket-key = "ABC"'));
+    assert.ok(readFileSync(join(root, "templates/repository.toml"), "utf8").includes('# ticket-key = "ABC"'));
     assert.ok(!("id" in repositoryParsed));
     assert.ok(!repositoryContent.includes("Short purpose of this repository"));
 
