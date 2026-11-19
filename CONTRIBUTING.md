@@ -69,7 +69,7 @@ Include exactly one matching emoji and type. Use `charts` as the scope, or a nar
 
 ## Catalog entries
 
-Entries in `systems/`, `repositories/`, and `externals/` are each user's own catalog and stay private, as [rule I of the constitution](./CONSTITUTION.md#i-the-catalog-stays-private) sets out.
+Entries in `systems/`, `repositories/`, and `externals/` are each catalog owner's own catalog and stay private, as [rule I of the constitution](./CONSTITUTION.md#i-the-catalog-stays-private) sets out.
 
 Read [docs/structure.md](./docs/structure.md) for entry types, fields, and ID rules. Follow the [charts skill](./.agents/skills/charts/SKILL.md) when finding or changing entries or resolving a local repository path.
 
