@@ -99,4 +99,63 @@ export class MemoryStore implements CatalogStore {
     const warnings = localPathReplaced ? [localPathReplacementWarning(id)] : [];
     return { status: "created", path, warnings, rollback };
   }
+
+  updateEntry(
+    kind: Kind,
+    id: string,
+    data: Data,
+    changedFields: readonly string[],
+    localPath?: string,
+    newTags: readonly NewTag[] = [],
+  ): ReturnType<CatalogStore["updateEntry"]> {
+    const path = entryFile(kind, id);
+    const entry = this.entries.find((item) => item.kind === kind && item.id === id);
+    if (!entry) return { status: "invalid", path, errors: [`cannot read entry ${path}`] };
+    if (this.failWrite) return { status: "failed", path, errors: [`could not write entry: ${this.failWrite}`] };
+
+    const previousData = structuredClone(entry.data);
+    const hadFile = this.files.has(path);
+    const previousText = this.files.get(path) ?? JSON.stringify(entry.data);
+    const updatedData = structuredClone(entry.data);
+    for (const field of changedFields) {
+      if (Object.hasOwn(data, field)) Object.defineProperty(updatedData, field, { value: structuredClone(data[field]), enumerable: true, writable: true });
+    }
+    const text = JSON.stringify(updatedData);
+    const previousLocalPaths = this.localPaths;
+    const pathChanges = localPath !== undefined && (!Object.hasOwn(previousLocalPaths ?? {}, id) || previousLocalPaths?.[id] !== localPath);
+    const localPathReplaced = pathChanges && Object.hasOwn(previousLocalPaths ?? {}, id);
+    const previousTags = this.tags;
+    entry.data = updatedData;
+    this.files.set(path, text);
+    if (pathChanges) this.localPaths = { ...(previousLocalPaths ?? {}), [id]: localPath };
+    if (newTags.length) {
+      this.tags = { ...(previousTags ?? {}), ...Object.fromEntries(newTags.map(({ name, description }) => [name, description])) };
+    }
+    const writtenLocalPaths = this.localPaths;
+    const writtenTags = this.tags;
+
+    const rollback = (): string[] => {
+      const errors: string[] = [];
+      if (this.changeBeforeRollback.has("entry")) this.files.set(path, `${text} changed`);
+      if (pathChanges && this.changeBeforeRollback.has("localPaths")) this.localPaths = { ...(this.localPaths ?? {}), other: "changed" };
+      if (newTags.length && this.changeBeforeRollback.has("tags")) this.tags = { ...(this.tags ?? {}), other: "changed" };
+      if (newTags.length) {
+        if (this.tags !== writtenTags) errors.push("tags.toml changed during rollback and was not restored");
+        else this.tags = previousTags;
+      }
+      if (pathChanges) {
+        if (this.localPaths !== writtenLocalPaths) errors.push("local/paths.toml changed during rollback and was not restored");
+        else this.localPaths = previousLocalPaths;
+      }
+      if (this.files.get(path) !== text) errors.push(`${path} changed during rollback and was not restored`);
+      else {
+        entry.data = previousData;
+        if (hadFile) this.files.set(path, previousText);
+        else this.files.delete(path);
+      }
+      return errors;
+    };
+    const warnings = localPathReplaced ? [localPathReplacementWarning(id)] : [];
+    return { status: "updated", path, warnings, rollback };
+  }
 }
