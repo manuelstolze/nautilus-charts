@@ -30,6 +30,18 @@ export interface CatalogStore {
     | { status: "invalid"; path: string; errors: string[] }
     | { status: "failed"; path: string; errors: string[] }
     | { status: "created"; path: string; warnings: string[]; rollback(): string[] };
+  /** Updates only the named fields, records the local path and appends new tags. */
+  updateEntry(
+    kind: Kind,
+    id: string,
+    data: Data,
+    changedFields: readonly string[],
+    localPath?: string,
+    newTags?: readonly NewTag[],
+  ):
+    | { status: "invalid"; path: string; errors: string[] }
+    | { status: "failed"; path: string; errors: string[] }
+    | { status: "updated"; path: string; warnings: string[]; rollback(): string[] };
 }
 
 /** Local Git data: repository roots, remotes, and ignore rules. Never remote access. */

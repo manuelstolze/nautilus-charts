@@ -1,6 +1,7 @@
 import type { AddResult } from "../commands/add.ts";
 import type { CheckResult } from "../commands/check.ts";
 import type { FindResult } from "../commands/find.ts";
+import type { SetResult } from "../commands/set.ts";
 import type { EntryResult } from "../commands/show.ts";
 import type { NewTag } from "../domain/validation.ts";
 import {
@@ -19,7 +20,7 @@ import {
 // The terminal adapter: argument parsing and text or JSON output.
 
 export type Options = {
-  command: "find" | "show" | "deps" | "rdeps" | "check" | "add";
+  command: "find" | "show" | "deps" | "rdeps" | "check" | "add" | "set";
   json: boolean;
   text?: string;
   id?: string;
@@ -27,6 +28,7 @@ export type Options = {
   data?: Data;
   localPath?: string;
   newTags?: NewTag[];
+  replaceKey?: boolean;
   system?: string;
   tag?: string;
   status?: string;
@@ -36,8 +38,8 @@ export type Options = {
 /** Parses the command line. Throws an Error with the usage message on bad input. */
 export function parseArgs(argv: string[]): Options {
   const [command, ...rest] = argv;
-  if (!["find", "show", "deps", "rdeps", "check", "add"].includes(command)) {
-    throw new Error("usage: charts <find|show|deps|rdeps|check|add> [arguments] [--json]");
+  if (!["find", "show", "deps", "rdeps", "check", "add", "set"].includes(command)) {
+    throw new Error("usage: charts <find|show|deps|rdeps|check|add|set> [arguments] [--json]");
   }
   const options: Options = { command: command as Options["command"], json: false };
   const positional: string[] = [];
@@ -107,6 +109,76 @@ export function parseArgs(argv: string[]): Options {
     return options;
   }
 
+  if (command === "set") {
+    let dataText: string | undefined;
+    let localPathSet = false;
+    let replaceKeySet = false;
+    const newTags: NewTag[] = [];
+    const newTagNames = new Set<string>();
+    for (let index = 0; index < rest.length; index += 1) {
+      const argument = rest[index];
+      if (argument === "--json") {
+        options.json = true;
+        continue;
+      }
+      if (argument === "--replace-key") {
+        if (replaceKeySet) throw new Error("--replace-key can be used only once");
+        replaceKeySet = true;
+        options.replaceKey = true;
+        continue;
+      }
+      if (argument === "--data" || argument === "--local-path" || argument === "--new-tag") {
+        const value = rest[index + 1];
+        if (value === undefined) throw new Error(`${argument} requires a value`);
+        index += 1;
+        if (argument === "--data") {
+          if (dataText !== undefined) throw new Error("--data can be used only once");
+          dataText = value;
+        } else if (argument === "--local-path") {
+          if (localPathSet) throw new Error("--local-path can be used only once");
+          localPathSet = true;
+          options.localPath = value;
+        } else {
+          const separator = value.indexOf("=");
+          if (separator < 0) throw new Error("--new-tag must use <name>=<description>");
+          const name = value.slice(0, separator);
+          const description = value.slice(separator + 1);
+          if (!name) throw new Error("--new-tag name must not be empty");
+          if (!description) throw new Error("--new-tag description must not be empty");
+          if (newTagNames.has(name)) throw new Error(`--new-tag name ${JSON.stringify(name)} was used more than once`);
+          newTagNames.add(name);
+          newTags.push({ name, description });
+        }
+        continue;
+      }
+      if (argument.startsWith("--")) throw new Error(`unknown option: ${argument}`);
+      positional.push(argument);
+    }
+    if (positional.length !== 1) throw new Error("set requires one entry ID");
+    options.id = positional[0];
+    if (!ID_PATTERN.test(options.id)) throw new Error(`invalid ID ${JSON.stringify(options.id)}; use lowercase kebab-case`);
+    if (dataText === undefined && options.localPath === undefined) {
+      throw new Error("set requires --data '<JSON>' or --local-path <path>");
+    }
+    if (options.localPath === "") throw new Error("--local-path must not be empty");
+    if (dataText !== undefined) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(dataText);
+      } catch (error) {
+        throw new Error(`--data is not valid JSON: ${errorMessage(error)}`);
+      }
+      if (!isRecord(parsed)) throw new Error("--data must be a JSON object");
+      if (Object.hasOwn(parsed, "id")) throw new Error("do not include id in --data; pass it as the positional ID");
+      if (replaceKeySet && !Object.hasOwn(parsed, "key")) throw new Error("--replace-key requires key in --data");
+      options.data = parsed;
+    } else if (replaceKeySet) {
+      throw new Error("--replace-key requires key in --data");
+    }
+    options.newTags = newTags;
+    return options;
+  }
+
   for (let index = 0; index < rest.length; index += 1) {
     const argument = rest[index];
     if (argument === "--json") {
@@ -149,7 +221,7 @@ function printJson(value: unknown): void {
 /** Reports an argument error. `add --json` reports it as JSON. Returns the exit status. */
 export function renderUsageError(argv: string[], error: unknown): number {
   const message = errorMessage(error);
-  if (argv[0] === "add" && argv.includes("--json")) printJson({ ok: false, error: message });
+  if (["add", "set"].includes(argv[0]) && argv.includes("--json")) printJson({ ok: false, error: message });
   else console.error(message);
   return 2;
 }
@@ -248,6 +320,34 @@ export function renderCheck(json: boolean, result: CheckResult): number {
     for (const error of errors) console.log(`ERROR: ${error}`);
     if (!errors.length) console.log("check: ok");
   }
+  return result.status;
+}
+
+export function renderSet(json: boolean, result: SetResult): number {
+  if (json) {
+    printJson({
+      ok: result.ok,
+      type: result.type,
+      id: result.id,
+      path: result.path,
+      changed: result.changed,
+      new_tags: result.newTags,
+      validation: { ok: result.validation.errors.length === 0, ...result.validation },
+    });
+    return result.status;
+  }
+  for (const warning of result.validation.warnings) console.log(`WARNING: ${warning}`);
+  for (const error of result.validation.errors) console.error(`ERROR: ${error}`);
+  if (result.ok && result.changed.length === 0 && result.newTags.length === 0) {
+    console.log(`No change to ${result.type} ${result.id} at ${result.path}`);
+  } else if (result.ok) {
+    const changed = result.changed.length ? result.changed.join(", ") : "none";
+    console.log(`Updated ${result.type} ${result.id} at ${result.path}; changed fields: ${changed}; validation ok`);
+    if (result.newTags.length) {
+      console.log(`New tags: ${result.newTags.join(", ")}. The shared tag list has uncommitted changes.`);
+    }
+  } else if (result.type) console.error(`Could not set ${result.type} ${result.id} at ${result.path}; validation failed`);
+  else console.error(`Could not set entry ${result.id}; validation failed`);
   return result.status;
 }
 

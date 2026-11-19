@@ -54,12 +54,14 @@ If a result is ambiguous, ask the catalog owner which entry they mean. A path in
 
 ## Update an entry
 
-1. Use `find` and `show` to identify the entry.
-2. Change only the fields the catalog owner requested. Keep other fields and dependency links unchanged.
-3. If an ID changes, rename its file and update every reference, including `system`, `depends-on`, and the matching key in `local/paths.toml`.
-4. Never change a repository `key` that is already used. To add a missing key, search with `find <key>` first, then choose a unique key with the catalog owner. `find` also matches the key inside other text, so rely on `check` to confirm that the key is unique.
+1. Use `find` and `show` to identify the entry and confirm its type.
+2. Pass only the fields the catalog owner requested as a partial JSON object to `charts set`. Do not include `id` or JSON `null`. Keep all other fields and dependency links unchanged.
+3. For a repository, use `--local-path` only when the catalog owner requests a path change. For a missing tag, propose its name and description, ask the catalog owner to confirm both, and pass `--new-tag` only when the `tags` value in `--data` includes the new name.
+4. Never change a repository key that another module uses. Before a key change, check the key in the Logbook. Ask the catalog owner before using `--replace-key`. To add a missing key, search with `find <key>` and check the catalog for uniqueness.
 5. Ask the catalog owner before recording a suggested remote. Never add credentials to a remote URL.
-6. Run `npm run --silent charts -- check` and fix all errors.
+6. Run `npm run --silent charts -- set <id> --data '<JSON>'` with the approved options. Charts checks the merged entry and the full catalog. It changes only named field lines and rolls back a failed validation. It reports when nothing changes.
+7. Check the command result, fix errors, and run `npm run --silent charts -- check`.
+8. Use hand edits only to rename or remove an entry. To rename an ID, rename its file and update every reference, including `system`, `depends-on`, and the matching key in `local/paths.toml`. Use the separate removal steps to remove an entry.
 
 ## Remove an entry
 

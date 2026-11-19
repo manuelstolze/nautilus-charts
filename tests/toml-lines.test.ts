@@ -1,6 +1,61 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { upsertSingleLineMapping } from "../src/adapters/toml-lines.ts";
+import { setTomlFields, upsertSingleLineMapping } from "../src/adapters/toml-lines.ts";
+
+describe("TOML field updates", () => {
+  test("replaces a single-line field and keeps its trailing comment", () => {
+    const original = 'description   = "Old."  # keep this\n# after\n';
+    const result = setTomlFields(original, { description: "New." }, ["description"]);
+    assert.deepEqual(result, {
+      text: 'description   = "New."  # keep this\n# after\n',
+    });
+  });
+
+  test("replaces a multi-line value and keeps comments outside it", () => {
+    const original = [
+      "# before",
+      "depends-on = [",
+      '  { id = "old#id", via = "[] # text" }, # inside value',
+      "]",
+      "# after",
+      'description = "Keep."',
+      "",
+    ].join("\n");
+    const result = setTomlFields(original, { "depends-on": [{ id: "new" }] }, ["description", "depends-on"]);
+    assert.deepEqual(result, {
+      text: '# before\ndepends-on = [{ id = "new" }]\n# after\ndescription = "Keep."\n',
+    });
+  });
+
+  test("inserts missing fields in template order", () => {
+    const cases = [
+      { text: 'description = "Text"\nremote = "https://example.com/a.git"\n', field: "key", order: ["key", "description", "remote"], expected: 'key = "ABC"\ndescription = "Text"\nremote = "https://example.com/a.git"\n' },
+      { text: 'description = "Text"\nremote = "https://example.com/a.git"\n', field: "system", order: ["description", "system", "remote"], expected: 'description = "Text"\nsystem = "shop"\nremote = "https://example.com/a.git"\n' },
+      { text: 'description = "Text"', field: "status", order: ["description", "status"], expected: 'description = "Text"\nstatus = "active"' },
+    ];
+    for (const item of cases) {
+      const result = setTomlFields(item.text, { [item.field]: item.field === "key" ? "ABC" : item.field === "system" ? "shop" : "active" }, item.order);
+      assert.deepEqual(result, { text: item.expected });
+    }
+  });
+
+  test("keeps a BOM, CRLF endings, and a missing final newline", () => {
+    const original = '\uFEFFdescription = "Old."\r\nstatus = "active"';
+    const result = setTomlFields(original, { description: "New." }, ["description", "status"]);
+    assert.deepEqual(result, { text: '\uFEFFdescription = "New."\r\nstatus = "active"' });
+  });
+
+  test("refuses duplicate fields, dotted fields, and table sections", () => {
+    const cases = [
+      { text: 'description = "One"\ndescription = "Two"\n', error: "duplicate-field" },
+      { text: 'description.extra = "One"\n', error: "dotted-key" },
+      { text: '[meta]\ndescription = "One"\n', error: "table-section" },
+    ] as const;
+    for (const item of cases) {
+      assert.deepEqual(setTomlFields(item.text, { description: "New" }, ["description"]), { error: item.error });
+    }
+  });
+});
 
 describe("TOML mapping updates", () => {
   test("appends after existing text with a final newline", () => {

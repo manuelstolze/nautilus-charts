@@ -35,7 +35,7 @@ One file per entry keeps lookups small. An agent reads only the entries it needs
 
 Charts uses lean hexagonal architecture ([ADR 0001](adr/0001-hexagonal-architecture.md)). [Rule VI of the constitution](../CONSTITUTION.md#vi-the-core-does-no-io) sets the dependency rule, and `tests/architecture.test.ts` enforces it.
 
-- **Core.** `src/domain/` holds the catalog rules: entry types, IDs and keys, statuses, fields, validation, and dependencies. `src/commands/` holds one use case per command (`find`, `show`, `deps` and `rdeps`, `check`, `add`). Each use case returns data and an exit status.
+- **Core.** `src/domain/` holds the catalog rules: entry types, IDs and keys, statuses, fields, validation, and dependencies. `src/commands/` holds one use case per command (`find`, `show`, `deps` and `rdeps`, `check`, `add`, `set`). Each use case returns data and an exit status.
 - **Ports.** `src/commands/ports.ts` defines the two boundaries: the catalog store (entry files, `tags.toml`, the templates, and `local/paths.toml`) and Git (repository roots, remotes, and ignore checks).
 - **Adapters.** `src/adapters/` implements the ports with TOML files and local Git, and holds the command-line adapter that parses arguments and prints text or JSON. The tests use in-memory fakes from `tests/fakes/` instead.
 - **Composition root.** `scripts/charts.ts` parses the arguments, builds the adapters, runs the use case, and prints its result.
@@ -158,6 +158,7 @@ shop-common-lib = "~/code/shop/shop-common-lib"
 | `rdeps <id>` | Show what depends on a repository, external, or system. |
 | `check` | Validate all entries and the local paths. |
 | `add <system|repository|external> <id> --data '<JSON>' [--local-path <path>] [--new-tag <name>=<description>]... [--json]` | Create one entry from its template and validate the catalog. `--local-path` is for repositories only. `--new-tag` is for repository entries only. |
+| `set <id> [--data '<JSON>'] [--local-path <path>] [--new-tag <name>=<description>]... [--replace-key] [--json]` | Add or replace fields on an existing entry. `--local-path` is for repositories only. `--new-tag` is for repository entries only. |
 
 `check` reports:
 
@@ -183,7 +184,7 @@ npm run --silent charts -- add repository shop-api \
   --data '{"description":"The shop API.","system":"shop"}'
 ```
 
-Charts reads the matching file in `templates/` to set the field order. It writes only supplied values, so optional template examples do not appear in the new entry. A repository can omit `--local-path`; when supplied, the path is added to ignored `local/paths.toml`. Charts checks that it is a Git repository root and that its local remote matches the entry's `remote`, if set. It uses local Git data only and does not connect to remote servers. When adding a local path, Charts appends new mappings without changing the rest of `local/paths.toml`, replaces one stale mapping written on a single line for the same ID with a warning, and fails without writing when it cannot replace that mapping safely. Charts does not update a file that contains a TOML table section, because a new line at the end would belong to that section.
+Charts reads the matching file in `templates/` to set the field order. It writes only supplied values, so optional template examples do not appear in the new entry. A repository can omit `--local-path`; when supplied, the path is added to ignored `local/paths.toml`. Charts checks that it is a Git repository root and that its local remote matches the entry's `remote`, if set. It uses local Git data only and does not connect to remote servers. When adding a local path, Charts appends new mappings without changing the rest of `local/paths.toml`, replaces one stale mapping written on a single line for the same ID with a warning, and fails without writing when it cannot replace that mapping safely. Charts refuses to append a path when `local/paths.toml` contains a TOML table section, because a new line at the end would belong to that section.
 
 For a missing repository tag, propose a lowercase kebab-case name and a description. Ask the catalog owner to confirm both before passing `--new-tag`. The entry must use each new tag. Charts appends new tags to `tags.toml` and keeps all prior text unchanged.
 
@@ -193,7 +194,17 @@ Use `--json` for machine-readable results. Success reports the type, ID, path, a
 
 ## Updating and removing entries
 
-The `charts` command does not update or remove entries. Follow the skill in `.agents/skills/charts/` to edit existing TOML files and run `npm run --silent charts -- check` afterwards. Run tests with `npm test` and type checks with `npm run typecheck`. Removing an entry never deletes the repository or its files.
+Use `charts set <id>` to add or replace fields on an existing system, repository, or external entry. There is no type argument because IDs are unique across all entry types.
+
+Pass a partial JSON object with `--data`. Do not include `id` or JSON `null`. A named field is added when missing or replaces its full old value, including lists. Fields that are not named stay unchanged. Charts validates the merged entry and the full catalog. If validation fails after writing, it restores the entry, `local/paths.toml`, and `tags.toml`, unless one of those files changed after the write.
+
+Charts changes only the lines of the named fields. It keeps comments, blank lines, and all other field text. It refuses to write when a named field appears more than once, uses a dotted key, or the file has a table section. If the requested values are already set and the local path is unchanged, the command succeeds without writing.
+
+Use `--local-path` only for a repository. Charts applies the same safe mapping rules as `add` and checks the updated path against the entry's remote. Use `--new-tag <name>=<description>` only for a repository. The tag must be new, and its name must appear in the `tags` value passed through `--data`. Charts appends new tags to `tags.toml`; a successful change remains uncommitted.
+
+A repository key may be added when missing. Do not change a key that another module uses. Changing an existing key requires `--replace-key`; first check that the key is not in use, then ask the catalog owner before using the option. Charts does not check other modules for key use.
+
+Use hand edits only to rename an ID or remove an entry. When renaming an ID, rename the file and update every reference, including `system`, `depends-on`, and the matching key in `local/paths.toml`. When removing an entry, check its dependents first and change only the approved entry and references. Removing an entry never deletes the repository or its files.
 
 ## Catalog data
 

@@ -9,6 +9,7 @@ import {
   renderEdges,
   renderFind,
   renderShow,
+  renderSet,
   renderUsageError,
   type Options,
 } from "../src/adapters/cli.ts";
@@ -20,6 +21,7 @@ import type { Ports } from "../src/commands/context.ts";
 import { deps, rdeps } from "../src/commands/deps.ts";
 import { find } from "../src/commands/find.ts";
 import { show } from "../src/commands/show.ts";
+import { set } from "../src/commands/set.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -39,6 +41,14 @@ export function main(argv = process.argv.slice(2), root = ROOT): number {
         data: options.data!,
         localPath: options.localPath,
         newTags: options.newTags,
+      }));
+    case "set":
+      return renderSet(options.json, set(ports, {
+        id: options.id!,
+        data: options.data,
+        localPath: options.localPath,
+        newTags: options.newTags,
+        replaceKey: options.replaceKey,
       }));
     case "check":
       return renderCheck(options.json, check(ports));
