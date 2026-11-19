@@ -16,33 +16,13 @@ import {
 } from "../domain/entry.ts";
 import type { CatalogStore } from "../commands/ports.ts";
 import type { NewTag } from "../domain/validation.ts";
-import { appendTomlLines, upsertSingleLineMapping } from "./toml-lines.ts";
-
-function tomlKey(value: string): string {
-  return /^[A-Za-z0-9_-]+$/.test(value) ? value : JSON.stringify(value);
-}
+import { appendTomlLines, tomlKey, tomlValue, upsertSingleLineMapping } from "./toml-lines.ts";
 
 function localPathUpdateError(id: string, reason: "unsafe-mapping" | "table-section"): string {
   if (reason === "unsafe-mapping") {
     return `${LOCAL_PATHS}: cannot replace the existing local path for ${JSON.stringify(id)}; edit the file by hand`;
   }
   return `${LOCAL_PATHS}: cannot safely update the local path for ${JSON.stringify(id)} while the file contains a table section; edit the file by hand`;
-}
-
-function tomlValue(value: unknown): string {
-  if (value === null || value === undefined) throw new Error("JSON null values cannot be written to TOML");
-  if (typeof value === "string") return JSON.stringify(value);
-  if (typeof value === "boolean") return String(value);
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new Error("number is outside the TOML range");
-    return String(value);
-  }
-  if (Array.isArray(value)) return `[${value.map(tomlValue).join(", ")}]`;
-  if (isRecord(value)) {
-    const pairs = Object.entries(value).map(([key, item]) => `${tomlKey(key)} = ${tomlValue(item)}`);
-    return `{ ${pairs.join(", ")} }`;
-  }
-  throw new Error(`unsupported TOML value: ${String(value)}`);
 }
 
 function tomlTable(data: Data, order: string[] = Object.keys(data)): string {
