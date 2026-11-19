@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { add } from "../src/commands/add.ts";
 import { check } from "../src/commands/check.ts";
+import { set } from "../src/commands/set.ts";
 import { FakeGit } from "./fakes/fake-git.ts";
 import { MemoryStore } from "./fakes/memory-store.ts";
 
@@ -278,5 +279,97 @@ describe("add use case", () => {
     const result = add(ports, { kind: "system", id: "new-system", data: { description: "New." } });
     assert.equal(result.status, 1);
     assert.deepEqual(result.validation.errors, ["could not write entry: disk full"]);
+  });
+});
+
+describe("set use case", () => {
+  test("protects an existing key and allows a deliberate replacement", () => {
+    const ports = catalog();
+    const same = set(ports, { id: "alpha-app", data: { key: "ALP" } });
+    assert.equal(same.ok, true);
+    assert.deepEqual(same.changed, []);
+
+    const refused = set(ports, { id: "alpha-app", data: { key: "BET" } });
+    assert.equal(refused.status, 2);
+    assert.deepEqual(refused.validation.errors, [
+      "repositories/alpha-app.toml: changing an existing key requires --replace-key",
+    ]);
+    assert.equal(ports.store.entries.find((entry) => entry.id === "alpha-app")?.data.key, "ALP");
+
+    const missingKey = set(ports, { id: "alpha-app", data: { description: "Updated." }, replaceKey: true });
+    assert.equal(missingKey.status, 2);
+    assert.deepEqual(missingKey.validation.errors, ["--replace-key requires key in --data"]);
+
+    const replaced = set(ports, { id: "alpha-app", data: { key: "BET" }, replaceKey: true });
+    assert.equal(replaced.ok, true);
+    assert.deepEqual(replaced.changed, ["key"]);
+    assert.equal(ports.store.entries.find((entry) => entry.id === "alpha-app")?.data.key, "BET");
+  });
+
+  test("rejects invalid merged data without changing the store", () => {
+    const ports = catalog();
+    ports.store.entries.push({
+      kind: "repository",
+      id: "beta-lib",
+      data: { description: "Beta library." },
+      file: "repositories/beta-lib.toml",
+    });
+    const cases = [
+      { data: { extra: true }, expected: "repositories/beta-lib.toml: unknown field(s): extra" },
+      { data: { id: "other" }, expected: "--data must not contain id" },
+      { data: { description: null }, expected: "--data must not contain JSON null values" },
+      { data: { tags: ["missing"] }, expected: 'repositories/beta-lib.toml: tag "missing" is not defined in tags.toml' },
+      { data: { system: "missing" }, expected: 'repositories/beta-lib.toml: system "missing" does not name a system' },
+      { data: { "depends-on": [{ id: "missing" }] }, expected: 'repositories/beta-lib.toml: depends-on[0] ID "missing" does not exist' },
+      { data: { key: "ALP" }, replaceKey: true, expected: 'repositories/beta-lib.toml: duplicate key "ALP"; also used by repositories/alpha-app.toml' },
+    ];
+    for (const item of cases) {
+      const entriesBefore = structuredClone(ports.store.entries);
+      const filesBefore = new Map(ports.store.files);
+      const result = set(ports, { id: "beta-lib", ...item });
+      assert.equal(result.status, 2, item.expected);
+      assert.ok(result.validation.errors.includes(item.expected), JSON.stringify(result.validation.errors));
+      assert.deepEqual(ports.store.entries, entriesBefore);
+      assert.deepEqual(ports.store.files, filesBefore);
+    }
+  });
+
+  test("reports unknown and unreadable IDs", () => {
+    const ports = catalog();
+    const unknown = set(ports, { id: "missing", data: { description: "No entry." } });
+    assert.equal(unknown.status, 2);
+    assert.equal(unknown.type, null);
+    assert.deepEqual(unknown.validation.errors, ['unknown ID "missing"']);
+
+    ports.store.unreadable.push("repositories/broken.toml");
+    const unreadable = set(ports, { id: "broken", data: { description: "No entry." } });
+    assert.equal(unreadable.status, 2);
+    assert.equal(unreadable.path, "repositories/broken.toml");
+    assert.deepEqual(unreadable.validation.errors, ["cannot read entry repositories/broken.toml"]);
+  });
+
+  test("returns success and does not write when current values are supplied", () => {
+    const ports = catalog();
+    const result = set(ports, {
+      id: "alpha-app",
+      data: { description: "Alpha application.", key: "ALP", system: "alpha" },
+    });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.changed, []);
+    assert.equal(ports.store.files.size, 0);
+  });
+
+  test("adds a key to a repository that does not have one", () => {
+    const ports = catalog();
+    ports.store.entries.push({
+      kind: "repository",
+      id: "beta-lib",
+      data: { description: "Beta library." },
+      file: "repositories/beta-lib.toml",
+    });
+    const result = set(ports, { id: "beta-lib", data: { key: "BET" } });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.changed, ["key"]);
+    assert.equal(ports.store.entries.find((entry) => entry.id === "beta-lib")?.data.key, "BET");
   });
 });
