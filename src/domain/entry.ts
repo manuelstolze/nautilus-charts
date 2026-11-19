@@ -7,6 +7,7 @@ export type Finding = { errors: string[]; warnings: string[] };
 
 export const ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const KEY_PATTERN = /^[A-Z][A-Z0-9]{1,4}$/;
+export const TICKET_KEY_PATTERN = /^[A-Z][A-Z0-9]{1,9}$/;
 export const ENTRY_DIRS: Array<[Kind, string]> = [
   ["system", "systems"],
   ["repository", "repositories"],
@@ -21,11 +22,12 @@ export function localPathReplacementWarning(id: string): string {
 
 export const STATUSES = new Set(["planned", "active", "deprecated", "archived"]);
 export const FIELD_ORDER: Record<Kind, string[]> = {
-  system: ["name", "description", "owner", "status"],
+  system: ["name", "description", "owner", "ticket-key", "status"],
   repository: [
     "name",
     "description",
     "key",
+    "ticket-key",
     "system",
     "status",
     "owner",
