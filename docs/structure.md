@@ -209,5 +209,4 @@ Git ignores the entries in `systems/`, `repositories/`, and `externals/`. Each c
 
 ## Open points
 
-- How agents in other modules find Charts and load its skill.
-- Whether `owner` becomes a reference to owner entries when a team uses Charts.
+None.
