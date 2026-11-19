@@ -26,13 +26,22 @@ export function resolveTicketKey(
 export function showEntry(index: CatalogIndex, entry: Entry, facts: LocalPathFacts): Data {
   const result = entryJson(entry);
   if (entry.kind !== "repository") return result;
+  const ticketKey = resolveTicketKey(index, entry);
   const configured = index.snapshot.localPaths?.[entry.id];
   const fact = facts.get(entry.id);
   if (!isString(configured) || !fact) {
-    return { ...result, local_path: null, local_path_status: "not configured" };
+    return {
+      ...result,
+      resolved_ticket_key: ticketKey.key,
+      ticket_key_source: ticketKey.source,
+      local_path: null,
+      local_path_status: "not configured",
+    };
   }
   return {
     ...result,
+    resolved_ticket_key: ticketKey.key,
+    ticket_key_source: ticketKey.source,
     local_path: fact.error ? null : fact.resolved,
     local_path_status: fact.error ?? "ok",
   };
