@@ -3,28 +3,28 @@ $ charts
 exit: 2
 --- stdout
 --- stderr
-usage: charts <find|show|deps|rdeps|check|add> [arguments] [--json]
+usage: charts <find|show|deps|rdeps|check|add|set> [arguments] [--json]
 
 ## no command (--json)
 $ charts "--json"
 exit: 2
 --- stdout
 --- stderr
-usage: charts <find|show|deps|rdeps|check|add> [arguments] [--json]
+usage: charts <find|show|deps|rdeps|check|add|set> [arguments] [--json]
 
 ## unknown command
 $ charts "list"
 exit: 2
 --- stdout
 --- stderr
-usage: charts <find|show|deps|rdeps|check|add> [arguments] [--json]
+usage: charts <find|show|deps|rdeps|check|add|set> [arguments] [--json]
 
 ## unknown command (--json)
 $ charts "list" "--json"
 exit: 2
 --- stdout
 --- stderr
-usage: charts <find|show|deps|rdeps|check|add> [arguments] [--json]
+usage: charts <find|show|deps|rdeps|check|add|set> [arguments] [--json]
 
 ## unknown option
 $ charts "show" "alpha" "--verbose"

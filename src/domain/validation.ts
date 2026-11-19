@@ -38,6 +38,34 @@ export function remoteHasCredentials(remote: string): boolean {
   return false;
 }
 
+function sameValue(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right)
+      && left.length === right.length
+      && left.every((value, index) => sameValue(value, right[index]));
+  }
+  if (isRecord(left) || isRecord(right)) {
+    if (!isRecord(left) || !isRecord(right)) return false;
+    const leftKeys = Object.keys(left);
+    const rightKeys = Object.keys(right);
+    return leftKeys.length === rightKeys.length
+      && leftKeys.every((key) => Object.hasOwn(right, key) && sameValue(left[key], right[key]));
+  }
+  return false;
+}
+
+/** Merges supplied fields into an entry and reports fields whose values change. */
+export function mergeEntryData(current: Data, updates: Data): { data: Data; changed: string[] } {
+  const data: Data = { ...current };
+  const changed: string[] = [];
+  for (const [field, value] of Object.entries(updates)) {
+    if (!Object.hasOwn(current, field) || !sameValue(current[field], value)) changed.push(field);
+    Object.defineProperty(data, field, { value, enumerable: true, writable: true, configurable: true });
+  }
+  return { data, changed };
+}
+
 export function validateNewTags(tags: Data, newTags: readonly NewTag[], entryTags: unknown): string[] {
   const errors: string[] = [];
   for (const { name } of newTags) {
@@ -145,10 +173,15 @@ export function validateEntryData(
 }
 
 /** The IDs and keys already taken, for checking a new entry against the catalog. */
-export function validationMaps(index: CatalogIndex): { seen: Map<string, Entry>; keys: Map<string, Entry> } {
+export function validationMaps(index: CatalogIndex, excludeEntryId?: string): { seen: Map<string, Entry>; keys: Map<string, Entry> } {
   const seen = new Map<string, Entry>();
   const keys = new Map<string, Entry>();
+  let excluded = false;
   for (const entry of index.entries) {
+    if (!excluded && entry.id === excludeEntryId) {
+      excluded = true;
+      continue;
+    }
     if (!seen.has(entry.id)) seen.set(entry.id, entry);
     const key = entry.kind === "repository" ? entry.data.key : undefined;
     if (isString(key) && KEY_PATTERN.test(key) && !keys.has(key)) keys.set(key, entry);
