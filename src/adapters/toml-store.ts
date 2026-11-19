@@ -16,7 +16,7 @@ import {
 } from "../domain/entry.ts";
 import type { CatalogStore } from "../commands/ports.ts";
 import type { NewTag } from "../domain/validation.ts";
-import { appendTomlLines, tomlKey, tomlValue, upsertSingleLineMapping } from "./toml-lines.ts";
+import { appendTomlLines, setTomlFields, tomlKey, tomlValue, upsertSingleLineMapping } from "./toml-lines.ts";
 
 function localPathUpdateError(id: string, reason: "unsafe-mapping" | "table-section"): string {
   if (reason === "unsafe-mapping") {
@@ -47,12 +47,123 @@ function replaceTextFile(path: string, text: string): void {
   }
 }
 
+type SidecarUpdate = {
+  label: string;
+  path: string;
+  previousText: string | null;
+  nextText: string;
+  atomic: boolean;
+  written: boolean;
+};
+type PreparedSidecars =
+  | { updates: SidecarUpdate[]; warnings: string[] }
+  | { errors: string[] };
+
 /** The catalog store on disk: TOML files under the catalog root. */
 export class TomlStore implements CatalogStore {
   readonly root: string;
 
   constructor(root: string) {
     this.root = resolve(root);
+  }
+
+  private prepareSidecars(id: string, localPath?: string, newTags: readonly NewTag[] = []): PreparedSidecars {
+    const updates: SidecarUpdate[] = [];
+    const warnings: string[] = [];
+    const localPathFile = join(this.root, LOCAL_PATHS);
+
+    if (localPath !== undefined) {
+      let previousText: string | null;
+      try {
+        previousText = existsSync(localPathFile) ? readFileSync(localPathFile, "utf8") : null;
+      } catch (error) {
+        return { errors: [`cannot update ${LOCAL_PATHS}: ${errorMessage(error)}`] };
+      }
+      let nextText: string;
+      let replaced = false;
+      if (previousText === null) {
+        nextText = appendTomlLines("", [`${tomlKey(id)} = ${JSON.stringify(localPath)}`]);
+      } else {
+        const update = upsertSingleLineMapping(previousText, id, `${tomlKey(id)} = ${JSON.stringify(localPath)}`);
+        if ("error" in update) return { errors: [localPathUpdateError(id, update.error)] };
+        let parsed: unknown;
+        try {
+          parsed = parseToml(previousText);
+        } catch (error) {
+          return { errors: [`cannot update ${LOCAL_PATHS}: ${errorMessage(error)}`] };
+        }
+        if (!isRecord(parsed)) return { errors: [`${LOCAL_PATHS} must contain a TOML table`] };
+        if (Object.hasOwn(parsed, id) && parsed[id] === localPath) nextText = previousText;
+        else {
+          nextText = update.text;
+          replaced = update.replaced;
+        }
+      }
+      if (nextText !== previousText) {
+        updates.push({ label: LOCAL_PATHS, path: localPathFile, previousText, nextText, atomic: false, written: false });
+        if (replaced) warnings.push(localPathReplacementWarning(id));
+      }
+    }
+
+    if (newTags.length > 0) {
+      const tagsFile = join(this.root, "tags.toml");
+      let previousText: string | null;
+      try {
+        previousText = existsSync(tagsFile) ? readFileSync(tagsFile, "utf8") : null;
+      } catch (error) {
+        return { errors: [`cannot update tags.toml: ${errorMessage(error)}`] };
+      }
+      const existingText = previousText ?? "";
+      const appended = newTags.map(({ name, description }) => `${name} = ${JSON.stringify(description)}`);
+      updates.push({
+        label: "tags.toml",
+        path: tagsFile,
+        previousText,
+        nextText: appendTomlLines(existingText, appended),
+        atomic: true,
+        written: false,
+      });
+    }
+    return { updates, warnings };
+  }
+
+  private writeSidecars(updates: SidecarUpdate[]): string[] {
+    for (const update of updates) {
+      try {
+        if (update.atomic) replaceTextFile(update.path, update.nextText);
+        else {
+          mkdirSync(dirname(update.path), { recursive: true });
+          writeFileSync(update.path, update.nextText, "utf8");
+        }
+        update.written = true;
+      } catch (error) {
+        return [`could not write ${update.label}: ${errorMessage(error)}`];
+      }
+    }
+    return [];
+  }
+
+  private rollbackSidecars(updates: SidecarUpdate[]): string[] {
+    const errors: string[] = [];
+    for (const update of [...updates].reverse()) {
+      if (!update.written) continue;
+      try {
+        if (!existsSync(update.path) || readFileSync(update.path, "utf8") !== update.nextText) {
+          errors.push(`${update.label} changed during rollback and was not restored`);
+        } else if (update.previousText === null) unlinkSync(update.path);
+        else if (update.atomic) replaceTextFile(update.path, update.previousText);
+        else writeFileSync(update.path, update.previousText, "utf8");
+      } catch (error) {
+        errors.push(`could not restore ${update.label}: ${errorMessage(error)}`);
+      }
+    }
+    return errors;
+  }
+
+  private templateOrder(kind: Kind): string[] {
+    const templateValue: unknown = parseToml(readFileSync(join(this.root, "templates", `${kind}.toml`), "utf8"));
+    if (!isRecord(templateValue)) throw new Error(`templates/${kind}.toml must contain a TOML table`);
+    return [...new Set([...Object.keys(templateValue), ...FIELD_ORDER[kind]])];
   }
 
   load(): Snapshot {
@@ -106,11 +217,8 @@ export class TomlStore implements CatalogStore {
   }
 
   private renderEntry(kind: Kind, data: Data): string {
-    const templateValue: unknown = parseToml(readFileSync(join(this.root, "templates", `${kind}.toml`), "utf8"));
-    if (!isRecord(templateValue)) throw new Error(`templates/${kind}.toml must contain a TOML table`);
     // Use the template's field order, but never copy its sample values.
-    const order = [...new Set([...Object.keys(templateValue), ...FIELD_ORDER[kind]])];
-    return tomlTable(data, order);
+    return tomlTable(data, this.templateOrder(kind));
   }
 
   createEntry(
@@ -122,7 +230,6 @@ export class TomlStore implements CatalogStore {
   ): ReturnType<CatalogStore["createEntry"]> {
     const path = entryFile(kind, id);
     const entryPath = join(this.root, path);
-    const localPathFile = join(this.root, LOCAL_PATHS);
     const invalid = (errors: string[]) => ({ status: "invalid" as const, path, errors });
 
     let entryText: string;
@@ -132,90 +239,18 @@ export class TomlStore implements CatalogStore {
       return invalid([`cannot create entry from template: ${errorMessage(error)}`]);
     }
 
-    let previousLocalPathText: string | null = null;
-    let localPathText: string | null = null;
-    let localPathReplaced = false;
-    if (localPath !== undefined) {
-      const valueLine = `${tomlKey(id)} = ${JSON.stringify(localPath)}`;
-      if (existsSync(localPathFile)) {
-        try {
-          previousLocalPathText = readFileSync(localPathFile, "utf8");
-        } catch (error) {
-          return invalid([`cannot update ${LOCAL_PATHS}: ${errorMessage(error)}`]);
-        }
-        const update = upsertSingleLineMapping(previousLocalPathText, id, valueLine);
-        if ("error" in update) return invalid([localPathUpdateError(id, update.error)]);
-        let parsed: unknown;
-        try {
-          parsed = parseToml(previousLocalPathText);
-        } catch (error) {
-          return invalid([`cannot update ${LOCAL_PATHS}: ${errorMessage(error)}`]);
-        }
-        if (!isRecord(parsed)) return invalid([`${LOCAL_PATHS} must contain a TOML table`]);
-        if (Object.hasOwn(parsed, id) && parsed[id] === localPath) {
-          localPathText = null;
-        } else {
-          localPathText = update.text;
-          localPathReplaced = update.replaced;
-        }
-      } else {
-        localPathText = appendTomlLines("", [valueLine]);
-      }
-    }
-
-    const tagsFile = join(this.root, "tags.toml");
-    let previousTagsText: string | null = null;
-    let tagsText: string | null = null;
-    if (newTags.length) {
-      try {
-        previousTagsText = existsSync(tagsFile) ? readFileSync(tagsFile, "utf8") : null;
-        const existingText = previousTagsText ?? "";
-        const appended = newTags.map(({ name, description }) => `${name} = ${JSON.stringify(description)}`);
-        tagsText = appendTomlLines(existingText, appended);
-      } catch (error) {
-        return invalid([`cannot update tags.toml: ${errorMessage(error)}`]);
-      }
-    }
+    const prepared = this.prepareSidecars(id, localPath, newTags);
+    if ("errors" in prepared) return invalid(prepared.errors);
+    const { updates, warnings } = prepared;
 
     let entryCreated = false;
-    let localPathWritten = false;
-    let tagsWritten = false;
-    // Never remove or restore a file that changed after this command wrote it.
     const rollback = (): string[] => {
-      const errors: string[] = [];
-      if (tagsWritten) {
-        try {
-          if (!existsSync(tagsFile) || readFileSync(tagsFile, "utf8") !== tagsText) {
-            errors.push("tags.toml changed during rollback and was not restored");
-          } else if (previousTagsText === null) {
-            unlinkSync(tagsFile);
-          } else {
-            replaceTextFile(tagsFile, previousTagsText);
-          }
-        } catch (error) {
-          errors.push(`could not restore tags.toml: ${errorMessage(error)}`);
-        }
-      }
-      if (localPathWritten && existsSync(localPathFile)) {
-        try {
-          if (readFileSync(localPathFile, "utf8") !== localPathText) {
-            errors.push(`${LOCAL_PATHS} changed during rollback and was not restored`);
-          } else if (previousLocalPathText === null) {
-            unlinkSync(localPathFile);
-          } else {
-            writeFileSync(localPathFile, previousLocalPathText, "utf8");
-          }
-        } catch (error) {
-          errors.push(`could not restore ${LOCAL_PATHS}: ${errorMessage(error)}`);
-        }
-      }
+      const errors = this.rollbackSidecars(updates);
       if (entryCreated && existsSync(entryPath)) {
         try {
           if (readFileSync(entryPath, "utf8") !== entryText) {
             errors.push("new entry changed during rollback and was not removed");
-          } else {
-            unlinkSync(entryPath);
-          }
+          } else unlinkSync(entryPath);
         } catch (error) {
           errors.push(`could not remove new entry: ${errorMessage(error)}`);
         }
@@ -226,23 +261,83 @@ export class TomlStore implements CatalogStore {
     try {
       writeFileSync(entryPath, entryText, { encoding: "utf8", flag: "wx" });
       entryCreated = true;
-      if (localPathText !== null) {
-        mkdirSync(dirname(localPathFile), { recursive: true });
-        writeFileSync(localPathFile, localPathText, "utf8");
-        localPathWritten = true;
-      }
-      if (tagsText !== null) {
+    } catch (error) {
+      return { status: "failed", path, errors: [`could not write entry: ${errorMessage(error)}`] };
+    }
+    const sidecarErrors = this.writeSidecars(updates);
+    if (sidecarErrors.length) return { status: "failed", path, errors: [...sidecarErrors, ...rollback()] };
+    return { status: "created", path, warnings, rollback };
+  }
+
+  updateEntry(
+    kind: Kind,
+    id: string,
+    data: Data,
+    changedFields: readonly string[],
+    localPath?: string,
+    newTags: readonly NewTag[] = [],
+  ): ReturnType<CatalogStore["updateEntry"]> {
+    const path = entryFile(kind, id);
+    const entryPath = join(this.root, path);
+    const invalid = (errors: string[]) => ({ status: "invalid" as const, path, errors });
+
+    let previousEntryText: string;
+    try {
+      previousEntryText = readFileSync(entryPath, "utf8");
+    } catch (error) {
+      return invalid([`cannot read entry ${path}: ${errorMessage(error)}`]);
+    }
+
+    let order: string[];
+    try {
+      order = this.templateOrder(kind);
+    } catch (error) {
+      return invalid([`cannot read template for ${kind}: ${errorMessage(error)}`]);
+    }
+    const fields: Data = Object.create(null) as Data;
+    for (const field of changedFields) {
+      if (Object.hasOwn(data, field)) Object.defineProperty(fields, field, { value: data[field], enumerable: true, writable: true });
+    }
+    const updated = setTomlFields(previousEntryText, fields, order);
+    if ("error" in updated) {
+      const reasons = {
+        "duplicate-field": "a field appears more than once",
+        "dotted-key": "a field uses a dotted key",
+        "table-section": "the file contains a table section",
+        "unsafe-value": "a field value cannot be read or rendered safely",
+      };
+      return invalid([`${path}: cannot safely update fields: ${reasons[updated.error]}; edit the file by hand`]);
+    }
+
+    const prepared = this.prepareSidecars(id, localPath, newTags);
+    if ("errors" in prepared) return invalid(prepared.errors);
+    const { updates, warnings } = prepared;
+    let entryWritten = false;
+    const rollback = (): string[] => {
+      const errors: string[] = [];
+      if (entryWritten) {
         try {
-          replaceTextFile(tagsFile, tagsText);
-          tagsWritten = true;
+          if (!existsSync(entryPath) || readFileSync(entryPath, "utf8") !== updated.text) {
+            errors.push(`${path} changed during rollback and was not restored`);
+          } else replaceTextFile(entryPath, previousEntryText);
         } catch (error) {
-          return { status: "failed", path, errors: [`could not write tags.toml: ${errorMessage(error)}`, ...rollback()] };
+          errors.push(`could not restore ${path}: ${errorMessage(error)}`);
         }
       }
-    } catch (error) {
-      return { status: "failed", path, errors: [`could not write entry: ${errorMessage(error)}`, ...rollback()] };
+      errors.push(...this.rollbackSidecars(updates));
+      return errors;
+    };
+
+    if (updated.text !== previousEntryText) {
+      try {
+        replaceTextFile(entryPath, updated.text);
+        entryWritten = true;
+      } catch (error) {
+        return { status: "failed", path, errors: [`could not write entry: ${errorMessage(error)}`] };
+      }
     }
-    const warnings = localPathReplaced ? [localPathReplacementWarning(id)] : [];
-    return { status: "created", path, warnings, rollback };
+    const sidecarErrors = this.writeSidecars(updates);
+    if (sidecarErrors.length) return { status: "failed", path, errors: [...sidecarErrors, ...rollback()] };
+    return { status: "updated", path, warnings, rollback };
   }
 }
