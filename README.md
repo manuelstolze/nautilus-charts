@@ -26,7 +26,7 @@ flowchart LR
     Bridge -.->|repositories and paths| Charts
 ```
 
-The Bridge is the only module that uses Charts. It works without Charts and then asks for the target repository's local path. Charts depends on no other module and knows nothing about them.
+Workflow modules use Charts. Today this is the Bridge, and Sonar is planned to. The Bridge works without Charts and then asks for the target repository's local path. Charts depends on no other module and knows nothing about them.
 
 ## Entries
 
@@ -99,7 +99,7 @@ Find prints one line per entry. Add `--json` when another tool reads a result. T
 ## Setup
 
 ```bash
-cd "${NAUTILUS_HOME:-$HOME/code/nautilus}/nautilus-charts"
+cd "$NAUTILUS_HOME/nautilus-charts"
 npm ci
 npm run check
 ```
