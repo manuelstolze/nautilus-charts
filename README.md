@@ -61,6 +61,7 @@ Ask an agent, for example Pi or Claude, from this repository. The `charts` skill
 
 - "Where is `<repository>` on this machine?" shows the entry and its checked local path.
 - "Register `<repository>` in system `<system>`" uses `charts add` and runs full catalog validation.
+- "Update fields on `<id>`" uses `charts set` and keeps all other entry text unchanged.
 - "What depends on `<id>`?" lists the entries that depend on a repository, external, or system.
 - "Remove `<id>`" lists the dependents first and asks before changing anything. It never deletes the repository.
 
@@ -73,6 +74,7 @@ npm run --silent charts -- deps <id>
 npm run --silent charts -- rdeps <id>
 npm run --silent charts -- check
 npm run --silent charts -- add <system|repository|external> <id> --data '<JSON>' [--local-path <path>] [--new-tag <name>=<description>]... [--json]
+npm run --silent charts -- set <id> [--data '<JSON>'] [--local-path <path>] [--new-tag <name>=<description>]... [--replace-key] [--json]
 ```
 
 For example:
@@ -86,6 +88,8 @@ The `--data` value is a JSON object. JSON is a text format for structured data. 
 Use `--local-path` only for a repository. Charts checks the full catalog, including the path and its relation to a configured remote. The Charts skill asks the owner to confirm a proposed remote before it adds that remote. If a repository needs a tag missing from `tags.toml`, pass `--new-tag <name>=<description>` once for each new tag. The name and description must be non-empty. The name must be lowercase kebab-case, must not already exist in `tags.toml`, and must appear in the repository's `tags` list. A new tag that the entry does not use is rejected. The Charts skill proposes the name and description and asks the owner to confirm both before using the option.
 
 `tags.toml` is shared and tracked by Git. Charts appends new tags without changing its prior text. If writing or full-catalog validation fails, Charts removes the new entry and restores `local/paths.toml` and `tags.toml`. A successful add leaves `tags.toml` changed and uncommitted. Charts never stages or commits it; the owner decides whether to commit it. The entry and path files stay ignored by Git.
+
+Use `charts set <id>` to add or replace fields on an existing entry. Its `--data` value is a partial JSON object. Each named field replaces the full old value; other fields stay unchanged. `--local-path` and `--new-tag` follow the repository rules above. Changing an existing repository key needs `--replace-key`; check in the Logbook that no other module uses the key, then ask the owner before using this option. Charts changes only the named TOML lines, validates the full catalog, and restores the entry, `local/paths.toml`, and `tags.toml` when validation fails. Unsafe layouts, such as duplicate or dotted fields and TOML table sections, are refused. A request that changes nothing succeeds without writing.
 
 Find prints one line per entry. Add `--json` when another tool reads a result. The script uses local Git data only. It never contacts remote servers, clones, or fetches.
 
