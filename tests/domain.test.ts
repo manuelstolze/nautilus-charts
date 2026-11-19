@@ -90,6 +90,34 @@ describe("validation", () => {
     assert.deepEqual(errors, ["externals/tracker.toml: unknown field(s): ticket-key"]);
   });
 
+  test("checks ticket-key form on systems and repositories", () => {
+    const invalidValues: unknown[] = ["A", "abc", "1AB", "AB-C", "ABCDEFGHIJK", 12];
+    const entries = [
+      entry("system", "short-key", { description: "Short key.", "ticket-key": "AB" }),
+      entry("repository", "long-key", { description: "Long key.", "ticket-key": "ABCDEFGHIJ" }),
+      ...invalidValues.flatMap((value, index) => [
+        entry("system", `bad-system-${index}`, { description: "Invalid key.", "ticket-key": value }),
+        entry("repository", `bad-repository-${index}`, { description: "Invalid key.", "ticket-key": value }),
+      ]),
+    ];
+    const form = "ticket-key must be 2–10 characters: an uppercase letter, then uppercase letters or digits";
+    assert.deepEqual(validateCatalog(snapshot(entries), NO_FACTS).errors, invalidValues.flatMap((_, index) => [
+      `systems/bad-system-${index}.toml: ${form}`,
+      `repositories/bad-repository-${index}.toml: ${form}`,
+    ]));
+  });
+
+  test("does not require ticket keys to be unique or different from repository keys", () => {
+    const { errors } = validateCatalog(snapshot([
+      entry("system", "alpha", { description: "Alpha system.", "ticket-key": "ABC" }),
+      entry("system", "beta", { description: "Beta system.", "ticket-key": "ABC" }),
+      entry("repository", "alpha-app", { description: "Alpha app.", system: "alpha", "ticket-key": "ABC" }),
+      entry("repository", "key-owner", { description: "Key owner.", key: "XYZ" }),
+      entry("repository", "ticket-owner", { description: "Ticket owner.", "ticket-key": "XYZ" }),
+    ]), NO_FACTS);
+    assert.deepEqual(errors, []);
+  });
+
   test("checks IDs, keys, and duplicate keys", () => {
     const { errors } = validateCatalog(snapshot([
       entry("repository", "Bad_ID", { description: "Bad ID." }),
