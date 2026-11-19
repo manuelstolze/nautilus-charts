@@ -1,11 +1,11 @@
 ---
 name: update-constitution
-description: Govern changes to mandatory engineering rules. Use when the owner requests a constitution change or a proposed decision conflicts with the constitution.
+description: Govern changes to mandatory engineering rules. Use when the repository owner requests a constitution change or a proposed decision conflicts with the constitution.
 ---
 
 # Update constitution
 
-Update `CONSTITUTION.md` only after the human owner approves the proposed
+Update `CONSTITUTION.md` only after the repository owner approves the proposed
 rule change. This skill governs mandatory engineering rules. It is not a feature delivery
 step and does not grant an exception for feature work.
 
@@ -17,11 +17,15 @@ Repository paths below are relative to the repository root.
    on the affected rule. Check `AGENTS.md`, relevant context files, documentation, and skills.
    Check templates only if they exist.
 2. Present the proposed rule change, its reason, the version increase, and the affected files.
-   Explain how the change affects existing work. Obtain explicit owner approval before
-   editing the constitution or dependent guidance. If the owner declines, leave them unchanged.
+   Explain how the change affects existing work. Obtain the repository owner's explicit approval before
+   editing the constitution or dependent guidance. If the repository owner declines, leave them unchanged.
 3. Apply only the approved change. Preserve the constitution's heading structure. Set its
-   version using the rules below. Prepend a Sync Impact Report with the old and new versions,
-   changed rules, affected guidance, and any open follow-up work. Keep earlier reports.
+   version using the rules below. Move the previous Sync Impact Report unchanged to the top
+   of `docs/constitution-history.md`, creating the file when it is missing, so the history
+   stays newest first. Put a new Sync Impact Report at the top of the constitution with the
+   old and new versions, changed rules, affected guidance, and any open follow-up work. In
+   `docs/constitution-history.md`, mark each open follow-up that this change resolves as
+   `(closed: <change or document>)`.
 4. Update affected guidance that exists. Add a new document only when the approved change
    needs it. Keep the constitution as the source of mandatory rules; use references instead
    of copying those rules into dependent skills.
@@ -31,13 +35,13 @@ Repository paths below are relative to the repository root.
 6. Check that the version, report, references, and dependent guidance agree. Search for stale
    references to changed rules. Report checks, changed files, and open points. If further rule
    changes are needed, obtain approval before applying them.
-7. Present the completed changes and obtain separate owner approval before committing.
+7. Present the completed changes and obtain the repository owner's separate approval before committing.
    Approval to edit is not approval to commit.
 
 ## Version rules
 
 Use `MAJOR.MINOR.PATCH`. If the constitution has no version, propose `1.0.0` for the
-first constitution update. Obtain explicit owner approval before setting it. In the Sync
+first constitution update. Obtain the repository owner's explicit approval before setting it. In the Sync
 Impact Report, record the old version as `unversioned` and the new version as `1.0.0`.
 
 For later updates, select the highest applicable increase:
