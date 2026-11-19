@@ -3,7 +3,15 @@ import { describe, test } from "node:test";
 import { CatalogIndex, type Snapshot } from "../src/domain/catalog.ts";
 import { dependenciesFor, reverseDependencies, showEntry } from "../src/domain/dependencies.ts";
 import { entryFile, type Data, type Kind } from "../src/domain/entry.ts";
-import { remoteHasCredentials, validateCatalog, validateNewTags, type CatalogFacts } from "../src/domain/validation.ts";
+import {
+  mergeEntryData,
+  remoteHasCredentials,
+  validateCatalog,
+  validateEntryData,
+  validateNewTags,
+  validationMaps,
+  type CatalogFacts,
+} from "../src/domain/validation.ts";
 
 // Pure domain tests: snapshot literals, no temporary folders and no Git.
 
@@ -218,6 +226,55 @@ describe("validation", () => {
       validateCatalog(snapshot([], { localPaths: null, localPathsExists: false }), { ...NO_FACTS, localPathsIgnored: { error: "spawn failed" } }),
       { errors: ["could not check Git ignore rule: spawn failed"], warnings: ["local/paths.toml is missing; local path checks were skipped"] },
     );
+  });
+});
+
+describe("entry updates", () => {
+  test("merges fields and reports only deep value changes", () => {
+    const current: Data = {
+      description: "Old.",
+      tags: ["utility"],
+      "depends-on": [{ id: "beta-lib", via: "npm" }],
+      options: { enabled: true, retry: 2 },
+    };
+    const updates: Data = {
+      description: "New.",
+      tags: ["library"],
+      "depends-on": [{ id: "beta-lib", via: "npm" }],
+      options: { retry: 2, enabled: true },
+      name: "Renamed label",
+    };
+
+    const result = mergeEntryData(current, updates);
+    assert.deepEqual(result, {
+      data: {
+        description: "New.",
+        tags: ["library"],
+        "depends-on": [{ id: "beta-lib", via: "npm" }],
+        options: { enabled: true, retry: 2 },
+        name: "Renamed label",
+      },
+      changed: ["description", "tags", "name"],
+    });
+    assert.deepEqual(current.description, "Old.");
+    assert.deepEqual(current.tags, ["utility"]);
+  });
+
+  test("validates an entry without treating its own ID or key as a duplicate", () => {
+    const entries = [
+      entry("repository", "alpha-app", { description: "Alpha.", key: "ALP" }),
+      entry("repository", "beta-lib", { description: "Beta.", key: "BET" }),
+    ];
+    const index = new CatalogIndex(snapshot(entries));
+    const merged = entry("repository", "beta-lib", { description: "Updated beta.", key: "BET" });
+    const maps = validationMaps(index, "beta-lib");
+    assert.deepEqual(validateEntryData(index, merged, maps.seen, maps.keys), { errors: [], warnings: [] });
+
+    const conflicting = entry("repository", "beta-lib", { description: "Updated beta.", key: "ALP" });
+    const conflictMaps = validationMaps(index, "beta-lib");
+    assert.deepEqual(validateEntryData(index, conflicting, conflictMaps.seen, conflictMaps.keys).errors, [
+      'repositories/beta-lib.toml: duplicate key "ALP"; also used by repositories/alpha-app.toml',
+    ]);
   });
 });
 
