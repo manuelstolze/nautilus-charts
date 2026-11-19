@@ -12,6 +12,12 @@ Follow [the ADR format](../../.agents/skills/engineering/domain-modeling/ADR-FOR
 
 ## Changing a decision
 
-Do not rewrite an accepted ADR. Record a changed decision in a new ADR that names the one it replaces, and add `Superseded by ADR NNNN` at the top of the old one. Fixing typos and broken links is allowed.
+Do not rewrite an accepted ADR. Record a changed decision in a new ADR that names the one it replaces. In the same change, set the old ADR's `status:` to `superseded by ADR NNNN`, or to `partly superseded by ADR NNNN` when the new ADR replaces only part of it, and update its status in [Records](#records). The status is metadata, so it may change in an accepted ADR. Fixing typos and broken links is allowed.
 
 When a changed decision affects a constitution rule, change the rule through the `update-constitution` skill and update its ADR reference in the same change.
+
+## Records
+
+Each ADR with its status, as its frontmatter holds it:
+
+- [ADR 0001: Charts uses lean hexagonal architecture](0001-hexagonal-architecture.md) (accepted). [nautilus-bridge ADR 0014](https://github.com/manuelstolze/nautilus-bridge/blob/main/docs/adr/0014-the-bridge-applies-the-shared-style-at-its-boundaries.md) describes how the Bridge applies the shared style.

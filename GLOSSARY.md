@@ -36,8 +36,22 @@ A connection between two Systems that follows from the Dependencies of their Rep
 ## Nautilus
 
 **Module**:
-A part of the Nautilus framework, for example Charts, Library, or Logbook. Each Module is a Repository in the Nautilus System.
+A part of Nautilus with its own repository, for example the Bridge, Charts, the Library, or the Logbook. Each Module is a Repository in the Nautilus System.
 _Avoid_: Component, service
+
+## People
+
+**Catalog owner**:
+The one person whose catalog it is, who keeps it on their machine and confirms each write an agent proposes.
+_Avoid_: Owner (unqualified), user
+
+**System owner**:
+The team or person responsible for a System, recorded in its `owner` field.
+_Avoid_: Owner (unqualified), maintainer
+
+**Repository owner**:
+The team or person responsible for a Repository, recorded in its `owner` field.
+_Avoid_: Owner (unqualified), maintainer
 
 ## Machine
 

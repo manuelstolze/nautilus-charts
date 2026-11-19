@@ -26,7 +26,7 @@ flowchart LR
     Bridge -.->|repositories and paths| Charts
 ```
 
-The Bridge is the only module that uses Charts. It works without Charts and then asks for the target repository's local path. Charts depends on no other module and knows nothing about them.
+Workflow modules use Charts. Today this is the Bridge, and Sonar is planned to use it too. The Bridge works without Charts and then asks for the target repository's local path. Charts depends on no other module and knows nothing about them.
 
 ## Entries
 
@@ -85,11 +85,11 @@ npm run --silent charts -- add system shop --data '{"description":"Online shop s
 
 The `--data` value is a JSON object. JSON is a text format for structured data. Include a required `description`. Do not include an `id`; pass it as the second positional value. Use only fields defined for that entry type. Charts uses the matching template and omits optional fields you do not supply. It does not generate IDs or repository keys.
 
-Use `--local-path` only for a repository. Charts checks the full catalog, including the path and its relation to a configured remote. The Charts skill asks the owner to confirm a proposed remote before it adds that remote. If a repository needs a tag missing from `tags.toml`, pass `--new-tag <name>=<description>` once for each new tag. The name and description must be non-empty. The name must be lowercase kebab-case, must not already exist in `tags.toml`, and must appear in the repository's `tags` list. A new tag that the entry does not use is rejected. The Charts skill proposes the name and description and asks the owner to confirm both before using the option.
+Use `--local-path` only for a repository. Charts checks the full catalog, including the path and its relation to a configured remote. The Charts skill asks the catalog owner to confirm a proposed remote before it adds that remote. If a repository needs a tag missing from `tags.toml`, pass `--new-tag <name>=<description>` once for each new tag. The name and description must be non-empty. The name must be lowercase kebab-case, must not already exist in `tags.toml`, and must appear in the repository's `tags` list. A new tag that the entry does not use is rejected. The Charts skill proposes the name and description and asks the catalog owner to confirm both before using the option.
 
-`tags.toml` is shared and tracked by Git. Charts appends new tags without changing its prior text. If writing or full-catalog validation fails, Charts removes the new entry and restores `local/paths.toml` and `tags.toml`. A successful add leaves `tags.toml` changed and uncommitted. Charts never stages or commits it; the owner decides whether to commit it. The entry and path files stay ignored by Git.
+`tags.toml` is shared and tracked by Git. Charts appends new tags without changing its prior text. If writing or full-catalog validation fails, Charts removes the new entry and restores `local/paths.toml` and `tags.toml`. A successful add leaves `tags.toml` changed and uncommitted. Charts never stages or commits it; the catalog owner decides whether to commit it. The entry and path files stay ignored by Git.
 
-Use `charts set <id>` to add or replace fields on an existing entry. Its `--data` value is a partial JSON object. Each named field replaces the full old value; other fields stay unchanged. `--local-path` and `--new-tag` follow the repository rules above. Changing an existing repository key needs `--replace-key`; check in the Logbook that no other module uses the key, then ask the owner before using this option. Charts changes only the named TOML lines, validates the full catalog, and restores the entry, `local/paths.toml`, and `tags.toml` when validation fails. Unsafe layouts, such as duplicate or dotted fields and TOML table sections, are refused. A request that changes nothing succeeds without writing.
+Use `charts set <id>` to add or replace fields on an existing entry. Its `--data` value is a partial JSON object. Each named field replaces the full old value; other fields stay unchanged. `--local-path` and `--new-tag` follow the repository rules above. Changing an existing repository key needs `--replace-key`; check in the Logbook that no other module uses the key, then ask the catalog owner before using this option. Charts changes only the named TOML lines, validates the full catalog, and restores the entry, `local/paths.toml`, and `tags.toml` when validation fails. Unsafe layouts, such as duplicate or dotted fields and TOML table sections, are refused. A request that changes nothing succeeds without writing.
 
 Find prints one line per entry. Add `--json` when another tool reads a result. The script uses local Git data only. It never contacts remote servers, clones, or fetches.
 
@@ -103,7 +103,7 @@ Find prints one line per entry. Add `--json` when another tool reads a result. T
 ## Setup
 
 ```bash
-cd "${NAUTILUS_HOME:-$HOME/code/nautilus}/nautilus-charts"
+cd "$NAUTILUS_HOME/nautilus-charts"
 npm ci
 npm run check
 ```
