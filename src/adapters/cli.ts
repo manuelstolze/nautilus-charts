@@ -257,6 +257,7 @@ export function renderShow(json: boolean, result: EntryResult): number {
     "name",
     "description",
     "key",
+    "ticket-key",
     "system",
     "status",
     "owner",
@@ -268,6 +269,8 @@ export function renderShow(json: boolean, result: EntryResult): number {
     "depends-on",
     "local_path",
     "local_path_status",
+    "resolved_ticket_key",
+    "ticket_key_source",
   ]) {
     if (key in data && data[key] !== null) fields.push(`${key}=${compact(data[key])}`);
   }

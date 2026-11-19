@@ -52,6 +52,49 @@ exit: 0
   ],
   "type": "repository",
   "id": "alpha-app",
+  "resolved_ticket_key": null,
+  "ticket_key_source": null,
+  "local_path": "<TMP>/work/alpha-app",
+  "local_path_status": "ok"
+}
+--- stderr
+
+## repository with an inherited ticket key
+$ charts "show" "alpha-app"
+exit: 0
+--- stdout
+repository alpha-app — name=Alpha App — description=Alpha application. — key=ALP — system=alpha — owner=Team Alpha — tags=utility — remote=https://example.com/shop/alpha-app.git — default-branch=main — depends-on=id=beta-lib, via=npm, id=stripe, via=API — local_path=<TMP>/work/alpha-app — local_path_status=ok — resolved_ticket_key=ABC — ticket_key_source=system
+--- stderr
+
+## repository with an inherited ticket key (--json)
+$ charts "show" "alpha-app" "--json"
+exit: 0
+--- stdout
+{
+  "name": "Alpha App",
+  "description": "Alpha application.",
+  "key": "ALP",
+  "system": "alpha",
+  "owner": "Team Alpha",
+  "tags": [
+    "utility"
+  ],
+  "remote": "https://example.com/shop/alpha-app.git",
+  "default-branch": "main",
+  "depends-on": [
+    {
+      "id": "beta-lib",
+      "via": "npm"
+    },
+    {
+      "id": "stripe",
+      "via": "API"
+    }
+  ],
+  "type": "repository",
+  "id": "alpha-app",
+  "resolved_ticket_key": "ABC",
+  "ticket_key_source": "system",
   "local_path": "<TMP>/work/alpha-app",
   "local_path_status": "ok"
 }
@@ -78,6 +121,8 @@ exit: 0
   "type": "repository",
   "id": "beta-lib",
   "name": "beta-lib",
+  "resolved_ticket_key": null,
+  "ticket_key_source": null,
   "local_path": null,
   "local_path_status": "not configured"
 }
@@ -154,6 +199,8 @@ exit: 0
   ],
   "type": "repository",
   "id": "alpha-app",
+  "resolved_ticket_key": null,
+  "ticket_key_source": null,
   "local_path": null,
   "local_path_status": "path does not exist: <TMP>/work/absent"
 }
@@ -193,6 +240,8 @@ exit: 0
   ],
   "type": "repository",
   "id": "alpha-app",
+  "resolved_ticket_key": null,
+  "ticket_key_source": null,
   "local_path": null,
   "local_path_status": "remote does not match \"https://example.com/shop/alpha-app.git\""
 }
@@ -219,6 +268,8 @@ exit: 0
   "type": "repository",
   "id": "beta-lib",
   "name": "beta-lib",
+  "resolved_ticket_key": null,
+  "ticket_key_source": null,
   "local_path": null,
   "local_path_status": "not a Git repository root: <TMP>/work/plain"
 }

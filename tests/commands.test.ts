@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 import { add } from "../src/commands/add.ts";
 import { check } from "../src/commands/check.ts";
 import { set } from "../src/commands/set.ts";
+import { show } from "../src/commands/show.ts";
 import { FakeGit } from "./fakes/fake-git.ts";
 import { MemoryStore } from "./fakes/memory-store.ts";
 
@@ -26,6 +27,53 @@ function catalog(localPaths: Record<string, string> | null = { "alpha-app": "/wo
   });
   return { store, git };
 }
+
+describe("show use case", () => {
+  test("reports resolved ticket keys for repositories only", () => {
+    const store = new MemoryStore({
+      entries: [
+        { kind: "system", id: "alpha", data: { description: "Alpha.", "ticket-key": "ABC" } },
+        { kind: "system", id: "beta", data: { description: "Beta." } },
+        { kind: "repository", id: "own", data: { description: "Own key.", system: "alpha", "ticket-key": "XYZ" } },
+        { kind: "repository", id: "inherited", data: { description: "Inherited key.", system: "alpha" } },
+        { kind: "repository", id: "independent", data: { description: "Independent." } },
+        { kind: "repository", id: "no-system-key", data: { description: "No system key.", system: "beta" } },
+        { kind: "external", id: "tracker", data: { description: "Tracker." } },
+      ],
+      localPaths: null,
+    });
+    const git = new FakeGit();
+    const own = show({ store, git }, "own");
+    assert.equal(own.status, 0);
+    if (own.status === 0) {
+      assert.equal(own.data["ticket-key"], "XYZ");
+      assert.equal(own.data.resolved_ticket_key, "XYZ");
+      assert.equal(own.data.ticket_key_source, "repository");
+    }
+    const inherited = show({ store, git }, "inherited");
+    assert.equal(inherited.status, 0);
+    if (inherited.status === 0) {
+      assert.equal(inherited.data.resolved_ticket_key, "ABC");
+      assert.equal(inherited.data.ticket_key_source, "system");
+    }
+    for (const id of ["independent", "no-system-key"]) {
+      const result = show({ store, git }, id);
+      assert.equal(result.status, 0);
+      if (result.status === 0) {
+        assert.equal(result.data.resolved_ticket_key, null, id);
+        assert.equal(result.data.ticket_key_source, null, id);
+      }
+    }
+    for (const id of ["alpha", "tracker"]) {
+      const result = show({ store, git }, id);
+      assert.equal(result.status, 0);
+      if (result.status === 0) {
+        assert.equal("resolved_ticket_key" in result.data, false, id);
+        assert.equal("ticket_key_source" in result.data, false, id);
+      }
+    }
+  });
+});
 
 describe("add use case", () => {
   test("fake store appends new tags and restores them on rollback", () => {

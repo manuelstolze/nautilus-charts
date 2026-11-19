@@ -84,6 +84,15 @@ const CASES: Record<string, Case[]> = {
   show: [
     { name: "system", argv: fixed("show", "alpha") },
     { name: "repository with an ok path", argv: fixed("show", "alpha-app") },
+    {
+      name: "repository with an inherited ticket key",
+      argv: fixed("show", "alpha-app"),
+      setup: ({ root }) => write(
+        root,
+        "systems/alpha.toml",
+        'name = "Alpha"\ndescription = "Alpha system."\nowner = "Team Alpha"\nticket-key = "ABC"\n',
+      ),
+    },
     { name: "repository with no path configured", argv: fixed("show", "beta-lib") },
     { name: "external", argv: fixed("show", "stripe") },
     { name: "unknown ID", argv: fixed("show", "missing") },
