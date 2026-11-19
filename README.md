@@ -26,7 +26,7 @@ flowchart LR
     Bridge -.->|repositories and paths| Charts
 ```
 
-Workflow modules use Charts. Today this is the Bridge, and Sonar is planned to. The Bridge works without Charts and then asks for the target repository's local path. Charts depends on no other module and knows nothing about them.
+Workflow modules use Charts. Today this is the Bridge, and Sonar is planned to use it too. The Bridge works without Charts and then asks for the target repository's local path. Charts depends on no other module and knows nothing about them.
 
 ## Entries
 
