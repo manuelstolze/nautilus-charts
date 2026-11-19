@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { CatalogIndex, type Snapshot } from "../src/domain/catalog.ts";
-import { dependenciesFor, reverseDependencies, showEntry } from "../src/domain/dependencies.ts";
+import { dependenciesFor, resolveTicketKey, reverseDependencies, showEntry } from "../src/domain/dependencies.ts";
 import { entryFile, type Data, type Kind } from "../src/domain/entry.ts";
 import {
   mergeEntryData,
@@ -364,6 +364,30 @@ describe("dependencies", () => {
     assert.deepEqual(reverseDependencies(index, index.get("stripe")!).dependents, [
       { id: "alpha-app", type: "repository", name: "alpha-app" },
     ]);
+  });
+
+  test("resolves ticket keys from repositories and their systems", () => {
+    const index = new CatalogIndex(snapshot([
+      entry("system", "alpha", { description: "Alpha.", "ticket-key": "ABC" }),
+      entry("system", "beta", { description: "Beta." }),
+      entry("system", "invalid-system", { description: "Invalid.", "ticket-key": "abc" }),
+      entry("external", "tracker", { description: "Tracker.", "ticket-key": "ABC" }),
+      entry("repository", "own", { description: "Own key.", system: "alpha", "ticket-key": "XYZ" }),
+      entry("repository", "inherited", { description: "Inherited key.", system: "alpha" }),
+      entry("repository", "independent", { description: "Independent." }),
+      entry("repository", "no-key", { description: "No system key.", system: "beta" }),
+      entry("repository", "missing-system", { description: "Missing system.", system: "missing" }),
+      entry("repository", "external-system", { description: "External system.", system: "tracker" }),
+      entry("repository", "invalid-system-key", { description: "Invalid system key.", system: "invalid-system" }),
+      entry("repository", "invalid-own", { description: "Invalid own key.", system: "alpha", "ticket-key": "abc" }),
+    ]));
+    assert.deepEqual(resolveTicketKey(index, index.get("own")!), { key: "XYZ", source: "repository" });
+    assert.deepEqual(resolveTicketKey(index, index.get("inherited")!), { key: "ABC", source: "system" });
+    for (const id of ["independent", "no-key", "missing-system", "external-system", "invalid-system-key"]) {
+      assert.deepEqual(resolveTicketKey(index, index.get(id)!), { key: null, source: null }, id);
+    }
+    assert.deepEqual(resolveTicketKey(index, index.get("invalid-own")!), { key: "ABC", source: "system" });
+    assert.deepEqual(resolveTicketKey(index, index.get("alpha")!), { key: null, source: null });
   });
 
   test("shows a local path only when its check passed", () => {
