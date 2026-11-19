@@ -1,8 +1,28 @@
 import { CatalogIndex } from "./catalog.ts";
-import { entryJson, entryName, isString, validDependencies, type Data, type Entry } from "./entry.ts";
+import { entryJson, entryName, isString, TICKET_KEY_PATTERN, validDependencies, type Data, type Entry } from "./entry.ts";
 import type { LocalPathFacts } from "./validation.ts";
 
 /** Shows an entry. A repository's local path is shown only when its check passed. */
+export function resolveTicketKey(
+  index: CatalogIndex,
+  repository: Entry,
+): { key: string | null; source: "repository" | "system" | null } {
+  if (repository.kind !== "repository") return { key: null, source: null };
+  const repositoryKey = repository.data["ticket-key"];
+  if (isString(repositoryKey) && TICKET_KEY_PATTERN.test(repositoryKey)) {
+    return { key: repositoryKey, source: "repository" };
+  }
+  const systemId = repository.data.system;
+  if (!isString(systemId)) return { key: null, source: null };
+  const system = index.get(systemId);
+  if (!system || system.kind !== "system") return { key: null, source: null };
+  const systemKey = system.data["ticket-key"];
+  if (isString(systemKey) && TICKET_KEY_PATTERN.test(systemKey)) {
+    return { key: systemKey, source: "system" };
+  }
+  return { key: null, source: null };
+}
+
 export function showEntry(index: CatalogIndex, entry: Entry, facts: LocalPathFacts): Data {
   const result = entryJson(entry);
   if (entry.kind !== "repository") return result;
