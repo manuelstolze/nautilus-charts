@@ -298,7 +298,9 @@ export class TomlStore implements CatalogStore {
     for (const field of changedFields) {
       if (Object.hasOwn(data, field)) Object.defineProperty(fields, field, { value: data[field], enumerable: true, writable: true });
     }
-    const updated = setTomlFields(previousEntryText, fields, order);
+    const updated = changedFields.length === 0
+      ? { text: previousEntryText }
+      : setTomlFields(previousEntryText, fields, order);
     if ("error" in updated) {
       const reasons = {
         "duplicate-field": "a field appears more than once",
