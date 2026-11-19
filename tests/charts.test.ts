@@ -349,6 +349,24 @@ describe("charts add", () => {
     assert.equal(readFileSync(join(root, "externals/stripe.toml"), "utf8"), originalExternal);
   });
 
+  test("rejects invalid ticket-key values without writing", () => {
+    const values: unknown[] = ["A", "abc", "1AB", "AB-C", "ABCDEFGHIJK", 12];
+    const form = "ticket-key must be 2–10 characters: an uppercase letter, then uppercase letters or digits";
+    let number = 0;
+    for (const kind of ["system", "repository"]) {
+      for (const value of values) {
+        const id = `bad-ticket-key-${number}`;
+        number += 1;
+        const result = add(kind, id, { description: "Invalid ticket key.", "ticket-key": value }, ["--json"]);
+        assert.equal(result.result, 2, `${kind} ${JSON.stringify(value)}`);
+        const payload = JSON.parse(result.output.join("\n"));
+        const directory = kind === "system" ? "systems" : "repositories";
+        assert.deepEqual(payload.validation.errors, [`${directory}/${id}.toml: ${form}`]);
+        assert.equal(existsSync(join(root, `${directory}/${id}.toml`)), false);
+      }
+    }
+  });
+
   test("checks keys, tags, dependencies, and remotes before writing", () => {
     write("repositories/alpha-app.toml", 'description = "Alpha application."\nkey = "NBR"\n');
     const cases = [
