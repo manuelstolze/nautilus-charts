@@ -398,6 +398,7 @@ describe("dependencies", () => {
     ]);
     assert.deepEqual(showEntry(withPaths, withPaths.get("alpha-app")!, facts), {
       ...BASE[3].data, type: "repository", id: "alpha-app", name: "alpha-app",
+      resolved_ticket_key: null, ticket_key_source: null,
       local_path: "/home/user/alpha", local_path_status: "ok",
     });
     assert.equal(showEntry(withPaths, withPaths.get("beta-lib")!, facts).local_path, null);
