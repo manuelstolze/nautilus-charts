@@ -1,3 +1,7 @@
+---
+status: accepted
+---
+
 # Charts uses lean hexagonal architecture
 
 Every Nautilus module uses lean hexagonal architecture: the core does no I/O, ports exist only at real boundaries, code is organised per command, and each script has one composition root. The modules share this one rule; only the number of ports differs. Each module records the decision in its own ADR, and this is Charts's. Charts is the pilot: after it, the owner reviews the result before the Library, Logbook, and Bridge follow.
