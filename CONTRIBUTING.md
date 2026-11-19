@@ -10,7 +10,7 @@ nautilus-charts is the system catalog of Nautilus. Read [the README](./README.md
 - Check changes with commands or examples suited to the files changed.
 - Do not commit credentials, secrets, personal settings, machine-specific paths, or catalog entries.
 
-## Branches and pull requests
+## Branches and merge requests
 
 Use a branch for changes that will be shared for review. Use this branch format:
 
@@ -28,7 +28,7 @@ fix/12-check-missing-path
 docs/explain-dependencies
 ```
 
-When using a shared remote, open a pull request before merging. Keep it focused and explain why the change is needed. List the checks you ran and any known limitations.
+When using a shared remote, open a merge request (a GitHub pull request) before merging. Keep it focused and explain why the change is needed. List the checks you ran and any known limitations.
 
 ## Commit messages
 
@@ -86,6 +86,14 @@ for skill in .agents/skills/charts .agents/skills/engineering/*; do
 done
 ```
 
+The engineering skills in `.agents/skills/engineering/` are copies from nautilus-bridge. Change them in the Bridge first, then copy the folder unchanged from the Charts root:
+
+```bash
+rsync -a --delete "$NAUTILUS_HOME/nautilus-bridge/.agents/skills/engineering/" .agents/skills/engineering/
+```
+
+`grill-me` and `grill-with-docs` are shortcuts for the catalog owner: `grill-me` calls `grilling`, and `grill-with-docs` calls `grilling` with `domain-modeling`. Agents cannot invoke them.
+
 ## Tooling
 
 The tooling is written in TypeScript. It needs Node 26 or later. The TypeScript,
@@ -94,7 +102,7 @@ Node.js, and tooling package versions follow the
 Install dependencies once with:
 
 ```bash
-npm install
+npm ci
 ```
 
 Keep production code under `src/`, the entry point in `scripts/`, and tests under `tests/`. [docs/structure.md](./docs/structure.md#code-structure) explains the code structure. Use `node:test` for tests. Add a runtime dependency only when the standard library is not enough, and commit `package-lock.json` with it.
@@ -115,7 +123,7 @@ npm run check
 
 `charts check` validates IDs, references, tags, local paths, and remotes. For skill, template, or documentation changes, check links and examples and exercise the changed instructions when practical. Record the checks and results when requesting review. Explain any unrelated failures.
 
-## Pull request checklist
+## Merge request checklist
 
 Before requesting review, confirm that:
 
@@ -124,4 +132,4 @@ Before requesting review, confirm that:
 - [ ] Checks suited to the change have been run, or missing checks are explained.
 - [ ] `npm run check` passes, and no catalog entries or `local/paths.toml` are committed.
 - [ ] No credentials, personal settings, machine-specific paths, or real company, host, or repository names are included.
-- [ ] The pull request lists checks, results, and known limitations.
+- [ ] The merge request lists checks, results, and known limitations.
