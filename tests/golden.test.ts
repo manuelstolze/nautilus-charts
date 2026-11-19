@@ -292,6 +292,27 @@ const CASES: Record<string, Case[]> = {
     { name: "argument error: option without value", argv: fixed("add", "repository", "no-value", "--local-path") },
     { name: "argument error: unknown option", argv: fixed("add", "system", "unknown", "--force") },
   ],
+  set: [
+    {
+      name: "success",
+      argv: fixed("set", "alpha-app", "--data", '{"description":"Updated application."}'),
+      files: ["repositories/alpha-app.toml"],
+    },
+    {
+      name: "no change",
+      argv: fixed("set", "alpha-app", "--data", '{"description":"Alpha application."}'),
+      files: ["repositories/alpha-app.toml"],
+    },
+    {
+      name: "refused key change",
+      argv: fixed("set", "alpha-app", "--data", '{"key":"NEW"}'),
+      files: ["repositories/alpha-app.toml"],
+    },
+    {
+      name: "input error",
+      argv: fixed("set", "alpha-app", "--data", "{"),
+    },
+  ],
   usage: [
     { name: "no command", argv: fixed() },
     { name: "unknown command", argv: fixed("list") },
