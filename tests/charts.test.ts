@@ -186,6 +186,38 @@ describe("catalog validation", () => {
     assert.deepEqual(JSON.parse(found.output.join("\n")).entries.map((entry: { id: string }) => entry.id), ["alpha-app"]);
   });
 
+  test("shows resolved ticket keys in JSON for repositories only", () => {
+    write("systems/alpha.toml", 'description = "Alpha system."\nticket-key = "ABC"\n');
+    write("repositories/alpha-app.toml", 'description = "Alpha application."\nsystem = "alpha"\nticket-key = "XYZ"\n');
+    write("repositories/beta-lib.toml", 'description = "Beta library."\nsystem = "beta"\n');
+    write("repositories/independent.toml", 'description = "Independent repository."\n');
+
+    const own = capture(() => main(["show", "alpha-app", "--json"], root));
+    const ownData = JSON.parse(own.output.join("\n"));
+    assert.equal(ownData["ticket-key"], "XYZ");
+    assert.equal(ownData.resolved_ticket_key, "XYZ");
+    assert.equal(ownData.ticket_key_source, "repository");
+
+    write("repositories/alpha-app.toml", 'description = "Alpha application."\nsystem = "alpha"\n');
+    const inherited = capture(() => main(["show", "alpha-app", "--json"], root));
+    const inheritedData = JSON.parse(inherited.output.join("\n"));
+    assert.equal(inheritedData.resolved_ticket_key, "ABC");
+    assert.equal(inheritedData.ticket_key_source, "system");
+
+    for (const id of ["beta-lib", "independent"]) {
+      const result = capture(() => main(["show", id, "--json"], root));
+      const data = JSON.parse(result.output.join("\n"));
+      assert.equal(data.resolved_ticket_key, null, id);
+      assert.equal(data.ticket_key_source, null, id);
+    }
+    for (const id of ["alpha", "stripe"]) {
+      const result = capture(() => main(["show", id, "--json"], root));
+      const data = JSON.parse(result.output.join("\n"));
+      assert.equal("resolved_ticket_key" in data, false, id);
+      assert.equal("ticket_key_source" in data, false, id);
+    }
+  });
+
   test("checks repository key form, type, uniqueness, and entry type", () => {
     const form = "key must be 2–5 characters: an uppercase letter, then uppercase letters or digits";
     write("repositories/lower-key.toml", 'description = "Lowercase key."\nkey = "nb"\n');
