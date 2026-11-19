@@ -1,0 +1,161 @@
+## success
+$ charts "set" "alpha-app" "--data" "{\"description\":\"Updated application.\"}"
+exit: 0
+--- stdout
+Updated repository alpha-app at repositories/alpha-app.toml; changed fields: description; validation ok
+--- stderr
+--- file repositories/alpha-app.toml
+name = "Alpha App"
+description = "Updated application."
+key = "ALP"
+system = "alpha"
+owner = "Team Alpha"
+tags = ["utility"]
+remote = "https://example.com/shop/alpha-app.git"
+default-branch = "main"
+depends-on = [{ id = "beta-lib", via = "npm" }, { id = "stripe", via = "API" }]
+
+## success (--json)
+$ charts "set" "alpha-app" "--data" "{\"description\":\"Updated application.\"}" "--json"
+exit: 0
+--- stdout
+{
+  "ok": true,
+  "type": "repository",
+  "id": "alpha-app",
+  "path": "repositories/alpha-app.toml",
+  "changed": [
+    "description"
+  ],
+  "new_tags": [],
+  "validation": {
+    "ok": true,
+    "errors": [],
+    "warnings": []
+  }
+}
+--- stderr
+--- file repositories/alpha-app.toml
+name = "Alpha App"
+description = "Updated application."
+key = "ALP"
+system = "alpha"
+owner = "Team Alpha"
+tags = ["utility"]
+remote = "https://example.com/shop/alpha-app.git"
+default-branch = "main"
+depends-on = [{ id = "beta-lib", via = "npm" }, { id = "stripe", via = "API" }]
+
+## no change
+$ charts "set" "alpha-app" "--data" "{\"description\":\"Alpha application.\"}"
+exit: 0
+--- stdout
+No change to repository alpha-app at repositories/alpha-app.toml
+--- stderr
+--- file repositories/alpha-app.toml
+name = "Alpha App"
+description = "Alpha application."
+key = "ALP"
+system = "alpha"
+owner = "Team Alpha"
+tags = ["utility"]
+remote = "https://example.com/shop/alpha-app.git"
+default-branch = "main"
+depends-on = [{ id = "beta-lib", via = "npm" }, { id = "stripe", via = "API" }]
+
+## no change (--json)
+$ charts "set" "alpha-app" "--data" "{\"description\":\"Alpha application.\"}" "--json"
+exit: 0
+--- stdout
+{
+  "ok": true,
+  "type": "repository",
+  "id": "alpha-app",
+  "path": "repositories/alpha-app.toml",
+  "changed": [],
+  "new_tags": [],
+  "validation": {
+    "ok": true,
+    "errors": [],
+    "warnings": []
+  }
+}
+--- stderr
+--- file repositories/alpha-app.toml
+name = "Alpha App"
+description = "Alpha application."
+key = "ALP"
+system = "alpha"
+owner = "Team Alpha"
+tags = ["utility"]
+remote = "https://example.com/shop/alpha-app.git"
+default-branch = "main"
+depends-on = [{ id = "beta-lib", via = "npm" }, { id = "stripe", via = "API" }]
+
+## refused key change
+$ charts "set" "alpha-app" "--data" "{\"key\":\"NEW\"}"
+exit: 2
+--- stdout
+--- stderr
+ERROR: repositories/alpha-app.toml: changing an existing key requires --replace-key
+Could not set repository alpha-app at repositories/alpha-app.toml; validation failed
+--- file repositories/alpha-app.toml
+name = "Alpha App"
+description = "Alpha application."
+key = "ALP"
+system = "alpha"
+owner = "Team Alpha"
+tags = ["utility"]
+remote = "https://example.com/shop/alpha-app.git"
+default-branch = "main"
+depends-on = [{ id = "beta-lib", via = "npm" }, { id = "stripe", via = "API" }]
+
+## refused key change (--json)
+$ charts "set" "alpha-app" "--data" "{\"key\":\"NEW\"}" "--json"
+exit: 2
+--- stdout
+{
+  "ok": false,
+  "type": "repository",
+  "id": "alpha-app",
+  "path": "repositories/alpha-app.toml",
+  "changed": [
+    "key"
+  ],
+  "new_tags": [],
+  "validation": {
+    "ok": false,
+    "errors": [
+      "repositories/alpha-app.toml: changing an existing key requires --replace-key"
+    ],
+    "warnings": []
+  }
+}
+--- stderr
+--- file repositories/alpha-app.toml
+name = "Alpha App"
+description = "Alpha application."
+key = "ALP"
+system = "alpha"
+owner = "Team Alpha"
+tags = ["utility"]
+remote = "https://example.com/shop/alpha-app.git"
+default-branch = "main"
+depends-on = [{ id = "beta-lib", via = "npm" }, { id = "stripe", via = "API" }]
+
+## input error
+$ charts "set" "alpha-app" "--data" "{"
+exit: 2
+--- stdout
+--- stderr
+--data is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+
+## input error (--json)
+$ charts "set" "alpha-app" "--data" "{" "--json"
+exit: 2
+--- stdout
+{
+  "ok": false,
+  "error": "--data is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2)"
+}
+--- stderr
