@@ -7,18 +7,33 @@ Create the `docs/adr/` directory lazily: only when the first ADR is needed.
 ## Template
 
 ```md
+---
+status: accepted
+---
+
 # {Short title of the decision}
 
 {1-3 sentences: what's the context, what did we decide, and why.}
 ```
 
-That's it. An ADR can be a single paragraph. The value is in recording *that* a decision was made and *why*, not in filling out sections.
+That's it. An ADR can be a single paragraph after its status. The value is in recording *that* a decision was made and *why*, not in filling out sections.
+
+## Status
+
+Every ADR starts with frontmatter that holds `status:` with one of these values:
+
+- `proposed`
+- `accepted`
+- `deprecated`
+- `superseded by ADR NNNN`
+- `partly superseded by ADR NNNN`
+
+When a new ADR replaces an old one, in whole or in part, set the old ADR's status in the same change. The status is metadata, so it may change in an accepted ADR whose text otherwise stays as it is. When `docs/adr/` has an index of the records, update the status there too.
 
 ## Optional sections
 
 Only include these when they add genuine value. Most ADRs won't need them.
 
-- **Status** frontmatter (`proposed | accepted | deprecated | superseded by ADR-NNNN`): useful when decisions are revisited
 - **Considered Options**: only when the rejected alternatives are worth remembering
 - **Consequences**: only when non-obvious downstream effects need to be called out
 

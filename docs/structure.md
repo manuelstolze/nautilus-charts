@@ -57,7 +57,7 @@ All files are TOML. Optional fields are omitted when unused.
 | --- | --- | --- |
 | `name` | no | Display name when it differs from the ID, for example "Online Shop". |
 | `description` | yes | Short purpose. |
-| `owner` | no | Responsible team or person, as free text. |
+| `owner` | no | The system owner: the responsible team or person, as free text. |
 | `status` | no | See [Status](#status). Default `active`. |
 
 ```toml
@@ -75,7 +75,7 @@ description = "Storefront, checkout, and the libraries they share."
 | `key` | no | Short uppercase code that starts the IDs of changes to this repository, for example `NBR`. 2–5 characters: an uppercase letter, then uppercase letters or digits. Unique across repositories. Do not change it once used. |
 | `system` | no | ID of the system it belongs to. Omitted for independent repositories. |
 | `status` | no | See [Status](#status). Default `active`. |
-| `owner` | no | Responsible team or person, as free text. |
+| `owner` | no | The repository owner: the responsible team or person, as free text. |
 | `tags` | no | Labels from `tags.toml`. |
 | `remote` | no | Remote Git link. Never contains credentials. |
 | `default-branch` | no | Default `main`. |
@@ -185,9 +185,9 @@ npm run --silent charts -- add repository shop-api \
 
 Charts reads the matching file in `templates/` to set the field order. It writes only supplied values, so optional template examples do not appear in the new entry. A repository can omit `--local-path`; when supplied, the path is added to ignored `local/paths.toml`. Charts checks that it is a Git repository root and that its local remote matches the entry's `remote`, if set. It uses local Git data only and does not connect to remote servers. When adding a local path, Charts appends new mappings without changing the rest of `local/paths.toml`, replaces one stale mapping written on a single line for the same ID with a warning, and fails without writing when it cannot replace that mapping safely. Charts does not update a file that contains a TOML table section, because a new line at the end would belong to that section.
 
-For a missing repository tag, propose a lowercase kebab-case name and a description. Ask the owner to confirm both before passing `--new-tag`. The entry must use each new tag. Charts appends new tags to `tags.toml` and keeps all prior text unchanged.
+For a missing repository tag, propose a lowercase kebab-case name and a description. Ask the catalog owner to confirm both before passing `--new-tag`. The entry must use each new tag. Charts appends new tags to `tags.toml` and keeps all prior text unchanged.
 
-After writing, Charts validates the full catalog. If a write or validation fails, it removes the new entry and restores `local/paths.toml` and `tags.toml` to their prior contents. It does not overwrite a file that changed after Charts wrote it; it reports a rollback error instead. `tags.toml` is shared and tracked by Git. A successful add leaves it uncommitted. Charts never stages or commits it; the owner decides whether to commit it. Entry and path files stay ignored by Git. The Charts skill asks the owner to confirm a proposed remote before adding it.
+After writing, Charts validates the full catalog. If a write or validation fails, it removes the new entry and restores `local/paths.toml` and `tags.toml` to their prior contents. It does not overwrite a file that changed after Charts wrote it; it reports a rollback error instead. `tags.toml` is shared and tracked by Git. A successful add leaves it uncommitted. Charts never stages or commits it; the catalog owner decides whether to commit it. Entry and path files stay ignored by Git. The Charts skill asks the catalog owner to confirm a proposed remote before adding it.
 
 Use `--json` for machine-readable results. Success reports the type, ID, path, and validation result. When new tags are added, it also reports `new_tags` in option order. Text output names the tags and says that the shared tag list has uncommitted changes. Failure reports the errors and returns a non-zero status.
 
@@ -197,7 +197,7 @@ The `charts` command does not update or remove entries. Follow the skill in `.ag
 
 ## Catalog data
 
-Git ignores the entries in `systems/`, `repositories/`, and `externals/`. Each user keeps their own catalog on their machine, so it can name private systems and remotes without publishing them. Only `templates/` and the tracked `tags.toml` are shared. Charts never stages or commits `tags.toml`; its owner decides whether to commit changes.
+Git ignores the entries in `systems/`, `repositories/`, and `externals/`. Each catalog owner keeps their own catalog on their machine, so it can name private systems and remotes without publishing them. Only `templates/` and the tracked `tags.toml` are shared. Charts never stages or commits `tags.toml`; the catalog owner decides whether to commit changes.
 
 ## Not in version 1
 
@@ -209,5 +209,4 @@ Git ignores the entries in `systems/`, `repositories/`, and `externals/`. Each u
 
 ## Open points
 
-- How agents in other modules find Charts and load its skill.
-- Whether `owner` becomes a reference to owner entries when a team uses Charts.
+None.
