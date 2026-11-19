@@ -81,6 +81,15 @@ describe("validation", () => {
     assert.deepEqual(validateCatalog(snapshot(BASE), NO_FACTS), { errors: [], warnings: [] });
   });
 
+  test("allows ticket-key on systems and repositories, but not externals", () => {
+    const { errors } = validateCatalog(snapshot([
+      entry("system", "alpha", { description: "Alpha system.", "ticket-key": "ABC" }),
+      entry("repository", "alpha-app", { description: "Alpha application.", "ticket-key": "ABC" }),
+      entry("external", "tracker", { description: "Tracker service.", "ticket-key": "ABC" }),
+    ]), NO_FACTS);
+    assert.deepEqual(errors, ["externals/tracker.toml: unknown field(s): ticket-key"]);
+  });
+
   test("checks IDs, keys, and duplicate keys", () => {
     const { errors } = validateCatalog(snapshot([
       entry("repository", "Bad_ID", { description: "Bad ID." }),
