@@ -87,7 +87,7 @@ describe("validation", () => {
       entry("repository", "alpha-app", { description: "Alpha application.", "ticket-key": "ABC" }),
       entry("external", "tracker", { description: "Tracker service.", "ticket-key": "ABC" }),
     ]), NO_FACTS);
-    assert.deepEqual(errors, ["externals/tracker.toml: unknown field(s): ticket-key"]);
+    assert.deepEqual(errors, ["external tracker: unknown field(s): ticket-key"]);
   });
 
   test("checks ticket-key form on systems and repositories", () => {
@@ -102,8 +102,8 @@ describe("validation", () => {
     ];
     const form = "ticket-key must be 2–10 characters: an uppercase letter, then uppercase letters or digits";
     assert.deepEqual(validateCatalog(snapshot(entries), NO_FACTS).errors, invalidValues.flatMap((_, index) => [
-      `systems/bad-system-${index}.toml: ${form}`,
-      `repositories/bad-repository-${index}.toml: ${form}`,
+      `system bad-system-${index}: ${form}`,
+      `repository bad-repository-${index}: ${form}`,
     ]));
   });
 
@@ -129,11 +129,11 @@ describe("validation", () => {
     ]), NO_FACTS);
     const form = "key must be 2–5 characters: an uppercase letter, then uppercase letters or digits";
     assert.deepEqual(errors, [
-      'repositories/Bad_ID.toml: ID "Bad_ID" is not lowercase kebab-case',
-      'repositories/second.toml: duplicate key "NBR"; also used by repositories/first.toml',
-      `repositories/lower.toml: ${form}`,
-      `repositories/number.toml: ${form}`,
-      "systems/with-key.toml: unknown field(s): key",
+      'repository Bad_ID: ID "Bad_ID" is not lowercase kebab-case',
+      'repository second: duplicate key "NBR"; also used by repository first',
+      `repository lower: ${form}`,
+      `repository number: ${form}`,
+      "system with-key: unknown field(s): key",
     ]);
   });
 
@@ -145,13 +145,13 @@ describe("validation", () => {
       entry("repository", "bad-tags", { description: 5, tags: "utility" }),
     ]), NO_FACTS);
     assert.deepEqual(errors, [
-      "systems/extra.toml: unknown field(s): another, extra",
-      "externals/no-description.toml: missing required field: description",
-      "externals/no-description.toml: provider must be a string",
-      'repositories/paused.toml: invalid status "paused"',
-      'repositories/paused.toml: tag "unknown" is not defined in tags.toml',
-      "repositories/bad-tags.toml: description must be a string",
-      "repositories/bad-tags.toml: tags must be a list of strings",
+      "system extra: unknown field(s): another, extra",
+      "external no-description: missing required field: description",
+      "external no-description: provider must be a string",
+      'repository paused: invalid status "paused"',
+      'repository paused: tag "unknown" is not defined in tags.toml',
+      "repository bad-tags: description must be a string",
+      "repository bad-tags: tags must be a list of strings",
     ]);
   });
 
@@ -163,7 +163,7 @@ describe("validation", () => {
     const { errors } = validateCatalog(snapshot([
       entry("repository", "tagged", { description: "Tagged.", tags: [...inherited, "utility"] }),
     ], { tags }), NO_FACTS);
-    assert.deepEqual(errors, inherited.map((name) => `repositories/tagged.toml: tag ${JSON.stringify(name)} is not defined in tags.toml`));
+    assert.deepEqual(errors, inherited.map((name) => `repository tagged: tag ${JSON.stringify(name)} is not defined in tags.toml`));
   });
 
   test("accepts an inherited name that the tags table defines as its own key", () => {
@@ -185,14 +185,14 @@ describe("validation", () => {
       }),
     ]), NO_FACTS);
     assert.deepEqual(errors, [
-      'repositories/loop.toml: system "missing-system" does not name a system',
-      "repositories/loop.toml: depends-on[0] cannot point to the same repository",
-      'repositories/loop.toml: depends-on[1] ID "missing" does not exist',
-      "repositories/loop.toml: depends-on[2] has unknown field(s): extra",
-      'repositories/loop.toml: depends-on[2] ID "alpha" is not a repository or external',
-      "repositories/loop.toml: depends-on[2] via must be a string",
-      "repositories/loop.toml: depends-on[3] must be a table",
-      "repositories/loop.toml: depends-on[4] requires a string id",
+      'repository loop: system "missing-system" does not name a system',
+      "repository loop: depends-on[0] cannot point to the same repository",
+      'repository loop: depends-on[1] ID "missing" does not exist',
+      "repository loop: depends-on[2] has unknown field(s): extra",
+      'repository loop: depends-on[2] ID "alpha" is not a repository or external',
+      "repository loop: depends-on[2] via must be a string",
+      "repository loop: depends-on[3] must be a table",
+      "repository loop: depends-on[4] requires a string id",
     ]);
   });
 
@@ -206,9 +206,9 @@ describe("validation", () => {
     assert.deepEqual(result, {
       errors: [],
       warnings: [
-        'repositories/other-user.toml: depends-on[0] points to deprecated entry "old-lib"',
-        'repositories/user.toml: depends-on[0] points to deprecated entry "old-lib"',
-        'repositories/user.toml: depends-on[1] points to archived entry "old-api"',
+        'repository other-user: depends-on[0] points to deprecated entry "old-lib"',
+        'repository user: depends-on[0] points to deprecated entry "old-lib"',
+        'repository user: depends-on[1] points to archived entry "old-api"',
       ],
     });
   });
@@ -222,7 +222,7 @@ describe("validation", () => {
     const { errors } = validateCatalog(snapshot([
       entry("repository", "secret", { description: "Secret.", remote: "https://user:token@example.com/repo.git" }),
     ]), NO_FACTS);
-    assert.deepEqual(errors, ["repositories/secret.toml: remote must not contain credentials"]);
+    assert.deepEqual(errors, ["repository secret: remote must not contain credentials"]);
   });
 
   test("reports duplicate IDs across types and keeps the first entry", () => {
@@ -232,7 +232,7 @@ describe("validation", () => {
       entry("repository", "user", { description: "User.", system: "shared" }),
     ]);
     assert.deepEqual(validateCatalog(duplicate, NO_FACTS).errors, [
-      'repositories/shared.toml: duplicate ID "shared"; also used by systems/shared.toml',
+      'repository shared: duplicate ID "shared"; also used by system shared',
     ]);
     assert.equal(new CatalogIndex(duplicate).get("shared")?.kind, "system");
   });
@@ -310,7 +310,7 @@ describe("entry updates", () => {
     const conflicting = entry("repository", "beta-lib", { description: "Updated beta.", key: "ALP" });
     const conflictMaps = validationMaps(index, "beta-lib");
     assert.deepEqual(validateEntryData(index, conflicting, conflictMaps.seen, conflictMaps.keys).errors, [
-      'repositories/beta-lib.toml: duplicate key "ALP"; also used by repositories/alpha-app.toml',
+      'repository beta-lib: duplicate key "ALP"; also used by repository alpha-app',
     ]);
   });
 });

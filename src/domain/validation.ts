@@ -87,92 +87,92 @@ export function validateEntryData(
 ): Finding {
   const errors: string[] = [];
   const warnings: string[] = [];
-  const file = entry.file;
-  if (!ID_PATTERN.test(entry.id)) errors.push(`${file}: ID ${JSON.stringify(entry.id)} is not lowercase kebab-case`);
+  const label = `${entry.kind} ${entry.id}`;
+  if (!ID_PATTERN.test(entry.id)) errors.push(`${label}: ID ${JSON.stringify(entry.id)} is not lowercase kebab-case`);
   const prior = seen.get(entry.id);
-  if (prior) errors.push(`${file}: duplicate ID ${JSON.stringify(entry.id)}; also used by ${prior.file}`);
+  if (prior) errors.push(`${label}: duplicate ID ${JSON.stringify(entry.id)}; also used by ${prior.kind} ${prior.id}`);
   else seen.set(entry.id, entry);
 
   const unknown = Object.keys(entry.data).filter((field) => !FIELDS[entry.kind].has(field)).sort();
-  if (unknown.length) errors.push(`${file}: unknown field(s): ${unknown.join(", ")}`);
-  if (!("description" in entry.data)) errors.push(`${file}: missing required field: description`);
-  else if (!isString(entry.data.description)) errors.push(`${file}: description must be a string`);
+  if (unknown.length) errors.push(`${label}: unknown field(s): ${unknown.join(", ")}`);
+  if (!("description" in entry.data)) errors.push(`${label}: missing required field: description`);
+  else if (!isString(entry.data.description)) errors.push(`${label}: description must be a string`);
 
   for (const field of ["name", "owner", "remote", "default-branch"]) {
-    if (field in entry.data && !isString(entry.data[field])) errors.push(`${file}: ${field} must be a string`);
+    if (field in entry.data && !isString(entry.data[field])) errors.push(`${label}: ${field} must be a string`);
   }
   if (entry.kind === "external") {
     for (const field of ["provider", "kind"]) {
-      if (field in entry.data && !isString(entry.data[field])) errors.push(`${file}: ${field} must be a string`);
+      if (field in entry.data && !isString(entry.data[field])) errors.push(`${label}: ${field} must be a string`);
     }
   }
 
   const status = entryStatus(entry);
-  if (!isString(status) || !STATUSES.has(status)) errors.push(`${file}: invalid status ${JSON.stringify(status)}`);
+  if (!isString(status) || !STATUSES.has(status)) errors.push(`${label}: invalid status ${JSON.stringify(status)}`);
   if (isString(entry.data.remote) && remoteHasCredentials(entry.data.remote)) {
-    errors.push(`${file}: remote must not contain credentials`);
+    errors.push(`${label}: remote must not contain credentials`);
   }
   const ticketKey = entry.data["ticket-key"];
   if ((entry.kind === "system" || entry.kind === "repository") && ticketKey !== undefined &&
     (!isString(ticketKey) || !TICKET_KEY_PATTERN.test(ticketKey))) {
-    errors.push(`${file}: ticket-key must be 2–10 characters: an uppercase letter, then uppercase letters or digits`);
+    errors.push(`${label}: ticket-key must be 2–10 characters: an uppercase letter, then uppercase letters or digits`);
   }
 
   if (entry.kind !== "repository") return { errors, warnings };
   const key = entry.data.key;
   if (key !== undefined && (!isString(key) || !KEY_PATTERN.test(key))) {
-    errors.push(`${file}: key must be 2–5 characters: an uppercase letter, then uppercase letters or digits`);
+    errors.push(`${label}: key must be 2–5 characters: an uppercase letter, then uppercase letters or digits`);
   } else if (isString(key)) {
     const priorKey = keys.get(key);
-    if (priorKey) errors.push(`${file}: duplicate key ${JSON.stringify(key)}; also used by ${priorKey.file}`);
+    if (priorKey) errors.push(`${label}: duplicate key ${JSON.stringify(key)}; also used by ${priorKey.kind} ${priorKey.id}`);
     else keys.set(key, entry);
   }
 
   const systemId = entry.data.system;
   if (systemId !== undefined && !isString(systemId)) {
-    errors.push(`${file}: system must be a string`);
+    errors.push(`${label}: system must be a string`);
   } else if (isString(systemId)) {
     const target = index.get(systemId);
-    if (!target || target.kind !== "system") errors.push(`${file}: system ${JSON.stringify(systemId)} does not name a system`);
+    if (!target || target.kind !== "system") errors.push(`${label}: system ${JSON.stringify(systemId)} does not name a system`);
   }
 
   const tags = entry.data.tags ?? [];
   if (!Array.isArray(tags) || tags.some((tag) => !isString(tag))) {
-    errors.push(`${file}: tags must be a list of strings`);
+    errors.push(`${label}: tags must be a list of strings`);
   } else {
     for (const tag of tags) {
-      if (!Object.hasOwn(index.snapshot.tags, tag)) errors.push(`${file}: tag ${JSON.stringify(tag)} is not defined in tags.toml`);
+      if (!Object.hasOwn(index.snapshot.tags, tag)) errors.push(`${label}: tag ${JSON.stringify(tag)} is not defined in tags.toml`);
     }
   }
 
   const rawDependencies = entry.data["depends-on"] ?? [];
   if (!Array.isArray(rawDependencies)) {
-    errors.push(`${file}: depends-on must be a list`);
+    errors.push(`${label}: depends-on must be a list`);
     return { errors, warnings };
   }
   for (const [position, rawDependency] of rawDependencies.entries()) {
-    const label = `${file}: depends-on[${position}]`;
+    const dependencyLabel = `${label}: depends-on[${position}]`;
     if (!isRecord(rawDependency)) {
-      errors.push(`${label} must be a table`);
+      errors.push(`${dependencyLabel} must be a table`);
       continue;
     }
     const extra = Object.keys(rawDependency).filter((field) => !["id", "via"].includes(field)).sort();
-    if (extra.length) errors.push(`${label} has unknown field(s): ${extra.join(", ")}`);
+    if (extra.length) errors.push(`${dependencyLabel} has unknown field(s): ${extra.join(", ")}`);
     const dependencyId = rawDependency.id;
     if (!isString(dependencyId)) {
-      errors.push(`${label} requires a string id`);
+      errors.push(`${dependencyLabel} requires a string id`);
       continue;
     }
-    if (dependencyId === entry.id) errors.push(`${label} cannot point to the same repository`);
+    if (dependencyId === entry.id) errors.push(`${dependencyLabel} cannot point to the same repository`);
     const target = index.get(dependencyId);
-    if (!target) errors.push(`${label} ID ${JSON.stringify(dependencyId)} does not exist`);
+    if (!target) errors.push(`${dependencyLabel} ID ${JSON.stringify(dependencyId)} does not exist`);
     else if (target.kind !== "repository" && target.kind !== "external") {
-      errors.push(`${label} ID ${JSON.stringify(dependencyId)} is not a repository or external`);
+      errors.push(`${dependencyLabel} ID ${JSON.stringify(dependencyId)} is not a repository or external`);
     }
-    if ("via" in rawDependency && !isString(rawDependency.via)) errors.push(`${label} via must be a string`);
+    if ("via" in rawDependency && !isString(rawDependency.via)) errors.push(`${dependencyLabel} via must be a string`);
     const dependencyStatus = target ? entryStatus(target) : "active";
     if (target && (dependencyStatus === "deprecated" || dependencyStatus === "archived")) {
-      warnings.push(`${label} points to ${dependencyStatus} entry ${JSON.stringify(dependencyId)}`);
+      warnings.push(`${dependencyLabel} points to ${dependencyStatus} entry ${JSON.stringify(dependencyId)}`);
     }
   }
   return { errors, warnings };
