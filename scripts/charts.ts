@@ -7,6 +7,7 @@ import {
   renderAdd,
   renderCheck,
   renderEdges,
+  renderError,
   renderFind,
   renderShow,
   renderSet,
@@ -32,34 +33,38 @@ export function main(argv = process.argv.slice(2), root = ROOT): number {
   } catch (error) {
     return renderUsageError(argv, error);
   }
-  const ports: Ports = { store: new TomlStore(root), git: new GitCli(root) };
-  switch (options.command) {
-    case "add":
-      return renderAdd(options.json, add(ports, {
-        kind: options.kind!,
-        id: options.id!,
-        data: options.data!,
-        localPath: options.localPath,
-        newTags: options.newTags,
-      }));
-    case "set":
-      return renderSet(options.json, set(ports, {
-        id: options.id!,
-        data: options.data,
-        localPath: options.localPath,
-        newTags: options.newTags,
-        replaceKey: options.replaceKey,
-      }));
-    case "check":
-      return renderCheck(options.json, check(ports));
-    case "find":
-      return renderFind(options.json, find(ports, options));
-    case "show":
-      return renderShow(options.json, show(ports, options.id!));
-    case "deps":
-      return renderEdges(options.json, deps(ports, options.id!), false);
-    case "rdeps":
-      return renderEdges(options.json, rdeps(ports, options.id!), true);
+  try {
+    const ports: Ports = { store: new TomlStore(root), git: new GitCli(root) };
+    switch (options.command) {
+      case "add":
+        return renderAdd(options.json, add(ports, {
+          kind: options.kind!,
+          id: options.id!,
+          data: options.data!,
+          localPath: options.localPath,
+          newTags: options.newTags,
+        }));
+      case "set":
+        return renderSet(options.json, set(ports, {
+          id: options.id!,
+          data: options.data,
+          localPath: options.localPath,
+          newTags: options.newTags,
+          replaceKey: options.replaceKey,
+        }));
+      case "check":
+        return renderCheck(options.json, check(ports));
+      case "find":
+        return renderFind(options.json, find(ports, options));
+      case "show":
+        return renderShow(options.json, show(ports, options.id!));
+      case "deps":
+        return renderEdges(options.json, deps(ports, options.id!), false);
+      case "rdeps":
+        return renderEdges(options.json, rdeps(ports, options.id!), true);
+    }
+  } catch (error) {
+    return renderError(options.json, error);
   }
 }
 

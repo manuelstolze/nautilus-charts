@@ -45,7 +45,7 @@ exit: 0
 
 ## with entry errors
 $ charts "check"
-exit: 1
+exit: 3
 --- stdout
 ERROR: systems/broken.toml: invalid TOML: Invalid TOML document: invalid value
 
@@ -80,7 +80,7 @@ ERROR: tags.toml: description for "library" must be a string
 
 ## with entry errors (--json)
 $ charts "check" "--json"
-exit: 1
+exit: 3
 --- stdout
 {
   "ok": false,
@@ -118,7 +118,7 @@ exit: 1
 
 ## with local path errors
 $ charts "check"
-exit: 1
+exit: 3
 --- stdout
 ERROR: local/paths.toml: path does not exist: <TMP>/work/absent for "alpha-app"
 ERROR: local/paths.toml: remote does not match "ssh://example.com/beta.git" for "beta-lib"
@@ -130,7 +130,7 @@ ERROR: local/paths.toml: "missing" does not name a repository
 
 ## with local path errors (--json)
 $ charts "check" "--json"
-exit: 1
+exit: 3
 --- stdout
 {
   "ok": false,
@@ -148,7 +148,7 @@ exit: 1
 
 ## with invalid local paths TOML
 $ charts "check"
-exit: 1
+exit: 3
 --- stdout
 ERROR: local/paths.toml: invalid TOML: Invalid TOML document: invalid value
 
@@ -158,7 +158,7 @@ ERROR: local/paths.toml: invalid TOML: Invalid TOML document: invalid value
 
 ## with invalid local paths TOML (--json)
 $ charts "check" "--json"
-exit: 1
+exit: 3
 --- stdout
 {
   "ok": false,
@@ -171,7 +171,7 @@ exit: 1
 
 ## with an unignored local paths file and no tags
 $ charts "check"
-exit: 1
+exit: 3
 --- stdout
 ERROR: repositories/alpha-app.toml: tag "utility" is not defined in tags.toml
 ERROR: repositories/beta-lib.toml: tag "library" is not defined in tags.toml
@@ -181,7 +181,7 @@ ERROR: local/paths.toml is not ignored by Git
 
 ## with an unignored local paths file and no tags (--json)
 $ charts "check" "--json"
-exit: 1
+exit: 3
 --- stdout
 {
   "ok": false,

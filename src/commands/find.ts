@@ -2,7 +2,7 @@ import { compact, entryJson, entryStatus, isString, type Entry } from "../domain
 import type { Ports } from "./context.ts";
 
 export type FindOptions = { text?: string; system?: string; tag?: string; status?: string; owner?: string };
-export type FindResult = { entries: Entry[]; status: number };
+export type FindResult = { entries: Entry[] };
 
 export function find({ store }: Ports, options: FindOptions): FindResult {
   const text = (options.text ?? "").toLowerCase();
@@ -19,5 +19,5 @@ export function find({ store }: Ports, options: FindOptions): FindResult {
     .filter((entry) => !options.status || entryStatus(entry) === options.status)
     .filter((entry) => !options.owner || (isString(entry.data.owner) && entry.data.owner.toLowerCase().includes(options.owner!.toLowerCase())))
     .sort((left, right) => left.kind.localeCompare(right.kind) || left.id.localeCompare(right.id));
-  return { entries, status: 0 };
+  return { entries };
 }

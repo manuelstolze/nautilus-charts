@@ -113,17 +113,23 @@ exit: 0
 
 ## external
 $ charts "deps" "stripe"
-exit: 2
+exit: 1
 --- stdout
 --- stderr
-deps supports repositories and systems, not external entries: stripe
+ERROR: deps supports repositories and systems, not external entries: stripe
 
 ## external (--json)
 $ charts "deps" "stripe" "--json"
-exit: 2
+exit: 1
 --- stdout
 {
-  "error": "deps supports repositories and systems, not external entries: stripe"
+  "error": {
+    "code": "usage",
+    "message": "deps supports repositories and systems, not external entries: stripe",
+    "details": {
+      "id": "stripe"
+    }
+  }
 }
 --- stderr
 
@@ -132,13 +138,19 @@ $ charts "deps" "missing"
 exit: 2
 --- stdout
 --- stderr
-unknown entry ID: missing
+ERROR: unknown entry ID: missing
 
 ## unknown ID (--json)
 $ charts "deps" "missing" "--json"
 exit: 2
 --- stdout
 {
-  "error": "unknown entry ID: missing"
+  "error": {
+    "code": "entry-not-found",
+    "message": "unknown entry ID: missing",
+    "details": {
+      "id": "missing"
+    }
+  }
 }
 --- stderr
