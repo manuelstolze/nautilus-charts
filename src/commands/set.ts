@@ -1,5 +1,5 @@
 import { CatalogIndex } from "../domain/catalog.ts";
-import { ENTRY_DIRS, entryFile, errorMessage, isRecord, type Data, type Finding, type Kind } from "../domain/entry.ts";
+import { ENTRY_DIRS, errorMessage, isRecord, type Data, type Finding, type Kind } from "../domain/entry.ts";
 import { ChartsError, entryNotFound, type ErrorCode } from "../domain/errors.ts";
 import {
   mergeEntryData,
@@ -19,7 +19,7 @@ export type SetOptions = {
   replaceKey?: boolean;
 };
 export type SetResult =
-  | { ok: true; type: Kind; id: string; path: string; changed: string[]; newTags: string[]; validation: Finding }
+  | { ok: true; type: Kind; id: string; changed: string[]; newTags: string[]; validation: Finding }
   | { ok: false; error: ChartsError };
 
 function containsNull(value: unknown): boolean {
@@ -98,7 +98,6 @@ export function set(ports: Ports, options: SetOptions): SetResult {
       ok: true,
       type,
       id: options.id,
-      path,
       changed: [],
       newTags: [],
       validation: finding,
@@ -134,7 +133,6 @@ export function set(ports: Ports, options: SetOptions): SetResult {
     ok: true,
     type,
     id: options.id,
-    path: entryFile(current.kind, options.id),
     changed: merged.changed,
     newTags: newTags.map(({ name }) => name),
     validation,

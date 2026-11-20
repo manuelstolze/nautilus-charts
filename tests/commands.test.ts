@@ -211,7 +211,6 @@ describe("add use case", () => {
       ok: true,
       type: "repository",
       id: "new-repo",
-      path: "repositories/new-repo.toml",
       validation: { errors: [], warnings: [] },
       newTags: [],
     });
