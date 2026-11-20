@@ -2,7 +2,7 @@
 $ charts "set" "alpha-app" "--data" "{\"description\":\"Updated application.\"}"
 exit: 0
 --- stdout
-Updated repository alpha-app at repositories/alpha-app.toml; changed fields: description; validation ok
+Updated repository alpha-app; changed fields: description; validation ok
 --- stderr
 --- file repositories/alpha-app.toml
 name = "Alpha App"
@@ -23,7 +23,6 @@ exit: 0
   "ok": true,
   "type": "repository",
   "id": "alpha-app",
-  "path": "repositories/alpha-app.toml",
   "changed": [
     "description"
   ],
@@ -50,7 +49,7 @@ depends-on = [{ id = "beta-lib", via = "npm" }, { id = "stripe", via = "API" }]
 $ charts "set" "alpha-app" "--data" "{\"description\":\"Alpha application.\"}"
 exit: 0
 --- stdout
-No change to repository alpha-app at repositories/alpha-app.toml
+No change to repository alpha-app
 --- stderr
 --- file repositories/alpha-app.toml
 name = "Alpha App"
@@ -71,7 +70,6 @@ exit: 0
   "ok": true,
   "type": "repository",
   "id": "alpha-app",
-  "path": "repositories/alpha-app.toml",
   "changed": [],
   "new_tags": [],
   "validation": {
@@ -97,7 +95,7 @@ $ charts "set" "alpha-app" "--data" "{\"key\":\"NEW\"}"
 exit: 3
 --- stdout
 --- stderr
-ERROR: repositories/alpha-app.toml: changing an existing key requires --replace-key
+ERROR: repository alpha-app: changing an existing key requires --replace-key
 ERROR: could not set repository alpha-app: validation failed
 --- file repositories/alpha-app.toml
 name = "Alpha App"
@@ -120,7 +118,7 @@ exit: 3
     "message": "could not set repository alpha-app: validation failed",
     "details": {
       "errors": [
-        "repositories/alpha-app.toml: changing an existing key requires --replace-key"
+        "repository alpha-app: changing an existing key requires --replace-key"
       ],
       "warnings": []
     }
