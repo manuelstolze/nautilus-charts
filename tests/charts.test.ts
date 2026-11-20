@@ -15,7 +15,6 @@ import { CatalogIndex } from "../src/domain/catalog.ts";
 import { dependenciesFor, reverseDependencies } from "../src/domain/dependencies.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const TSX = join(REPO_ROOT, "node_modules/.bin/tsx");
 
 let temporary: string;
 let root: string;
@@ -1197,7 +1196,7 @@ describe("catalog commands", () => {
     const otherDirectory = mkdtempSync(join(tmpdir(), "charts-cwd-"));
     try {
       const output = execFileSync(
-        TSX,
+        process.execPath,
         [realpathSync(join(root, "scripts/charts.ts")), "find", "alpha-app", "--json"],
         { cwd: otherDirectory, encoding: "utf8" },
       );
