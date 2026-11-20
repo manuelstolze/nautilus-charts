@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { copyFileSync, cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import { parse as parseToml } from "smol-toml";
 import { main } from "../scripts/charts.ts";
+import { renderError } from "../src/adapters/cli.ts";
 import { GitCli } from "../src/adapters/git-cli.ts";
 import { TomlStore } from "../src/adapters/toml-store.ts";
 import { checkCatalog as validateCatalog } from "../src/commands/check.ts";
@@ -15,7 +16,6 @@ import { CatalogIndex } from "../src/domain/catalog.ts";
 import { dependenciesFor, reverseDependencies } from "../src/domain/dependencies.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const TSX = join(REPO_ROOT, "node_modules/.bin/tsx");
 
 let temporary: string;
 let root: string;
@@ -243,7 +243,7 @@ describe("catalog validation", () => {
     );
   });
 
-  test("prints check results as JSON and returns non-zero on errors", () => {
+  test("prints check results as JSON and exits with 3 on errors", () => {
     const valid = capture(() => main(["check", "--json"], root));
     const validPayload = JSON.parse(valid.output.join("\n"));
     assert.equal(valid.result, 0);
@@ -253,7 +253,7 @@ describe("catalog validation", () => {
     write("repositories/invalid-status.toml", 'description = "Invalid status."\nstatus = "paused"\n');
     const invalid = capture(() => main(["check", "--json"], root));
     const invalidPayload = JSON.parse(invalid.output.join("\n"));
-    assert.equal(invalid.result, 1);
+    assert.equal(invalid.result, 3);
     assert.equal(invalidPayload.ok, false);
     assert.ok(invalidPayload.errors.length > 0);
   });
@@ -340,18 +340,19 @@ describe("charts add", () => {
   });
 
   test("rejects malformed or invalid input without writing files", () => {
-    const cases: Array<{ kind: string; id: string; data: unknown; expected: string }> = [
-      { kind: "invalid", id: "new-entry", data: { description: "Example." }, expected: "invalid entry type" },
-      { kind: "system", id: "Bad_ID", data: { description: "Example." }, expected: "invalid ID" },
-      { kind: "system", id: "missing-description", data: { name: "No description" }, expected: "missing required field: description" },
-      { kind: "system", id: "unknown-field", data: { description: "Example.", extra: true }, expected: "unknown field(s): extra" },
-      { kind: "system", id: "bad-status", data: { description: "Example.", status: "paused" }, expected: "invalid status" },
-      { kind: "system", id: "bad-name", data: { description: "Example.", name: false }, expected: "name must be a string" },
-      { kind: "system", id: "id-in-data", data: { id: "wrong", description: "Example." }, expected: "do not include id" },
+    const cases: Array<{ kind: string; id: string; data: unknown; expected: string; code: string }> = [
+      { kind: "invalid", id: "new-entry", data: { description: "Example." }, expected: "invalid entry type", code: "usage" },
+      { kind: "system", id: "Bad_ID", data: { description: "Example." }, expected: "invalid ID", code: "usage" },
+      { kind: "system", id: "missing-description", data: { name: "No description" }, expected: "missing required field: description", code: "invalid-entry" },
+      { kind: "system", id: "unknown-field", data: { description: "Example.", extra: true }, expected: "unknown field(s): extra", code: "invalid-entry" },
+      { kind: "system", id: "bad-status", data: { description: "Example.", status: "paused" }, expected: "invalid status", code: "invalid-entry" },
+      { kind: "system", id: "bad-name", data: { description: "Example.", name: false }, expected: "name must be a string", code: "invalid-entry" },
+      { kind: "system", id: "id-in-data", data: { id: "wrong", description: "Example." }, expected: "do not include id", code: "usage" },
     ];
     for (const item of cases) {
       const result = add(item.kind, item.id, item.data, ["--json"]);
-      assert.equal(result.result, 2, JSON.stringify(item));
+      assert.equal(result.result, item.code === "usage" ? 1 : 3, JSON.stringify(item));
+      assert.equal(JSON.parse(result.output.join("\n")).error.code, item.code, JSON.stringify(item));
       assert.ok(result.output.join("\\n").includes(item.expected), result.output.join("\\n"));
       for (const directory of ["systems", "repositories", "externals"]) {
         assert.equal(existsSync(join(root, directory, `${item.id}.toml`)), false);
@@ -359,22 +360,22 @@ describe("charts add", () => {
     }
 
     const malformed = capture(() => main(["add", "system", "bad-json", "--data", "{", "--json"], root));
-    assert.equal(malformed.result, 2);
-    assert.ok(JSON.parse(malformed.output.join("\\n")).error.includes("not valid JSON"));
+    assert.equal(malformed.result, 1);
+    assert.ok(JSON.parse(malformed.output.join("\\n")).error.message.includes("not valid JSON"));
     assert.equal(existsSync(join(root, "systems/bad-json.toml")), false);
 
     for (const value of ["[]", "null", '"text"']) {
       const result = capture(() => main(["add", "system", "not-object", "--data", value, "--json"], root));
-      assert.equal(result.result, 2);
-      assert.ok(JSON.parse(result.output.join("\\n")).error.includes("JSON object"));
+      assert.equal(result.result, 1);
+      assert.ok(JSON.parse(result.output.join("\\n")).error.message.includes("JSON object"));
       assert.equal(existsSync(join(root, "systems/not-object.toml")), false);
     }
 
     const invalidLocalPath = capture(() => main([
       "add", "external", "external-path", "--data", '{"description":"Example."}', "--local-path", "/tmp/work", "--json",
     ], root));
-    assert.equal(invalidLocalPath.result, 2);
-    assert.ok(JSON.parse(invalidLocalPath.output.join("\\n")).error.includes("only for repository"));
+    assert.equal(invalidLocalPath.result, 1);
+    assert.ok(JSON.parse(invalidLocalPath.output.join("\\n")).error.message.includes("only for repository"));
     assert.equal(existsSync(join(root, "externals/external-path.toml")), false);
   });
 
@@ -384,7 +385,7 @@ describe("charts add", () => {
     const originalExternal = readFileSync(join(root, "externals/stripe.toml"), "utf8");
     for (const [kind, id] of [["repository", "alpha"], ["external", "alpha-app"], ["system", "stripe"]]) {
       const result = add(kind, id, { description: "Must not replace." }, ["--json"]);
-      assert.equal(result.result, 2);
+      assert.equal(result.result, 3);
       assert.ok(JSON.stringify(JSON.parse(result.output.join("\\n"))).includes("already exists"));
     }
     assert.equal(readFileSync(join(root, "systems/alpha.toml"), "utf8"), originalSystem);
@@ -401,10 +402,11 @@ describe("charts add", () => {
         const id = `bad-ticket-key-${number}`;
         number += 1;
         const result = add(kind, id, { description: "Invalid ticket key.", "ticket-key": value }, ["--json"]);
-        assert.equal(result.result, 2, `${kind} ${JSON.stringify(value)}`);
+        assert.equal(result.result, 3, `${kind} ${JSON.stringify(value)}`);
         const payload = JSON.parse(result.output.join("\n"));
         const directory = kind === "system" ? "systems" : "repositories";
-        assert.deepEqual(payload.validation.errors, [`${directory}/${id}.toml: ${form}`]);
+        assert.equal(payload.error.code, "invalid-entry");
+        assert.deepEqual(payload.error.details.errors, [`${directory}/${id}.toml: ${form}`]);
         assert.equal(existsSync(join(root, `${directory}/${id}.toml`)), false);
       }
     }
@@ -422,7 +424,7 @@ describe("charts add", () => {
     ];
     for (const item of cases) {
       const result = add("repository", item.id, item.data, ["--json"]);
-      assert.equal(result.result, 2, item.id);
+      assert.equal(result.result, 3, item.id);
       assert.ok(JSON.stringify(JSON.parse(result.output.join("\\n"))).includes(item.error), item.id);
       assert.equal(existsSync(join(root, `repositories/${item.id}.toml`)), false);
     }
@@ -607,8 +609,8 @@ describe("charts add", () => {
         ["--local-path", localRepository, "--json"],
       );
       const payload = JSON.parse(result.output.join("\\n"));
-      assert.equal(result.result, 2, id);
-      assert.deepEqual(payload.validation.errors, [
+      assert.equal(result.result, 3, id);
+      assert.deepEqual(payload.error.details.errors, [
         `local/paths.toml: cannot replace the existing local path for ${JSON.stringify(id)}; edit the file by hand`,
       ]);
       assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), text);
@@ -699,8 +701,8 @@ describe("charts add", () => {
       ["--local-path", mismatchedRepository, "--json"],
     );
     const payload = JSON.parse(result.output.join("\\n"));
-    assert.equal(result.result, 1);
-    assert.ok(payload.validation.errors.some((error: string) => error.includes("remote does not match")));
+    assert.equal(result.result, 3);
+    assert.ok(payload.error.details.errors.some((error: string) => error.includes("remote does not match")));
     assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), original);
     assert.equal(existsSync(join(root, "repositories/rollback-append.toml")), false);
   });
@@ -720,8 +722,8 @@ describe("charts add", () => {
       ["--local-path", mismatchedRepository, "--json"],
     );
     const payload = JSON.parse(result.output.join("\\n"));
-    assert.equal(result.result, 1);
-    assert.ok(payload.validation.errors.some((error: string) => error.includes("remote does not match")));
+    assert.equal(result.result, 3);
+    assert.ok(payload.error.details.errors.some((error: string) => error.includes("remote does not match")));
     assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), original);
     assert.equal(existsSync(join(root, "repositories/rollback-replace.toml")), false);
   });
@@ -739,13 +741,10 @@ describe("charts add", () => {
       ["--local-path", join(temporary, "missing-repository"), "--json"],
     );
     const payload = JSON.parse(result.output.join("\\n"));
-    assert.equal(result.result, 1);
-    assert.equal(payload.ok, false);
-    assert.equal(payload.type, "repository");
-    assert.equal(payload.id, "rollback-repository");
-    assert.equal(payload.path, "repositories/rollback-repository.toml");
-    assert.equal(payload.validation.ok, false);
-    assert.ok(payload.validation.errors.some((error: string) => error.includes("path does not exist")));
+    assert.equal(result.result, 3);
+    assert.equal(payload.error.code, "invalid-entry");
+    assert.equal(payload.error.message, "could not add repository rollback-repository: validation failed");
+    assert.ok(payload.error.details.errors.some((error: string) => error.includes("path does not exist")));
     assert.equal(existsSync(join(root, "repositories/rollback-repository.toml")), false);
     assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), original);
   });
@@ -758,7 +757,7 @@ describe("charts add", () => {
       { description: "Has an invalid local path." },
       ["--local-path", join(temporary, "missing-repository"), "--json"],
     );
-    assert.equal(result.result, 1);
+    assert.equal(result.result, 3);
     assert.equal(existsSync(join(root, "repositories/rollback-without-map.toml")), false);
     assert.equal(existsSync(join(root, "local/paths.toml")), false);
   });
@@ -775,8 +774,8 @@ describe("charts add", () => {
       ["--local-path", localRepository, "--json"],
     );
     const payload = JSON.parse(result.output.join("\\n"));
-    assert.equal(result.result, 1);
-    assert.ok(payload.validation.errors.some((error: string) => error.includes("remote does not match")));
+    assert.equal(result.result, 3);
+    assert.ok(payload.error.details.errors.some((error: string) => error.includes("remote does not match")));
     assert.equal(existsSync(join(root, "repositories/remote-mismatch.toml")), false);
     assert.equal(existsSync(join(root, "local/paths.toml")), false);
   });
@@ -819,8 +818,8 @@ describe("charts add", () => {
     const originalTags = readFileSync(join(root, "tags.toml"), "utf8");
     const result = add("repository", "missing-tag", { description: "Missing tag.", tags: ["data-pipeline"] }, ["--json"]);
     const payload = JSON.parse(result.output.join("\\n"));
-    assert.equal(result.result, 2);
-    assert.ok(payload.validation.errors.includes('repositories/missing-tag.toml: tag "data-pipeline" is not defined in tags.toml'));
+    assert.equal(result.result, 3);
+    assert.ok(payload.error.details.errors.includes('repositories/missing-tag.toml: tag "data-pipeline" is not defined in tags.toml'));
     assert.equal(existsSync(join(root, "repositories/missing-tag.toml")), false);
     assert.equal(readFileSync(join(root, "tags.toml"), "utf8"), originalTags);
     assert.equal(existsSync(join(root, "local/paths.toml")), false);
@@ -843,7 +842,7 @@ describe("charts add", () => {
         { description: "Invalid new tag.", tags: item.tags },
         ["--new-tag", `${item.name}=New description.`, "--json"],
       );
-      assert.equal(result.result, 2, item.name);
+      assert.equal(result.result, 3, item.name);
       assert.equal(existsSync(join(root, `repositories/${item.id}.toml`)), false);
       assert.equal(readFileSync(join(root, "tags.toml"), "utf8"), originalTags);
     }
@@ -865,7 +864,7 @@ describe("charts add", () => {
     ];
     for (const item of cases) {
       const result = add(item.kind, item.id, { description: "Usage error." }, item.extra);
-      assert.equal(result.result, 2, item.id);
+      assert.equal(result.result, 1, item.id);
       assert.equal(existsSync(join(root, `${item.kind === "system" ? "systems" : item.kind === "external" ? "externals" : "repositories"}/${item.id}.toml`)), false);
       assert.equal(readFileSync(join(root, "tags.toml"), "utf8"), originalTags);
       assert.equal(existsSync(join(root, "local/paths.toml")), false);
@@ -890,7 +889,7 @@ describe("charts add", () => {
       { description: "Rollback.", remote: "https://example.com/wanted.git", tags: ["data-pipeline"] },
       ["--local-path", mismatchedRepository, "--new-tag", "data-pipeline=Moves data."],
     );
-    assert.equal(result.result, 1);
+    assert.equal(result.result, 3);
     assert.ok(result.errors.join("\\n").includes("remote does not match"));
     assert.equal(existsSync(join(root, "repositories/rollback-new-tag.toml")), false);
     assert.equal(readFileSync(join(root, "tags.toml"), "utf8"), originalTags);
@@ -934,15 +933,15 @@ describe("charts add", () => {
 
     const jsonError = capture(() => main(["add", "repository", "bad-json-output", "--data", "{", "--json"], root));
     const payload = JSON.parse(jsonError.output.join("\\n"));
-    assert.equal(jsonError.result, 2);
-    assert.equal(payload.ok, false);
-    assert.ok(payload.error.includes("not valid JSON"));
+    assert.equal(jsonError.result, 1);
+    assert.equal(payload.error.code, "usage");
+    assert.ok(payload.error.message.includes("not valid JSON"));
 
     const validationFailure = capture(() => main([
       "add", "repository", "text-path-failure", "--data", '{"description":"Failure output."}',
       "--local-path", join(temporary, "missing-path"),
     ], root));
-    assert.equal(validationFailure.result, 1);
+    assert.equal(validationFailure.result, 3);
     assert.ok(validationFailure.errors.some((line) => line.includes("path does not exist")));
     assert.ok(validationFailure.errors.some((line) => line.includes("validation failed")));
     assert.equal(existsSync(join(root, "repositories/text-path-failure.toml")), false);
@@ -1031,11 +1030,11 @@ describe("charts set", () => {
   test("rejects local paths and new tags for non-repositories", () => {
     for (const id of ["alpha", "stripe"]) {
       const pathResult = update(id, undefined, ["--local-path", "/work/example", "--json"]);
-      assert.equal(pathResult.result, 2, id);
-      assert.ok(JSON.parse(pathResult.output.join("\\n")).validation.errors[0].includes("only for a repository"));
+      assert.equal(pathResult.result, 1, id);
+      assert.ok(JSON.parse(pathResult.output.join("\\n")).error.message.includes("only for a repository"));
       const tagResult = update(id, {}, ["--new-tag", "example-tag=Example.", "--json"]);
-      assert.equal(tagResult.result, 2, id);
-      assert.ok(JSON.parse(tagResult.output.join("\\n")).validation.errors[0].includes("only for a repository"));
+      assert.equal(tagResult.result, 1, id);
+      assert.ok(JSON.parse(tagResult.output.join("\\n")).error.message.includes("only for a repository"));
     }
   });
 
@@ -1043,8 +1042,8 @@ describe("charts set", () => {
     const originalEntry = readFileSync(join(root, "repositories/alpha-app.toml"), "utf8");
     const originalTags = readFileSync(join(root, "tags.toml"), "utf8");
     const result = update("alpha-app", {}, ["--new-tag", "unused-tag=Unused.", "--json"]);
-    assert.equal(result.result, 2);
-    assert.ok(JSON.parse(result.output.join("\\n")).validation.errors[0].includes("is not used by the entry"));
+    assert.equal(result.result, 3);
+    assert.ok(JSON.parse(result.output.join("\\n")).error.details.errors[0].includes("is not used by the entry"));
     assert.equal(readFileSync(join(root, "repositories/alpha-app.toml"), "utf8"), originalEntry);
     assert.equal(readFileSync(join(root, "tags.toml"), "utf8"), originalTags);
   });
@@ -1063,8 +1062,8 @@ describe("charts set", () => {
       "--new-tag", "data-pipeline=Moves data.",
       "--json",
     ]);
-    assert.equal(result.result, 1);
-    assert.ok(JSON.parse(result.output.join("\\n")).validation.errors.some((error: string) => error.includes("remote does not match")));
+    assert.equal(result.result, 3);
+    assert.ok(JSON.parse(result.output.join("\\n")).error.details.errors.some((error: string) => error.includes("remote does not match")));
     assert.equal(readFileSync(join(root, "repositories/alpha-app.toml"), "utf8"), originalEntry);
     assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), originalPaths);
     assert.equal(readFileSync(join(root, "tags.toml"), "utf8"), originalTags);
@@ -1102,20 +1101,20 @@ describe("charts set", () => {
     assert.ok(emptyData.output[0].includes("No change"));
 
     const noOptions = capture(() => main(["set", "alpha-app", "--json"], root));
-    assert.equal(noOptions.result, 2);
-    assert.equal(JSON.parse(noOptions.output.join("\\n")).ok, false);
+    assert.equal(noOptions.result, 1);
+    assert.equal(JSON.parse(noOptions.output.join("\\n")).error.code, "usage");
     const missingId = capture(() => main(["set", "--json"], root));
-    assert.equal(missingId.result, 2);
-    assert.equal(JSON.parse(missingId.output.join("\\n")).ok, false);
+    assert.equal(missingId.result, 1);
+    assert.equal(JSON.parse(missingId.output.join("\\n")).error.code, "usage");
     const missingKey = capture(() => main(["set", "alpha-app", "--data", "{}", "--replace-key", "--json"], root));
-    assert.equal(missingKey.result, 2);
-    assert.ok(JSON.parse(missingKey.output.join("\\n")).error.includes("requires key"));
+    assert.equal(missingKey.result, 1);
+    assert.ok(JSON.parse(missingKey.output.join("\\n")).error.message.includes("requires key"));
     const repeated = capture(() => main(["set", "alpha-app", "--data", "{}", "--data", "{}", "--json"], root));
-    assert.equal(repeated.result, 2);
-    assert.ok(JSON.parse(repeated.output.join("\\n")).error.includes("used only once"));
+    assert.equal(repeated.result, 1);
+    assert.ok(JSON.parse(repeated.output.join("\\n")).error.message.includes("used only once"));
     const badJson = capture(() => main(["set", "alpha-app", "--data", "{", "--json"], root));
-    assert.equal(badJson.result, 2);
-    assert.ok(JSON.parse(badJson.output.join("\\n")).error.includes("not valid JSON"));
+    assert.equal(badJson.result, 1);
+    assert.ok(JSON.parse(badJson.output.join("\\n")).error.message.includes("not valid JSON"));
   });
 });
 
@@ -1181,11 +1180,68 @@ describe("catalog commands", () => {
     const original = console.error;
     console.error = (...values: unknown[]) => errors.push(values.map(String).join(" "));
     try {
-      assert.equal(main(["deps", "stripe"], root), 2);
+      assert.equal(main(["deps", "stripe"], root), 1);
     } finally {
       console.error = original;
     }
     assert.ok(errors[0].includes("not external entries"));
+  });
+
+  /** Copies the command and its code into the fixture, whose catalog Git ignores. */
+  function installCommand(): void {
+    for (const folder of ["bin", "scripts", "src"]) cpSync(join(REPO_ROOT, folder), join(root, folder), { recursive: true });
+    copyFileSync(join(REPO_ROOT, "package.json"), join(root, "package.json"));
+    symlinkSync(join(REPO_ROOT, "node_modules"), join(root, "node_modules"));
+  }
+
+  /** Runs the `charts` command through a symbolic link, from a folder outside Charts. */
+  function runLinked(args: string[]) {
+    const binFolder = join(temporary, "local-bin");
+    mkdirSync(binFolder, { recursive: true });
+    const link = join(binFolder, "charts");
+    rmSync(link, { force: true });
+    symlinkSync(join(root, "bin/charts.js"), link);
+    const cwd = join(temporary, "elsewhere");
+    mkdirSync(cwd, { recursive: true });
+    return spawnSync(link, args, { cwd, encoding: "utf8" });
+  }
+
+  test("the charts command runs through a symbolic link from another folder like the script", () => {
+    installCommand();
+    const linked = runLinked(["find", "--json"]);
+    const script = spawnSync(process.execPath, [realpathSync(join(root, "scripts/charts.ts")), "find", "--json"], { cwd: root, encoding: "utf8" });
+    assert.equal(script.status, 0, script.stderr);
+    assert.equal(linked.status, 0, linked.stdout + linked.stderr);
+    assert.equal(linked.stderr, "");
+    assert.equal(linked.stdout, script.stdout);
+    // main runs exactly once: one JSON document.
+    assert.equal(JSON.parse(linked.stdout).entries.length, 7);
+
+    const failed = runLinked(["show", "missing", "--json"]);
+    assert.equal(failed.status, 2, failed.stdout + failed.stderr);
+    assert.equal(JSON.parse(failed.stdout).error.code, "entry-not-found");
+  });
+
+  test("the charts command fails with unsupported-runtime below engines before it loads Charts", () => {
+    installCommand();
+    const manifest = join(root, "package.json");
+    writeFileSync(manifest, readFileSync(manifest, "utf8").replace('"node": ">=26"', '"node": ">=999.1"'));
+    // If the command loaded Charts, this would fail differently.
+    writeFileSync(join(root, "scripts/charts.ts"), 'throw new Error("Charts was loaded");\n');
+    const running = process.versions.node;
+    const message = `charts needs Node 999.1.0 or later, but this is Node ${running}`;
+
+    const json = runLinked(["find", "--json"]);
+    assert.equal(json.status, 4, json.stdout + json.stderr);
+    assert.equal(json.stderr, "");
+    assert.deepEqual(JSON.parse(json.stdout), {
+      error: { code: "unsupported-runtime", message, details: { required: "999.1.0", running } },
+    });
+
+    const text = runLinked(["find"]);
+    assert.equal(text.status, 4, text.stdout + text.stderr);
+    assert.equal(text.stdout, "");
+    assert.equal(text.stderr, `ERROR: ${message}\n`);
   });
 
   test("resolves the catalog root when run from another directory", () => {
@@ -1197,7 +1253,7 @@ describe("catalog commands", () => {
     const otherDirectory = mkdtempSync(join(tmpdir(), "charts-cwd-"));
     try {
       const output = execFileSync(
-        TSX,
+        process.execPath,
         [realpathSync(join(root, "scripts/charts.ts")), "find", "alpha-app", "--json"],
         { cwd: otherDirectory, encoding: "utf8" },
       );
@@ -1206,5 +1262,117 @@ describe("catalog commands", () => {
     } finally {
       rmSync(otherDirectory, { recursive: true, force: true });
     }
+  });
+});
+
+describe("typed errors", () => {
+  /** Runs a command with and without --json and returns both outcomes. */
+  function both(argv: string[]) {
+    return { json: capture(() => main([...argv, "--json"], root)), text: capture(() => main(argv, root)) };
+  }
+
+  /** Checks the error object on stdout with --json, the message on stderr without, and the exit code. */
+  function assertError(argv: string[], code: string, exitCode: number, message: string) {
+    const { json, text } = both(argv);
+    assert.equal(json.result, exitCode, argv.join(" "));
+    assert.deepEqual(json.errors, []);
+    const payload = JSON.parse(json.output.join("\n"));
+    assert.deepEqual(Object.keys(payload), ["error"]);
+    assert.deepEqual(Object.keys(payload.error), ["code", "message", "details"]);
+    assert.equal(payload.error.code, code);
+    assert.equal(payload.error.message, message);
+    assert.equal(text.result, exitCode, argv.join(" "));
+    assert.equal(text.errors.at(-1), `ERROR: ${message}`);
+    return payload.error;
+  }
+
+  test("a usage error exits with 1", () => {
+    assertError(["show", "alpha", "--verbose"], "usage", 1, "unknown option: --verbose");
+  });
+
+  test("a missing entry exits with 2", () => {
+    assertError(["show", "missing"], "entry-not-found", 2, "unknown entry ID: missing");
+  });
+
+  test("a refusal exits with 3", () => {
+    writeFileSync(join(root, ".gitignore"), "/repositories/*.toml\n/externals/*.toml\n/local/paths.toml\n", "utf8");
+    const error = assertError(
+      ["add", "system", "unignored", "--data", '{"description":"Unignored."}'],
+      "refused",
+      3,
+      "could not add system unignored: Git does not ignore the entry file",
+    );
+    assert.deepEqual(error.details.errors, ["systems/unignored.toml is not ignored by Git"]);
+    assert.equal(existsSync(join(root, "systems/unignored.toml")), false);
+  });
+
+  test("a failed catalog write exits with 4", (context) => {
+    if (process.getuid?.() === 0) return context.skip("root can write to a read-only folder");
+    chmodSync(join(root, "systems"), 0o555);
+    try {
+      const { json, text } = both(["add", "system", "unwritable", "--data", '{"description":"Unwritable."}']);
+      for (const outcome of [json, text]) assert.equal(outcome.result, 4);
+      const payload = JSON.parse(json.output.join("\n"));
+      assert.equal(payload.error.code, "external");
+      assert.match(payload.error.message, /^could not add system unwritable: /);
+      assert.ok(payload.error.details.errors.length > 0);
+      assert.match(text.errors.at(-1)!, /^ERROR: could not add system unwritable: /);
+    } finally {
+      chmodSync(join(root, "systems"), 0o755);
+    }
+  });
+
+  test("show, deps, and rdeps give entry-not-found with the ID for an unknown ID", () => {
+    for (const command of ["show", "deps", "rdeps"]) {
+      const error = assertError([command, "missing"], "entry-not-found", 2, "unknown entry ID: missing");
+      assert.deepEqual(error.details, { id: "missing" }, command);
+    }
+  });
+
+  test("add and set give invalid-entry with the validation errors and warnings", () => {
+    write("externals/old-api.toml", 'description = "Retired API."\nstatus = "archived"\n');
+    const added = assertError(
+      ["add", "repository", "bad-repo", "--data", JSON.stringify({ description: "Bad.", tags: ["unknown"], "depends-on": [{ id: "old-api" }] })],
+      "invalid-entry",
+      3,
+      "could not add repository bad-repo: validation failed",
+    );
+    assert.deepEqual(added.details, {
+      errors: ['repositories/bad-repo.toml: tag "unknown" is not defined in tags.toml'],
+      warnings: ['repositories/bad-repo.toml: depends-on[0] points to archived entry "old-api"'],
+    });
+    const updated = assertError(
+      ["set", "beta-lib", "--data", JSON.stringify({ system: "missing" })],
+      "invalid-entry",
+      3,
+      "could not set repository beta-lib: validation failed",
+    );
+    assert.deepEqual(updated.details, { errors: ['repositories/beta-lib.toml: system "missing" does not name a system'], warnings: [] });
+  });
+
+  test("deps on an external entry is a usage error with the ID", () => {
+    const error = assertError(["deps", "stripe"], "usage", 1, "deps supports repositories and systems, not external entries: stripe");
+    assert.deepEqual(error.details, { id: "stripe" });
+  });
+
+  test("-h as an option value is not a request for help", () => {
+    const result = capture(() => main(["set", "alpha-app", "--local-path", "-h", "--json"], root));
+    assert.equal(result.result, 3, result.output.join("\n"));
+    assert.equal(JSON.parse(result.output.join("\n")).error.code, "invalid-entry");
+    assert.ok(capture(() => main(["-h"], root)).output[0].startsWith("Usage: charts"));
+  });
+
+  test("--json before the command applies to it", () => {
+    const result = capture(() => main(["--json", "find", "alpha-app"], root));
+    assert.equal(result.result, 0, result.errors.join("\n"));
+    assert.deepEqual(JSON.parse(result.output.join("\n")).entries.map((entry: { id: string }) => entry.id), ["alpha-app"]);
+  });
+
+  test("an error that is not a Charts error is external", () => {
+    const json = capture(() => renderError(true, new Error("disk full")));
+    assert.equal(json.result, 4);
+    assert.deepEqual(JSON.parse(json.output.join("\n")), { error: { code: "external", message: "disk full", details: {} } });
+    const text = capture(() => renderError(false, "odd"));
+    assert.deepEqual([text.result, text.output, text.errors], [4, [], ["ERROR: odd"]]);
   });
 });

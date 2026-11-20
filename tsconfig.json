@@ -7,7 +7,10 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": ["node"],
+    "erasableSyntaxOnly": true,
+    "allowJs": true,
+    "checkJs": true
   },
-  "include": ["scripts/**/*.ts", "src/**/*.ts", "tests/**/*.ts"]
+  "include": ["bin/**/*.js", "scripts/**/*.ts", "src/**/*.ts", "tests/**/*.ts"]
 }
