@@ -8,7 +8,9 @@
     "noEmit": true,
     "skipLibCheck": true,
     "types": ["node"],
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    "allowJs": true,
+    "checkJs": true
   },
-  "include": ["scripts/**/*.ts", "src/**/*.ts", "tests/**/*.ts"]
+  "include": ["bin/**/*.js", "scripts/**/*.ts", "src/**/*.ts", "tests/**/*.ts"]
 }
