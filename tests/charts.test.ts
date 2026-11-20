@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, copyFileSync, cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -1185,6 +1185,63 @@ describe("catalog commands", () => {
       console.error = original;
     }
     assert.ok(errors[0].includes("not external entries"));
+  });
+
+  /** Copies the command and its code into the fixture, whose catalog Git ignores. */
+  function installCommand(): void {
+    for (const folder of ["bin", "scripts", "src"]) cpSync(join(REPO_ROOT, folder), join(root, folder), { recursive: true });
+    copyFileSync(join(REPO_ROOT, "package.json"), join(root, "package.json"));
+    symlinkSync(join(REPO_ROOT, "node_modules"), join(root, "node_modules"));
+  }
+
+  /** Runs the `charts` command through a symbolic link, from a folder outside Charts. */
+  function runLinked(args: string[]) {
+    const binFolder = join(temporary, "local-bin");
+    mkdirSync(binFolder, { recursive: true });
+    const link = join(binFolder, "charts");
+    rmSync(link, { force: true });
+    symlinkSync(join(root, "bin/charts.js"), link);
+    const cwd = join(temporary, "elsewhere");
+    mkdirSync(cwd, { recursive: true });
+    return spawnSync(link, args, { cwd, encoding: "utf8" });
+  }
+
+  test("the charts command runs through a symbolic link from another folder like the script", () => {
+    installCommand();
+    const linked = runLinked(["find", "--json"]);
+    const script = spawnSync(process.execPath, [realpathSync(join(root, "scripts/charts.ts")), "find", "--json"], { cwd: root, encoding: "utf8" });
+    assert.equal(script.status, 0, script.stderr);
+    assert.equal(linked.status, 0, linked.stdout + linked.stderr);
+    assert.equal(linked.stderr, "");
+    assert.equal(linked.stdout, script.stdout);
+    // main runs exactly once: one JSON document.
+    assert.equal(JSON.parse(linked.stdout).entries.length, 7);
+
+    const failed = runLinked(["show", "missing", "--json"]);
+    assert.equal(failed.status, 2, failed.stdout + failed.stderr);
+    assert.equal(JSON.parse(failed.stdout).error.code, "entry-not-found");
+  });
+
+  test("the charts command fails with unsupported-runtime below engines before it loads Charts", () => {
+    installCommand();
+    const manifest = join(root, "package.json");
+    writeFileSync(manifest, readFileSync(manifest, "utf8").replace('"node": ">=26"', '"node": ">=999.1"'));
+    // If the command loaded Charts, this would fail differently.
+    writeFileSync(join(root, "scripts/charts.ts"), 'throw new Error("Charts was loaded");\n');
+    const running = process.versions.node;
+    const message = `charts needs Node 999.1.0 or later, but this is Node ${running}`;
+
+    const json = runLinked(["find", "--json"]);
+    assert.equal(json.status, 4, json.stdout + json.stderr);
+    assert.equal(json.stderr, "");
+    assert.deepEqual(JSON.parse(json.stdout), {
+      error: { code: "unsupported-runtime", message, details: { required: "999.1.0", running } },
+    });
+
+    const text = runLinked(["find"]);
+    assert.equal(text.status, 4, text.stdout + text.stderr);
+    assert.equal(text.stdout, "");
+    assert.equal(text.stderr, `ERROR: ${message}\n`);
   });
 
   test("resolves the catalog root when run from another directory", () => {

@@ -2,6 +2,9 @@
   "name": "nautilus-charts",
   "version": "1.0.0",
   "private": true,
+  "bin": {
+    "charts": "bin/charts.js"
+  },
   "type": "module",
   "engines": {
     "node": ">=26"
