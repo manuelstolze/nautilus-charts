@@ -71,7 +71,7 @@ export function validateNewTags(tags: Data, newTags: readonly NewTag[], entryTag
   const errors: string[] = [];
   for (const { name } of newTags) {
     if (!ID_PATTERN.test(name)) errors.push(`new tag ${JSON.stringify(name)} must be lowercase kebab-case`);
-    if (Object.hasOwn(tags, name)) errors.push(`tag ${JSON.stringify(name)} is already defined in tags.toml`);
+    if (Object.hasOwn(tags, name)) errors.push(`tag ${JSON.stringify(name)} is already defined in the tag list`);
     if (!Array.isArray(entryTags) || !entryTags.includes(name)) {
       errors.push(`new tag ${JSON.stringify(name)} is not used by the entry`);
     }
@@ -141,7 +141,7 @@ export function validateEntryData(
     errors.push(`${label}: tags must be a list of strings`);
   } else {
     for (const tag of tags) {
-      if (!Object.hasOwn(index.snapshot.tags, tag)) errors.push(`${label}: tag ${JSON.stringify(tag)} is not defined in tags.toml`);
+      if (!Object.hasOwn(index.snapshot.tags, tag)) errors.push(`${label}: tag ${JSON.stringify(tag)} is not defined in the tag list`);
     }
   }
 
@@ -218,32 +218,32 @@ export function validateCatalog(snapshot: Snapshot, facts: CatalogFacts): Findin
     warnings.push(...result.warnings);
   }
 
-  if (!snapshot.tagsExists) errors.push("tags.toml is missing");
+  if (!snapshot.tagsExists) errors.push("the tag list is missing");
   for (const [tag, description] of Object.entries(snapshot.tags)) {
-    if (!isString(description)) errors.push(`tags.toml: description for ${JSON.stringify(tag)} must be a string`);
+    if (!isString(description)) errors.push(`the tag list: description for ${JSON.stringify(tag)} must be a string`);
   }
 
   if (snapshot.localPaths === null) {
-    if (!snapshot.localPathsExists) warnings.push("local/paths.toml is missing; local path checks were skipped");
+    if (!snapshot.localPathsExists) warnings.push("the local paths are missing; local path checks were skipped");
   } else {
     for (const [repositoryId, rawPath] of Object.entries(snapshot.localPaths)) {
       if (!isString(rawPath)) {
-        errors.push(`local/paths.toml: path for ${JSON.stringify(repositoryId)} must be a string`);
+        errors.push(`the local paths: path for ${JSON.stringify(repositoryId)} must be a string`);
         continue;
       }
       const target = index.get(repositoryId);
       if (!target || target.kind !== "repository") {
-        errors.push(`local/paths.toml: ${JSON.stringify(repositoryId)} does not name a repository`);
+        errors.push(`the local paths: ${JSON.stringify(repositoryId)} does not name a repository`);
         continue;
       }
       const pathError = facts.localPaths.get(repositoryId)?.error;
-      if (pathError) errors.push(`local/paths.toml: ${pathError} for ${JSON.stringify(repositoryId)}`);
+      if (pathError) errors.push(`the local paths: ${pathError} for ${JSON.stringify(repositoryId)}`);
     }
   }
 
   const ignored = facts.localPathsIgnored;
   if ("error" in ignored) errors.push(`could not check Git ignore rule: ${ignored.error}`);
-  else if (!ignored.ignored) errors.push("local/paths.toml is not ignored by Git");
+  else if (!ignored.ignored) errors.push("the local paths are not ignored by Git");
 
   return { errors, warnings: [...new Set(warnings)].sort() };
 }
