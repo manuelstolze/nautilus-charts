@@ -412,17 +412,18 @@ export const COMMANDS: CommandSpec[] = [
 
 export function helpText(): string {
   const lines = COMMANDS.map(({ name, usage }) => `  ${usage === "" ? name : `${name} ${usage}`}`);
-  return ["Usage: charts <command> [arguments] [--json]", "Commands:", ...lines].join("\n");
+  return ["Usage: charts <command> [arguments] [--json]", "       charts --version [--json]", "Commands:", ...lines].join("\n");
 }
 
-export type Invocation = { json: boolean; help: boolean; args: string[] };
+export type Invocation = { json: boolean; help: boolean; version: boolean; args: string[] };
 
-/** Detects `--json` anywhere in the arguments and a request for help. */
+/** Detects `--json` anywhere in the arguments and a request for help or for the version. */
 export function readInvocation(argv: string[]): Invocation {
   const json = argv.includes("--json");
   const args = argv.filter((argument) => argument !== "--json");
   const help = args.length === 0 || args.includes("--help") || args.includes("-h");
-  return { json, help, args };
+  const version = args.length === 1 && args[0] === "--version";
+  return { json, help, version, args };
 }
 
 /** Parses the command line. Throws an Error with the usage message on bad input. */
@@ -650,6 +651,13 @@ export function renderDescribe(json: boolean, info: ModuleInfo): number {
   lines.push("Exit codes by category:");
   for (const [category, { exitCode, meaning }] of Object.entries(ERROR_CATEGORIES)) lines.push(`  ${exitCode} ${category}: ${meaning}`);
   console.log(lines.join("\n"));
+  return 0;
+}
+
+/** Prints `charts <version>`, or the module and version as JSON. */
+export function renderVersion(json: boolean, info: ModuleInfo): number {
+  if (json) printJson({ module: info.module, version: info.version });
+  else console.log(`${info.module} ${info.version}`);
   return 0;
 }
 
