@@ -209,7 +209,7 @@ Without `--json`, it prints `ERROR: <message>` on standard error. For `add` and 
 | `entry-not-found` | not found | 2 | No entry has the ID, for `show`, `deps`, `rdeps`, or `set`. The message is `unknown entry ID: <id>`. | `id` |
 | `refused` | refused | 3 | A rule of Charts refuses the command, for example an entry file that Git does not ignore. | `errors`, `warnings` |
 | `invalid-entry` | refused | 3 | `add` or `set` fails validation; nothing was changed. | `errors`, `warnings` |
-| `external` | external | 4 | Git or a file failed, for example a catalog write. | `errors`, `warnings` for `add` and `set` |
+| `external` | external | 4 | Git or a file failed, for example a catalog write, or a rollback after failed validation. | `errors`, `warnings` for `add` and `set` |
 | `unsupported-runtime` | external | 4 | The running Node is below `engines` in `package.json`. | `required`, `running` |
 
 ### The `describe` format
