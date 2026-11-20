@@ -65,22 +65,24 @@ Ask an agent, for example Pi or Claude, from this repository. The `charts` skill
 - "What depends on `<id>`?" lists the entries that depend on a repository, external, or system.
 - "Remove `<id>`" lists the dependents first and asks before changing anything. It never deletes the repository.
 
-Or run the script directly from the Charts root:
+Or run the `charts` command from any folder once it is linked ([Setup](#setup)):
 
 ```bash
-npm run --silent charts -- find [text]   # filters: --system, --tag, --status (all entry types), --owner
-npm run --silent charts -- show <id>
-npm run --silent charts -- deps <id>
-npm run --silent charts -- rdeps <id>
-npm run --silent charts -- check
-npm run --silent charts -- add <system|repository|external> <id> --data '<JSON>' [--local-path <path>] [--new-tag <name>=<description>]... [--json]
-npm run --silent charts -- set <id> [--data '<JSON>'] [--local-path <path>] [--new-tag <name>=<description>]... [--replace-key] [--json]
+charts find [text]   # filters: --system, --tag, --status (all entry types), --owner
+charts show <id>
+charts deps <id>
+charts rdeps <id>
+charts check
+charts add <system|repository|external> <id> --data '<JSON>' [--local-path <path>] [--new-tag <name>=<description>]... [--json]
+charts set <id> [--data '<JSON>'] [--local-path <path>] [--new-tag <name>=<description>]... [--replace-key] [--json]
+charts describe [--json]
+charts --version [--json]
 ```
 
 For example:
 
 ```bash
-npm run --silent charts -- add system shop --data '{"description":"Online shop system."}'
+charts add system shop --data '{"description":"Online shop system."}'
 ```
 
 The `--data` value is a JSON object. JSON is a text format for structured data. Include a required `description`. Do not include an `id`; pass it as the second positional value. Use only fields defined for that entry type. Charts uses the matching template and omits optional fields you do not supply. It does not generate IDs or repository keys.
@@ -93,13 +95,13 @@ Use `--local-path` only for a repository. Charts checks the full catalog, includ
 
 Use `charts set <id>` to add or replace fields on an existing entry. Its `--data` value is a partial JSON object. Each named field replaces the full old value; other fields stay unchanged. `--local-path` and `--new-tag` follow the repository rules above. Changing an existing repository key needs `--replace-key`; check in the Logbook that no other module uses the key, then ask the catalog owner before using this option. Charts changes only the named TOML lines, validates the full catalog, and restores the entry, `local/paths.toml`, and `tags.toml` when validation fails. Unsafe layouts, such as duplicate or dotted fields and TOML table sections, are refused. A request that changes nothing succeeds without writing.
 
-Find prints one line per entry. Add `--json` when another tool reads a result. The script uses local Git data only. It never contacts remote servers, clones, or fetches.
+Find prints one line per entry. Add `--json` when another tool reads a result. With `--json`, a failure prints `{"error": {"code", "message", "details"}}` and exits with 1 for a usage error, 2 for not found, 3 for a refusal, and 4 for an external failure; [docs/structure.md](docs/structure.md#errors-and-exit-codes) lists the codes. `charts check` with errors exits with 3 and keeps its report as output. `charts describe --json` lists every command and error code. The command uses local Git data only. It never contacts remote servers, clones, or fetches.
 
 ## Requirements
 
 | Needs | Without it |
 | --- | --- |
-| Node 26 or later | The `charts` script does not run. The TOML files stay readable. |
+| Node 26 or later | The `charts` command stops with the error code `unsupported-runtime`. The TOML files stay readable. |
 | `local/paths.toml` | `show` reports no local path. Everything else works. |
 
 ## Setup
@@ -107,8 +109,13 @@ Find prints one line per entry. Add `--json` when another tool reads a result. T
 ```bash
 cd "$NAUTILUS_HOME/nautilus-charts"
 npm ci
+mkdir -p ~/.local/bin
+ln -sf "$PWD/bin/charts.js" ~/.local/bin/charts
+charts --version
 npm run check
 ```
+
+The link puts the `charts` command on `PATH` when `~/.local/bin` is on it, whichever Node version nvm has active; do not use `npm link`. Link it once per machine. The command runs with plain Node and works from any folder.
 
 The catalog starts empty. Add systems, repositories, and externals with `charts add`, or ask the `charts` skill to register them. Git ignores your entries, so back them up yourself, for example in a private repository.
 
@@ -133,7 +140,7 @@ nautilus-bridge = "~/code/nautilus/nautilus-bridge"
 
 ## More
 
-- [docs/structure.md](docs/structure.md): entry fields, IDs, status values, and the `charts` script in detail.
+- [docs/structure.md](docs/structure.md): entry fields, IDs, status values, and the `charts` command in detail.
 - [CONSTITUTION.md](CONSTITUTION.md): the mandatory rules.
 - [GLOSSARY.md](GLOSSARY.md): the terms Charts uses.
 - [CONTRIBUTING.md](CONTRIBUTING.md): how to change Charts.

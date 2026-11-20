@@ -9,21 +9,13 @@ Charts stores system, repository, and external-service entries as TOML files. Us
 
 ## Locate the catalog
 
-Use the Charts repository root given by the task or project context. If you do not know the root, ask the catalog owner. Do not guess a path on the machine.
-
-Run `npm ci` from the Charts root when dependencies are absent. It replaces `node_modules` with the versions in `package-lock.json`.
-
-Run commands from the Charts root:
+Run the `charts` command from any folder:
 
 ```sh
-npm run --silent charts -- find
+charts find
 ```
 
-Use `--silent` so npm messages do not mix with JSON output. From another directory, call the local TypeScript runner with full paths:
-
-```sh
-<charts-root>/node_modules/.bin/tsx <charts-root>/scripts/charts.ts find
-```
+If `charts` is not found, stop and ask the catalog owner to link the command as the [README](../../../README.md#setup) shows. `charts describe --json` lists every command and error code. With `--json`, a failure prints `{"error": {"code", "message", "details"}}`; act on the `code`, not the message. Use the Charts repository root only when you edit an entry file by hand, and take it from the task or project context. If you do not know the root, ask the catalog owner. Do not guess a path on the machine.
 
 ## Find and show entries
 
@@ -44,15 +36,15 @@ If a result is ambiguous, ask the catalog owner which entry they mean. A path in
    For ticket tracking, set an optional `ticket-key` only when the catalog owner names one. Prefer setting it on the System. Use 2–10 characters: an uppercase letter, then uppercase letters or digits. A Repository's own value takes precedence over its System's value. If neither sets a value, no ticket key resolves. Ticket keys are not unique and may equal a Repository's `key`. Check the resolved value with `show <repository> --json`; read `resolved_ticket_key` and `ticket_key_source`.
 
 4. Before you record a suggested remote, inspect local Git remote settings and ask the catalog owner to confirm the remote. Never record credentials. Do not connect to a remote, clone, or fetch.
-5. Run `charts add` from the Charts root. It uses the matching template, checks the full catalog, and removes its new entry if validation fails:
+5. Run `charts add`. It uses the matching template, checks the full catalog, and removes its new entry if validation fails:
 
    ```sh
-   npm run --silent charts -- add repository new-repository \
+   charts add repository new-repository \
      --data '{"description":"Purpose of this repository."}'
    ```
 
    Add `--local-path <path>` only for a repository. Charts validates the path and its remote before it records the mapping in ignored `local/paths.toml`. If validation fails, it restores the prior path map. The command does not stage or commit catalog files.
-6. Check the command result. Fix errors, then run `npm run --silent charts -- check`.
+6. Check the command result. An `invalid-entry` error lists the validation errors in `details.errors`. Fix errors, then run `charts check`.
 
 ## Update an entry
 
@@ -61,8 +53,8 @@ If a result is ambiguous, ask the catalog owner which entry they mean. A path in
 3. For a repository, use `--local-path` only when the catalog owner requests a path change. For a missing tag, propose its name and description, ask the catalog owner to confirm both, and pass `--new-tag` only when the `tags` value in `--data` includes the new name.
 4. Never change a repository key that another module uses. Before a key change, check the key in the Logbook. Ask the catalog owner before using `--replace-key`. To add a missing key, search with `find <key>` and check the catalog for uniqueness.
 5. Ask the catalog owner before recording a suggested remote. Never add credentials to a remote URL.
-6. Run `npm run --silent charts -- set <id> --data '<JSON>'` with the approved options. Charts checks the merged entry and the full catalog. It changes only named field lines and rolls back a failed validation. It reports when nothing changes.
-7. Check the command result, fix errors, and run `npm run --silent charts -- check`.
+6. Run `charts set <id> --data '<JSON>'` with the approved options. Charts checks the merged entry and the full catalog. It changes only named field lines and rolls back a failed validation. It reports when nothing changes.
+7. Check the command result, fix errors, and run `charts check`.
 8. Use hand edits only to rename or remove an entry. To rename an ID, rename its file and update every reference, including `system`, `depends-on`, and the matching key in `local/paths.toml`. Use the separate removal steps to remove an entry.
 
 ## Remove an entry
@@ -71,8 +63,8 @@ If a result is ambiguous, ask the catalog owner which entry they mean. A path in
 2. Tell the catalog owner which catalog files and links would change. Ask how to handle any dependents or repositories in a system before removing the entry.
 3. Remove only the approved TOML entry and its matching local path mapping, if any. Update links only as the catalog owner directs.
 4. Never delete a repository, worktree, or repository file when removing a catalog entry.
-5. Run `npm run --silent charts -- check` and fix all errors.
+5. Run `charts check` and fix all errors.
 
 ## Check
 
-Run `npm run --silent charts -- check` after every catalog change and before you report completion. The command checks entry data, references, tags, local paths, configured remotes, and the Git ignore rule for `local/paths.toml`. Errors cause a non-zero exit code. Warnings alone do not.
+Run `charts check` after every catalog change and before you report completion. The command checks entry data, references, tags, local paths, configured remotes, and the Git ignore rule for `local/paths.toml`. Errors cause exit code 3 and the report lists them. Warnings alone do not.
