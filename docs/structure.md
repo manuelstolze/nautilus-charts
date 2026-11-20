@@ -16,14 +16,15 @@ nautilus-charts/
 ├── tags.toml
 ├── local/paths.toml          # git-ignored, one per machine
 ├── templates/                # entry templates
-├── scripts/charts.ts         # entry point and composition root
+├── bin/charts.js             # the charts command: Node check, then scripts/charts.ts
+├── scripts/charts.ts         # composition root
 ├── src/
 │   ├── domain/               # catalog rules, no I/O
 │   ├── commands/             # one use case per command, and the ports
 │   └── adapters/             # TOML store, Git, command line
 ├── tests/                    # TypeScript tests, with fakes in tests/fakes/
 ├── docs/adr/                 # architecture decisions
-├── package.json              # commands and dependencies
+├── package.json              # version, command, and dependencies
 ├── package-lock.json
 ├── tsconfig.json
 └── .agents/skills/charts/SKILL.md
@@ -35,10 +36,11 @@ One file per entry keeps lookups small. An agent reads only the entries it needs
 
 Charts uses lean hexagonal architecture ([ADR 0001](adr/0001-hexagonal-architecture.md)). [Rule VI of the constitution](../CONSTITUTION.md#vi-the-core-does-no-io) sets the dependency rule, and `tests/architecture.test.ts` enforces it.
 
-- **Core.** `src/domain/` holds the catalog rules: entry types, IDs and keys, statuses, fields, validation, and dependencies. `src/commands/` holds one use case per command (`find`, `show`, `deps` and `rdeps`, `check`, `add`, `set`). Each use case returns data and an exit status.
+- **Core.** `src/domain/` holds the catalog rules: entry types, IDs and keys, statuses, fields, validation, and dependencies. `src/commands/` holds one use case per command (`find`, `show`, `deps` and `rdeps`, `check`, `add`, `set`). Each use case returns data, or a typed error from `src/domain/errors.ts` when it fails.
 - **Ports.** `src/commands/ports.ts` defines the two boundaries: the catalog store (entry files, `tags.toml`, the templates, and `local/paths.toml`) and Git (repository roots, remotes, and ignore checks).
-- **Adapters.** `src/adapters/` implements the ports with TOML files and local Git, and holds the command-line adapter that parses arguments and prints text or JSON. The tests use in-memory fakes from `tests/fakes/` instead.
-- **Composition root.** `scripts/charts.ts` parses the arguments, builds the adapters, runs the use case, and prints its result.
+- **Adapters.** `src/adapters/` implements the ports with TOML files and local Git, and holds the command-line adapter. Its command table drives the argument parser, the help text, and `describe`; it prints text, JSON, or the error object and returns the exit code. The tests use in-memory fakes from `tests/fakes/` instead.
+- **Composition root.** `scripts/charts.ts` parses the arguments, builds the adapters, runs the use case, and prints its result. It reads the version from `package.json`.
+- **Entry point.** `bin/charts.js` is the `charts` command. It is plain JavaScript, so any Node can run it: it checks the Node version before it loads `scripts/charts.ts`.
 
 ## IDs
 
@@ -154,9 +156,9 @@ nautilus-bridge = "~/code/nautilus/nautilus-bridge"
 shop-common-lib = "~/code/shop/shop-common-lib"
 ```
 
-## The `charts` script
+## The `charts` command
 
-`charts.ts` uses Node.js 26 or newer and TypeScript. Node.js is the JavaScript runtime. The `smol-toml` package reads TOML files, and `tsx` runs the TypeScript script. Run `npm ci` from the Charts root to install the locked packages. Use `npm run --silent charts -- <command>` from the Charts root. The `--silent` option keeps npm messages out of JSON output. Commands print compact text with one line per entry by default. `--json` prints JSON for other modules.
+The `charts` command, `bin/charts.js`, is the entry point. It is plain JavaScript: it checks the running Node version against `engines` in `package.json` and fails with the error code `unsupported-runtime` below it, before it loads `scripts/charts.ts`, which runs the code in `src/`. Charts needs Node.js 26 or newer, which runs the TypeScript files directly by stripping their types. The `smol-toml` package reads TOML files. Run `npm ci` from the Charts root to install the locked packages, and link the command into `~/.local/bin` once ([README](../README.md#setup)). Then run `charts <command>` from any folder. Commands print compact text with one line per entry by default. `--json` prints JSON for other modules.
 
 | Command | Purpose |
 | --- | --- |
@@ -167,6 +169,10 @@ shop-common-lib = "~/code/shop/shop-common-lib"
 | `check` | Validate all entries and the local paths. |
 | `add <system|repository|external> <id> --data '<JSON>' [--local-path <path>] [--new-tag <name>=<description>]... [--json]` | Create one entry from its template and validate the catalog. `--local-path` is for repositories only. `--new-tag` is for repository entries only. |
 | `set <id> [--data '<JSON>'] [--local-path <path>] [--new-tag <name>=<description>]... [--replace-key] [--json]` | Add or replace fields on an existing entry. `--local-path` is for repositories only. `--new-tag` is for repository entries only. |
+| `describe` | Describe the module, its error codes, and its commands. With `--json`, it prints them in the format of `logbook describe --json`. |
+| `--version` | Print `charts <version>`; with `--json`, print `{"module": "charts", "version": "<version>"}`. |
+
+Without a command, or with `--help`, `charts` prints the help text.
 
 For repository `show --json`, Charts adds `resolved_ticket_key` and `ticket_key_source`. Both are `null` when no ticket key resolves. Text `show` lists the recorded `ticket-key` when set and lists both resolved fields when a value resolves. Systems and externals have no resolved fields.
 
@@ -182,7 +188,37 @@ For repository `show --json`, Charts adds `resolved_ticket_key` and `ticket_key_
 - `local/paths.toml` not ignored by Git.
 - New dependencies on `deprecated` or `archived` entries, as warnings.
 
-The script uses local Git data only. It never contacts remote servers, clones, or fetches.
+`check` with errors exits with code 3. Its report stays its output: text lines or `{"ok": false, "errors", "warnings"}`, not an error object.
+
+The command uses local Git data only. It never contacts remote servers, clones, or fetches.
+
+### Errors and exit codes
+
+Every failure has an error code. Callers branch on the code, never on the message (nautilus-bridge ADR 0017). With `--json`, a failed command prints one object on standard output and nothing else, in the shared format of the Logbook ([nautilus-logbook docs/structure.md](https://github.com/manuelstolze/nautilus-logbook/blob/main/docs/structure.md#errors-and-exit-codes)):
+
+```json
+{"error": {"code": "entry-not-found", "message": "unknown entry ID: shop-api", "details": {"id": "shop-api"}}}
+```
+
+Without `--json`, it prints `ERROR: <message>` on standard error. For `add` and `set`, the text output lists the validation errors and warnings first. Each code belongs to a category, and the category sets the exit code. A case that callers decide on has its own code; every other failure has its category's code. An unexpected error is `external`.
+
+| Code | Category | Exit | When | `details` |
+| --- | --- | --- | --- | --- |
+| `usage` | usage | 1 | An unknown command, a missing or invalid argument or option, `--data` that does not fit the entry, or `deps` on an external entry. | `id` for `deps` on an external entry |
+| `not-found` | not found | 2 | Something other than an entry does not exist. | — |
+| `entry-not-found` | not found | 2 | No entry has the ID, for `show`, `deps`, `rdeps`, or `set`. The message is `unknown entry ID: <id>`. | `id` |
+| `refused` | refused | 3 | A rule of Charts refuses the command, for example an entry file that Git does not ignore. | `errors`, `warnings` |
+| `invalid-entry` | refused | 3 | `add` or `set` fails validation; nothing was changed. | `errors`, `warnings` |
+| `external` | external | 4 | Git or a file failed, for example a catalog write, or a rollback after failed validation. | `errors`, `warnings` for `add` and `set` |
+| `unsupported-runtime` | external | 4 | The running Node is below `engines` in `package.json`. | `required`, `running` |
+
+### The `describe` format
+
+`charts describe --json` prints the contract in one object, read from the same command table as the argument parser and the help text. It has the format of `logbook describe --json`: `module` and `version`; `errors`, every error code with its `category`, `exit_code`, and `meaning`; and `commands`, every command with its `name`, `usage`, `summary`, `arguments` and `options` as JSON Schema, `output` fields, and `errors`. `--json`, `--help`, and `--version` are global and appear in no command's options.
+
+### Versions
+
+The version in `package.json` is the version of this contract. [CONTRIBUTING.md](../CONTRIBUTING.md#versions) states when it changes and the tag step after the merge.
 
 ## Adding entries
 
@@ -191,7 +227,7 @@ Pass the entry type and explicit ID as positional values. Pass a JSON object wit
 For example:
 
 ```bash
-npm run --silent charts -- add repository shop-api \
+charts add repository shop-api \
   --data '{"description":"The shop API.","system":"shop"}'
 ```
 
@@ -201,7 +237,7 @@ For a missing repository tag, propose a lowercase kebab-case name and a descript
 
 After writing, Charts validates the full catalog. If a write or validation fails, it removes the new entry and restores `local/paths.toml` and `tags.toml` to their prior contents. It does not overwrite a file that changed after Charts wrote it; it reports a rollback error instead. `tags.toml` is shared and tracked by Git. A successful add leaves it uncommitted. Charts never stages or commits it; the catalog owner decides whether to commit it. Entry and path files stay ignored by Git. The Charts skill asks the catalog owner to confirm a proposed remote before adding it.
 
-Use `--json` for machine-readable results. Success reports the type, ID, path, and validation result. When new tags are added, it also reports `new_tags` in option order. Text output names the tags and says that the shared tag list has uncommitted changes. Failure reports the errors and returns a non-zero status.
+Use `--json` for machine-readable results. Success reports the type, ID, path, and validation result. When new tags are added, it also reports `new_tags` in option order. Text output names the tags and says that the shared tag list has uncommitted changes. Failure prints an error object, `invalid-entry` with the validation errors and warnings in `details` when validation fails ([Errors and exit codes](#errors-and-exit-codes)).
 
 ## Updating and removing entries
 

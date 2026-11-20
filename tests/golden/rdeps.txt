@@ -123,13 +123,19 @@ $ charts "rdeps" "missing"
 exit: 2
 --- stdout
 --- stderr
-unknown entry ID: missing
+ERROR: unknown entry ID: missing
 
 ## unknown ID (--json)
 $ charts "rdeps" "missing" "--json"
 exit: 2
 --- stdout
 {
-  "error": "unknown entry ID: missing"
+  "error": {
+    "code": "entry-not-found",
+    "message": "unknown entry ID: missing",
+    "details": {
+      "id": "missing"
+    }
+  }
 }
 --- stderr

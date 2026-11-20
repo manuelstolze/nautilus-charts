@@ -96,8 +96,7 @@ rsync -a --delete "$NAUTILUS_HOME/nautilus-bridge/.agents/skills/engineering/" .
 
 ## Tooling
 
-The tooling is written in TypeScript. It needs Node 26 or later. The TypeScript,
-Node.js, and tooling package versions follow the
+The tooling is written in TypeScript. It needs Node 26 or later, which runs the TypeScript files directly by stripping their types. Use only syntax that Node can strip: `tsconfig.json` sets `erasableSyntaxOnly`, so the type check rejects, for example, enums and parameter properties. The TypeScript, Node.js, and tooling package versions follow the
 [shared Nautilus toolchain](https://github.com/manuelstolze/nautilus-bridge/blob/main/docs/overview.md#toolchain).
 Install dependencies once with:
 
@@ -105,7 +104,19 @@ Install dependencies once with:
 npm ci
 ```
 
-Keep production code under `src/`, the entry point in `scripts/`, and tests under `tests/`. [docs/structure.md](./docs/structure.md#code-structure) explains the code structure. Use `node:test` for tests. Add a runtime dependency only when the standard library is not enough, and commit `package-lock.json` with it.
+`bin/charts.js` is the `charts` command. It is plain JavaScript, so it can check the Node version before it loads the TypeScript files; the [README](./README.md#setup) shows how to link it into `~/.local/bin`.
+
+Keep production code under `src/`, the composition root in `scripts/`, and tests under `tests/`. [docs/structure.md](./docs/structure.md#code-structure) explains the code structure. Use `node:test` for tests. Add a runtime dependency only when the standard library is not enough, and commit `package-lock.json` with it.
+
+## Versions
+
+Charts has a semantic version in `package.json`, which `charts --version` and `charts describe --json` report. The version is the version of Charts's contract: its commands, options, `--json` fields, and error codes ([docs/structure.md](./docs/structure.md#errors-and-exit-codes)).
+
+- **Major:** a command, option, `--json` field, or error code is removed or changes its meaning.
+- **Minor:** a command, option, `--json` field, or error code is added.
+- **Patch:** a change that callers cannot see, such as a fix or a documentation change.
+
+A change that changes the contract sets the new version in `package.json` in its merge request. After the merge, the change owner tags the merge commit with `v<version>`, for example `git tag v1.0.0 && git push origin v1.0.0`.
 
 ## Validation
 
