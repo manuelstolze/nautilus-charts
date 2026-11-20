@@ -16,6 +16,7 @@ import {
   renderShow,
   renderSet,
   renderUsageError,
+  renderVersion,
   type ModuleInfo,
   type Options,
 } from "../src/adapters/cli.ts";
@@ -38,7 +39,9 @@ export function moduleInfo(): ModuleInfo {
 }
 
 export function main(argv = process.argv.slice(2), root = ROOT): number {
-  if (readInvocation(argv).help) return renderHelp();
+  const invocation = readInvocation(argv);
+  if (invocation.help) return renderHelp();
+  if (invocation.version) return renderVersion(invocation.json, moduleInfo());
   let options: Options;
   try {
     options = parseArgs(argv);

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, test } from "node:test";
@@ -29,6 +30,15 @@ describe("describe", () => {
     const commands = (JSON.parse(described.stdout) as { commands: Array<{ name: string }> }).commands.map(({ name }) => name);
     assert.deepEqual(commands, helpCommands(help.stdout));
     assert.deepEqual(commands, ["find", "show", "deps", "rdeps", "check", "add", "set", "describe"]);
+  });
+
+  test("has the structure of the Logbook's describe output", () => {
+    const description = JSON.parse(run(["describe", "--json"]).stdout) as Record<string, unknown> & { commands: Array<Record<string, unknown>> };
+    assert.deepEqual(Object.keys(description), ["module", "version", "errors", "commands"]);
+    assert.equal(description.module, "charts");
+    for (const command of description.commands) {
+      assert.deepEqual(Object.keys(command), ["name", "usage", "summary", "arguments", "options", "output", "errors"]);
+    }
   });
 
   test("lists every error code with its exit code and meaning, including each code of R6", () => {
@@ -99,5 +109,36 @@ describe("command table", () => {
   test("covers each specific code in at least one command", () => {
     const used = new Set(COMMANDS.flatMap(({ errors }) => errors));
     for (const code of ["entry-not-found", "invalid-entry", "refused", "external"]) assert.ok(used.has(code as never), code);
+  });
+});
+
+describe("version", () => {
+  const manifest = JSON.parse(readFileSync(join(REPO_ROOT, "package.json"), "utf8")) as { version: string };
+
+  test("package.json starts Charts at version 1.0.0", () => {
+    assert.equal(manifest.version, "1.0.0");
+  });
+
+  test("--version prints the module and the version from package.json, as text or JSON", () => {
+    const text = run(["--version"]);
+    assert.deepEqual([text.status, text.stdout, text.stderr], [0, `charts ${manifest.version}\n`, ""]);
+    for (const args of [["--version", "--json"], ["--json", "--version"]]) {
+      const json = run(args);
+      assert.equal(json.status, 0, json.stderr);
+      assert.deepEqual(JSON.parse(json.stdout), { module: "charts", version: manifest.version });
+    }
+    assert.equal(JSON.parse(run(["describe", "--json"]).stdout).version, manifest.version);
+  });
+
+  test("the version is not repeated in the code", () => {
+    const files = [
+      ...readdirSync(join(REPO_ROOT, "src"), { recursive: true, encoding: "utf8" }).map((file) => join("src", file)),
+      "scripts/charts.ts",
+    ].filter((file) => file.endsWith(".ts"));
+    for (const file of files) assert.ok(!readFileSync(join(REPO_ROOT, file), "utf8").includes(manifest.version), file);
+  });
+
+  test("the help text lists --version", () => {
+    assert.match(helpText(), /charts --version \[--json\]/);
   });
 });

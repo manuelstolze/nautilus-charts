@@ -3,6 +3,7 @@ $ charts
 exit: 0
 --- stdout
 Usage: charts <command> [arguments] [--json]
+       charts --version [--json]
 Commands:
   find [<text>] [--system <id>] [--tag <tag>] [--status <status>] [--owner <text>]
   show <id>
@@ -19,6 +20,7 @@ $ charts "--json"
 exit: 0
 --- stdout
 Usage: charts <command> [arguments] [--json]
+       charts --version [--json]
 Commands:
   find [<text>] [--system <id>] [--tag <tag>] [--status <status>] [--owner <text>]
   show <id>
