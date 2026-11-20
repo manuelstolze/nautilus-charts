@@ -12,9 +12,8 @@ export function checkCatalog({ store, git }: Ports): Finding {
   });
 }
 
-export type CheckResult = { finding: Finding; status: number };
+export type CheckResult = { finding: Finding };
 
 export function check(ports: Ports): CheckResult {
-  const finding = checkCatalog(ports);
-  return { finding, status: finding.errors.length ? 1 : 0 };
+  return { finding: checkCatalog(ports) };
 }

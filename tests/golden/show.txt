@@ -154,14 +154,20 @@ $ charts "show" "missing"
 exit: 2
 --- stdout
 --- stderr
-unknown entry ID: missing
+ERROR: unknown entry ID: missing
 
 ## unknown ID (--json)
 $ charts "show" "missing" "--json"
 exit: 2
 --- stdout
 {
-  "error": "unknown entry ID: missing"
+  "error": {
+    "code": "entry-not-found",
+    "message": "unknown entry ID: missing",
+    "details": {
+      "id": "missing"
+    }
+  }
 }
 --- stderr
 

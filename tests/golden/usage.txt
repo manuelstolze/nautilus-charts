@@ -1,153 +1,219 @@
 ## no command
 $ charts
-exit: 2
+exit: 1
 --- stdout
 --- stderr
-usage: charts <find|show|deps|rdeps|check|add|set> [arguments] [--json]
+ERROR: usage: charts <find|show|deps|rdeps|check|add|set> [arguments] [--json]
 
 ## no command (--json)
 $ charts "--json"
-exit: 2
+exit: 1
 --- stdout
+{
+  "error": {
+    "code": "usage",
+    "message": "usage: charts <find|show|deps|rdeps|check|add|set> [arguments] [--json]",
+    "details": {}
+  }
+}
 --- stderr
-usage: charts <find|show|deps|rdeps|check|add|set> [arguments] [--json]
 
 ## unknown command
 $ charts "list"
-exit: 2
+exit: 1
 --- stdout
 --- stderr
-usage: charts <find|show|deps|rdeps|check|add|set> [arguments] [--json]
+ERROR: usage: charts <find|show|deps|rdeps|check|add|set> [arguments] [--json]
 
 ## unknown command (--json)
 $ charts "list" "--json"
-exit: 2
+exit: 1
 --- stdout
+{
+  "error": {
+    "code": "usage",
+    "message": "usage: charts <find|show|deps|rdeps|check|add|set> [arguments] [--json]",
+    "details": {}
+  }
+}
 --- stderr
-usage: charts <find|show|deps|rdeps|check|add|set> [arguments] [--json]
 
 ## unknown option
 $ charts "show" "alpha" "--verbose"
-exit: 2
+exit: 1
 --- stdout
 --- stderr
-unknown option: --verbose
+ERROR: unknown option: --verbose
 
 ## unknown option (--json)
 $ charts "show" "alpha" "--verbose" "--json"
-exit: 2
+exit: 1
 --- stdout
+{
+  "error": {
+    "code": "usage",
+    "message": "unknown option: --verbose",
+    "details": {}
+  }
+}
 --- stderr
-unknown option: --verbose
 
 ## filter outside find
 $ charts "show" "alpha" "--system" "alpha"
-exit: 2
+exit: 1
 --- stdout
 --- stderr
-unknown option: --system
+ERROR: unknown option: --system
 
 ## filter outside find (--json)
 $ charts "show" "alpha" "--system" "alpha" "--json"
-exit: 2
+exit: 1
 --- stdout
+{
+  "error": {
+    "code": "usage",
+    "message": "unknown option: --system",
+    "details": {}
+  }
+}
 --- stderr
-unknown option: --system
 
 ## filter without value
 $ charts "find" "--system"
-exit: 2
+exit: 1
 --- stdout
 --- stderr
---system requires a value
+ERROR: --system requires a value
 
 ## filter without value (--json)
 $ charts "find" "--system" "--json"
-exit: 2
+exit: 1
 --- stdout
+{
+  "error": {
+    "code": "usage",
+    "message": "--system requires a value",
+    "details": {}
+  }
+}
 --- stderr
---system requires a value
 
 ## filter followed by an option
 $ charts "find" "--tag" "--owner" "x"
-exit: 2
+exit: 1
 --- stdout
 --- stderr
---tag requires a value
+ERROR: --tag requires a value
 
 ## filter followed by an option (--json)
 $ charts "find" "--tag" "--owner" "x" "--json"
-exit: 2
+exit: 1
 --- stdout
+{
+  "error": {
+    "code": "usage",
+    "message": "--tag requires a value",
+    "details": {}
+  }
+}
 --- stderr
---tag requires a value
 
 ## invalid status filter
 $ charts "find" "--status" "paused"
-exit: 2
+exit: 1
 --- stdout
 --- stderr
-invalid status filter: paused
+ERROR: invalid status filter: paused
 
 ## invalid status filter (--json)
 $ charts "find" "--status" "paused" "--json"
-exit: 2
+exit: 1
 --- stdout
+{
+  "error": {
+    "code": "usage",
+    "message": "invalid status filter: paused",
+    "details": {}
+  }
+}
 --- stderr
-invalid status filter: paused
 
 ## find with two texts
 $ charts "find" "one" "two"
-exit: 2
+exit: 1
 --- stdout
 --- stderr
-find accepts at most one text value
+ERROR: find accepts at most one text value
 
 ## find with two texts (--json)
 $ charts "find" "one" "two" "--json"
-exit: 2
+exit: 1
 --- stdout
+{
+  "error": {
+    "code": "usage",
+    "message": "find accepts at most one text value",
+    "details": {}
+  }
+}
 --- stderr
-find accepts at most one text value
 
 ## show without ID
 $ charts "show"
-exit: 2
+exit: 1
 --- stdout
 --- stderr
-show requires one entry ID
+ERROR: show requires one entry ID
 
 ## show without ID (--json)
 $ charts "show" "--json"
-exit: 2
+exit: 1
 --- stdout
+{
+  "error": {
+    "code": "usage",
+    "message": "show requires one entry ID",
+    "details": {}
+  }
+}
 --- stderr
-show requires one entry ID
 
 ## deps with two IDs
 $ charts "deps" "alpha" "beta"
-exit: 2
+exit: 1
 --- stdout
 --- stderr
-deps requires one entry ID
+ERROR: deps requires one entry ID
 
 ## deps with two IDs (--json)
 $ charts "deps" "alpha" "beta" "--json"
-exit: 2
+exit: 1
 --- stdout
+{
+  "error": {
+    "code": "usage",
+    "message": "deps requires one entry ID",
+    "details": {}
+  }
+}
 --- stderr
-deps requires one entry ID
 
 ## check with an argument
 $ charts "check" "alpha"
-exit: 2
+exit: 1
 --- stdout
 --- stderr
-check accepts no positional arguments
+ERROR: check accepts no positional arguments
 
 ## check with an argument (--json)
 $ charts "check" "alpha" "--json"
-exit: 2
+exit: 1
 --- stdout
+{
+  "error": {
+    "code": "usage",
+    "message": "check accepts no positional arguments",
+    "details": {}
+  }
+}
 --- stderr
-check accepts no positional arguments

@@ -94,11 +94,11 @@ depends-on = [{ id = "beta-lib", via = "npm" }, { id = "stripe", via = "API" }]
 
 ## refused key change
 $ charts "set" "alpha-app" "--data" "{\"key\":\"NEW\"}"
-exit: 2
+exit: 3
 --- stdout
 --- stderr
 ERROR: repositories/alpha-app.toml: changing an existing key requires --replace-key
-Could not set repository alpha-app at repositories/alpha-app.toml; validation failed
+ERROR: could not set repository alpha-app: validation failed
 --- file repositories/alpha-app.toml
 name = "Alpha App"
 description = "Alpha application."
@@ -112,23 +112,18 @@ depends-on = [{ id = "beta-lib", via = "npm" }, { id = "stripe", via = "API" }]
 
 ## refused key change (--json)
 $ charts "set" "alpha-app" "--data" "{\"key\":\"NEW\"}" "--json"
-exit: 2
+exit: 3
 --- stdout
 {
-  "ok": false,
-  "type": "repository",
-  "id": "alpha-app",
-  "path": "repositories/alpha-app.toml",
-  "changed": [
-    "key"
-  ],
-  "new_tags": [],
-  "validation": {
-    "ok": false,
-    "errors": [
-      "repositories/alpha-app.toml: changing an existing key requires --replace-key"
-    ],
-    "warnings": []
+  "error": {
+    "code": "invalid-entry",
+    "message": "could not set repository alpha-app: validation failed",
+    "details": {
+      "errors": [
+        "repositories/alpha-app.toml: changing an existing key requires --replace-key"
+      ],
+      "warnings": []
+    }
   }
 }
 --- stderr
@@ -145,17 +140,20 @@ depends-on = [{ id = "beta-lib", via = "npm" }, { id = "stripe", via = "API" }]
 
 ## input error
 $ charts "set" "alpha-app" "--data" "{"
-exit: 2
+exit: 1
 --- stdout
 --- stderr
---data is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+ERROR: --data is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2)
 
 ## input error (--json)
 $ charts "set" "alpha-app" "--data" "{" "--json"
-exit: 2
+exit: 1
 --- stdout
 {
-  "ok": false,
-  "error": "--data is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2)"
+  "error": {
+    "code": "usage",
+    "message": "--data is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+    "details": {}
+  }
 }
 --- stderr

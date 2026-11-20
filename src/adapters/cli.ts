@@ -16,6 +16,7 @@ import {
   type Data,
   type Kind,
 } from "../domain/entry.ts";
+import { ChartsError, exitCodeOf } from "../domain/errors.ts";
 
 // The terminal adapter: argument parsing and text or JSON output.
 
@@ -218,12 +219,32 @@ function printJson(value: unknown): void {
   console.log(JSON.stringify(value, null, 2));
 }
 
-/** Reports an argument error. `add --json` reports it as JSON. Returns the exit status. */
+/**
+ * Writes a failure as a typed error object with `--json`, or as prose on
+ * standard error, and returns its category's exit code. An error that is not
+ * a Charts error is external.
+ */
+export function renderError(json: boolean, error: unknown): number {
+  const typed = error instanceof ChartsError ? error : new ChartsError("external", errorMessage(error));
+  if (json) printJson({ error: { code: typed.code, message: typed.message, details: typed.details } });
+  else console.error(`ERROR: ${typed.message}`);
+  return exitCodeOf(typed.code);
+}
+
+/** Reports an argument error as a `usage` error. Returns the exit status. */
 export function renderUsageError(argv: string[], error: unknown): number {
-  const message = errorMessage(error);
-  if (["add", "set"].includes(argv[0]) && argv.includes("--json")) printJson({ ok: false, error: message });
-  else console.error(message);
-  return 2;
+  const typed = error instanceof ChartsError ? error : new ChartsError("usage", errorMessage(error));
+  return renderError(argv.includes("--json"), typed);
+}
+
+/** Without `--json`, prints the warnings and errors in a failure's details before its message. */
+function renderFailure(json: boolean, error: ChartsError): number {
+  if (!json) {
+    const { errors = [], warnings = [] } = error.details as { errors?: string[]; warnings?: string[] };
+    for (const warning of warnings) console.log(`WARNING: ${warning}`);
+    for (const message of errors) console.error(`ERROR: ${message}`);
+  }
+  return renderError(json, error);
 }
 
 export function renderFind(json: boolean, result: FindResult): number {
@@ -234,23 +255,15 @@ export function renderFind(json: boolean, result: FindResult): number {
       console.log(`${entry.kind} ${entry.id} — ${compact(entryName(entry))} — ${compact(entry.data.description ?? "")}`);
     }
   }
-  return result.status;
-}
-
-function renderEntryError(json: boolean, error: string): void {
-  if (json) printJson({ error });
-  else console.error(error);
+  return 0;
 }
 
 export function renderShow(json: boolean, result: EntryResult): number {
-  if (result.status !== 0) {
-    renderEntryError(json, result.error);
-    return result.status;
-  }
+  if (!result.ok) return renderError(json, result.error);
   const data = result.data;
   if (json) {
     printJson(data);
-    return result.status;
+    return 0;
   }
   const fields = [`${data.type} ${data.id}`];
   for (const key of [
@@ -275,26 +288,23 @@ export function renderShow(json: boolean, result: EntryResult): number {
     if (key in data && data[key] !== null) fields.push(`${key}=${compact(data[key])}`);
   }
   console.log(fields.join(" — "));
-  return result.status;
+  return 0;
 }
 
 /** Prints `deps` (reverse = false) or `rdeps` (reverse = true) results. */
 export function renderEdges(json: boolean, result: EntryResult, reverse: boolean): number {
-  if (result.status !== 0) {
-    renderEntryError(json, result.error);
-    return result.status;
-  }
+  if (!result.ok) return renderError(json, result.error);
   const data = result.data;
   if (json) {
     printJson(data);
-    return result.status;
+    return 0;
   }
   const key = reverse ? "dependents" : "dependencies";
   const edges = data[key] as Data[];
   const systemDependencies = (data.system_dependencies as Data[] | undefined) ?? [];
   if (!edges.length && !systemDependencies.length) {
     console.log(`${data.id}: no ${key}`);
-    return result.status;
+    return 0;
   }
   for (const edge of edges) {
     const via = edge.via ? ` via ${compact(edge.via)}` : "";
@@ -311,9 +321,10 @@ export function renderEdges(json: boolean, result: EntryResult, reverse: boolean
       console.log(`${data.id} -> system ${edge.id} via repositories ${repositories}`);
     }
   }
-  return result.status;
+  return 0;
 }
 
+/** Prints the check report; with errors, the report stays the output and the exit code is a refusal's. */
 export function renderCheck(json: boolean, result: CheckResult): number {
   const { errors, warnings } = result.finding;
   if (json) {
@@ -323,10 +334,11 @@ export function renderCheck(json: boolean, result: CheckResult): number {
     for (const error of errors) console.log(`ERROR: ${error}`);
     if (!errors.length) console.log("check: ok");
   }
-  return result.status;
+  return errors.length ? exitCodeOf("refused") : 0;
 }
 
 export function renderSet(json: boolean, result: SetResult): number {
+  if (!result.ok) return renderFailure(json, result.error);
   if (json) {
     printJson({
       ok: result.ok,
@@ -337,24 +349,23 @@ export function renderSet(json: boolean, result: SetResult): number {
       new_tags: result.newTags,
       validation: { ok: result.validation.errors.length === 0, ...result.validation },
     });
-    return result.status;
+    return 0;
   }
   for (const warning of result.validation.warnings) console.log(`WARNING: ${warning}`);
-  for (const error of result.validation.errors) console.error(`ERROR: ${error}`);
-  if (result.ok && result.changed.length === 0 && result.newTags.length === 0) {
+  if (result.changed.length === 0 && result.newTags.length === 0) {
     console.log(`No change to ${result.type} ${result.id} at ${result.path}`);
-  } else if (result.ok) {
+  } else {
     const changed = result.changed.length ? result.changed.join(", ") : "none";
     console.log(`Updated ${result.type} ${result.id} at ${result.path}; changed fields: ${changed}; validation ok`);
     if (result.newTags.length) {
       console.log(`New tags: ${result.newTags.join(", ")}. The shared tag list has uncommitted changes.`);
     }
-  } else if (result.type) console.error(`Could not set ${result.type} ${result.id} at ${result.path}; validation failed`);
-  else console.error(`Could not set entry ${result.id}; validation failed`);
-  return result.status;
+  }
+  return 0;
 }
 
 export function renderAdd(json: boolean, result: AddResult): number {
+  if (!result.ok) return renderFailure(json, result.error);
   if (json) {
     const output: Data = {
       ok: result.ok,
@@ -363,17 +374,14 @@ export function renderAdd(json: boolean, result: AddResult): number {
       path: result.path,
       validation: { ok: result.validation.errors.length === 0, ...result.validation },
     };
-    if (result.ok && result.newTags.length) output.new_tags = result.newTags;
+    if (result.newTags.length) output.new_tags = result.newTags;
     printJson(output);
-    return result.status;
+    return 0;
   }
   for (const warning of result.validation.warnings) console.log(`WARNING: ${warning}`);
-  for (const error of result.validation.errors) console.error(`ERROR: ${error}`);
-  if (result.ok) {
-    console.log(`Created ${result.type} ${result.id} at ${result.path}; validation ok`);
-    if (result.newTags.length) {
-      console.log(`New tags: ${result.newTags.join(", ")}. The shared tag list has uncommitted changes.`);
-    }
-  } else console.error(`Could not add ${result.type} ${result.id} at ${result.path}; validation failed`);
-  return result.status;
+  console.log(`Created ${result.type} ${result.id} at ${result.path}; validation ok`);
+  if (result.newTags.length) {
+    console.log(`New tags: ${result.newTags.join(", ")}. The shared tag list has uncommitted changes.`);
+  }
+  return 0;
 }

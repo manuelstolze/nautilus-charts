@@ -2,10 +2,25 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { add } from "../src/commands/add.ts";
 import { check } from "../src/commands/check.ts";
+import { deps, rdeps } from "../src/commands/deps.ts";
 import { set } from "../src/commands/set.ts";
 import { show } from "../src/commands/show.ts";
 import { FakeGit } from "./fakes/fake-git.ts";
 import { MemoryStore } from "./fakes/memory-store.ts";
+import type { ChartsError, ErrorCode } from "../src/domain/errors.ts";
+
+/** The typed error of a failed result, after checking its code. */
+function failed(result: { ok: true } | { ok: false; error: ChartsError }, code: ErrorCode, message: string = code): ChartsError {
+  assert.equal(result.ok, false, message);
+  if (result.ok) throw new Error("unreachable");
+  assert.equal(result.error.code, code, message);
+  return result.error;
+}
+
+/** The validation errors and warnings in a failure's details. */
+function details(error: ChartsError): { errors: string[]; warnings: string[] } {
+  return error.details as { errors: string[]; warnings: string[] };
+}
 
 // Use cases run against in-memory fakes: no temporary folders and no Git.
 
@@ -44,34 +59,63 @@ describe("show use case", () => {
     });
     const git = new FakeGit();
     const own = show({ store, git }, "own");
-    assert.equal(own.status, 0);
-    if (own.status === 0) {
+    assert.equal(own.ok, true);
+    if (own.ok) {
       assert.equal(own.data["ticket-key"], "XYZ");
       assert.equal(own.data.resolved_ticket_key, "XYZ");
       assert.equal(own.data.ticket_key_source, "repository");
     }
     const inherited = show({ store, git }, "inherited");
-    assert.equal(inherited.status, 0);
-    if (inherited.status === 0) {
+    assert.equal(inherited.ok, true);
+    if (inherited.ok) {
       assert.equal(inherited.data.resolved_ticket_key, "ABC");
       assert.equal(inherited.data.ticket_key_source, "system");
     }
     for (const id of ["independent", "no-system-key"]) {
       const result = show({ store, git }, id);
-      assert.equal(result.status, 0);
-      if (result.status === 0) {
+      assert.equal(result.ok, true);
+      if (result.ok) {
         assert.equal(result.data.resolved_ticket_key, null, id);
         assert.equal(result.data.ticket_key_source, null, id);
       }
     }
     for (const id of ["alpha", "tracker"]) {
       const result = show({ store, git }, id);
-      assert.equal(result.status, 0);
-      if (result.status === 0) {
+      assert.equal(result.ok, true);
+      if (result.ok) {
         assert.equal("resolved_ticket_key" in result.data, false, id);
         assert.equal("ticket_key_source" in result.data, false, id);
       }
     }
+  });
+
+  test("reports an unknown ID as entry-not-found with the ID", () => {
+    const result = show(catalog(), "missing");
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.deepEqual([result.error.code, result.error.category, result.error.message], ["entry-not-found", "not-found", "unknown entry ID: missing"]);
+      assert.deepEqual(result.error.details, { id: "missing" });
+    }
+  });
+});
+
+describe("deps use cases", () => {
+  test("report an unknown ID as entry-not-found and deps on an external as usage", () => {
+    const ports = catalog();
+    for (const result of [deps(ports, "missing"), rdeps(ports, "missing")]) {
+      assert.equal(result.ok, false);
+      if (!result.ok) {
+        assert.equal(result.error.code, "entry-not-found");
+        assert.deepEqual(result.error.details, { id: "missing" });
+      }
+    }
+    const external = deps(ports, "stripe");
+    assert.equal(external.ok, false);
+    if (!external.ok) {
+      assert.deepEqual([external.error.code, external.error.category], ["usage", "usage"]);
+      assert.deepEqual(external.error.details, { id: "stripe" });
+    }
+    assert.equal(rdeps(ports, "stripe").ok, true);
   });
 });
 
@@ -105,13 +149,13 @@ describe("add use case", () => {
       ],
     });
     assert.equal(result.ok, true);
-    assert.deepEqual(result.newTags, ["data-pipeline", "event-stream"]);
+    assert.deepEqual(result.ok && result.newTags, ["data-pipeline", "event-stream"]);
     assert.deepEqual(ports.store.tags, {
       utility: "Shared tools.",
       "data-pipeline": "Moves data.",
       "event-stream": "Processes events.",
     });
-    assert.equal(check(ports).status, 0);
+    assert.deepEqual(check(ports).finding.errors, []);
   });
 
   test("rejects invalid new tags without changing the store", () => {
@@ -132,10 +176,10 @@ describe("add use case", () => {
         data: { description: "Invalid tag.", tags: item.tags },
         newTags: [{ name: item.name, description: "New description." }],
       });
-      assert.equal(result.status, 2, item.name);
-      assert.equal(result.ok, false, item.name);
-      assert.ok(result.validation.errors.length > 0, item.name);
-      assert.equal(ports.store.entries.some((entry) => entry.id === result.id), false);
+      const error = failed(result, "invalid-entry", item.name);
+      assert.equal(error.category, "refused", item.name);
+      assert.ok(details(error).errors.length > 0, item.name);
+      assert.equal(ports.store.entries.some((entry) => entry.id === `bad-${item.name.toLowerCase().replaceAll("_", "-")}`), false);
       assert.deepEqual(ports.store.tags, originalTags);
     }
   });
@@ -170,11 +214,10 @@ describe("add use case", () => {
       path: "repositories/new-repo.toml",
       validation: { errors: [], warnings: [] },
       newTags: [],
-      status: 0,
     });
     assert.ok(ports.store.files.has("repositories/new-repo.toml"));
     assert.deepEqual(ports.store.localPaths, { "alpha-app": "/work/alpha-app", "new-repo": "/work/new-repo" });
-    assert.equal(check(ports).status, 0);
+    assert.deepEqual(check(ports).finding.errors, []);
   });
 
   test("reports a stale local path after catalog warnings", () => {
@@ -191,13 +234,13 @@ describe("add use case", () => {
       data: { description: "New.", "depends-on": [{ id: "old-service" }] },
       localPath: "/work/new-repo",
     });
+    assert.ok(result.ok);
     const catalogWarning = result.validation.warnings.findIndex((warning) => warning.includes('deprecated entry "old-service"'));
     const pathWarning = result.validation.warnings.findIndex((warning) => warning === 'replaced the existing local path for "new-repo" in local/paths.toml');
-    assert.equal(result.ok, true);
     assert.ok(catalogWarning >= 0);
     assert.ok(pathWarning > catalogWarning);
     assert.deepEqual(ports.store.localPaths, { "alpha-app": "/work/alpha-app", "new-repo": "/work/new-repo" });
-    assert.equal(check(ports).status, 0);
+    assert.deepEqual(check(ports).finding.errors, []);
   });
 
   test("rolls back a replaced local path after failed revalidation", () => {
@@ -209,9 +252,9 @@ describe("add use case", () => {
       data: { description: "Rollback." },
       localPath: "/work/absent",
     });
-    assert.equal(result.status, 1);
-    assert.ok(result.validation.errors.some((error) => error.includes("path does not exist")));
-    assert.deepEqual(result.validation.warnings, ['replaced the existing local path for "rollback-repo" in local/paths.toml']);
+    const error = details(failed(result, "invalid-entry"));
+    assert.ok(error.errors.some((message) => message.includes("path does not exist")));
+    assert.deepEqual(error.warnings, ['replaced the existing local path for "rollback-repo" in local/paths.toml']);
     assert.deepEqual(ports.store.localPaths, original);
     assert.equal(ports.store.entries.some((entry) => entry.id === "rollback-repo"), false);
   });
@@ -219,9 +262,9 @@ describe("add use case", () => {
   test("rejects an ID used by another entry type", () => {
     const ports = catalog();
     const result = add(ports, { kind: "external", id: "alpha-app", data: { description: "Duplicate." } });
-    assert.equal(result.status, 2);
-    assert.deepEqual(result.validation.errors, ['ID "alpha-app" already exists']);
-    assert.equal(result.path, "externals/alpha-app.toml");
+    const error = failed(result, "invalid-entry");
+    assert.equal(error.message, "could not add external alpha-app: validation failed");
+    assert.deepEqual(error.details, { errors: ['ID "alpha-app" already exists'], warnings: [] });
     assert.equal(ports.store.files.size, 0);
   });
 
@@ -229,8 +272,7 @@ describe("add use case", () => {
     const ports = catalog();
     ports.store.unreadable.push("systems/broken.toml");
     const result = add(ports, { kind: "repository", id: "broken", data: { description: "Duplicate." } });
-    assert.equal(result.status, 2);
-    assert.deepEqual(result.validation.errors, ['ID "broken" already exists']);
+    assert.deepEqual(details(failed(result, "invalid-entry")).errors, ['ID "broken" already exists']);
     assert.equal(ports.store.files.size, 0);
   });
 
@@ -238,16 +280,16 @@ describe("add use case", () => {
     const ports = catalog();
     ports.git.notIgnored.add("systems/new-system.toml");
     const result = add(ports, { kind: "system", id: "new-system", data: { description: "New." } });
-    assert.equal(result.status, 2);
-    assert.deepEqual(result.validation.errors, ["systems/new-system.toml is not ignored by Git"]);
+    const error = failed(result, "refused");
+    assert.equal(error.message, "could not add system new-system: systems/new-system.toml is not ignored by Git");
+    assert.deepEqual(details(error).errors, ["systems/new-system.toml is not ignored by Git"]);
     assert.equal(ports.store.files.size, 0);
   });
 
   test("rejects invalid input before writing", () => {
     const ports = catalog();
     const result = add(ports, { kind: "repository", id: "bad", data: { description: "Bad.", key: "ALP", tags: ["unknown"] } });
-    assert.equal(result.status, 2);
-    assert.deepEqual(result.validation.errors, [
+    assert.deepEqual(details(failed(result, "invalid-entry")).errors, [
       'repositories/bad.toml: duplicate key "ALP"; also used by repositories/alpha-app.toml',
       'repositories/bad.toml: tag "unknown" is not defined in tags.toml',
     ]);
@@ -262,9 +304,7 @@ describe("add use case", () => {
       data: { description: "Inherited tag.", tags: ["toString"] },
       localPath: "/work/new-repo",
     });
-    assert.equal(result.status, 2);
-    assert.equal(result.ok, false);
-    assert.deepEqual(result.validation.errors, ['repositories/inherited-tag.toml: tag "toString" is not defined in tags.toml']);
+    assert.deepEqual(details(failed(result, "invalid-entry")).errors, ['repositories/inherited-tag.toml: tag "toString" is not defined in tags.toml']);
     assert.ok(!ports.store.entries.some((entry) => entry.id === "inherited-tag"));
     assert.equal(ports.store.files.size, 0);
     assert.deepEqual(ports.store.localPaths, { "alpha-app": "/work/alpha-app" });
@@ -280,9 +320,7 @@ describe("add use case", () => {
       localPath: "/work/absent",
       newTags: [{ name: "data-pipeline", description: "Moves data." }],
     });
-    assert.equal(result.status, 1);
-    assert.equal(result.ok, false);
-    assert.deepEqual(result.validation.errors, ['local/paths.toml: path does not exist: /work/absent for "rollback-repo"']);
+    assert.deepEqual(details(failed(result, "invalid-entry")).errors, ['local/paths.toml: path does not exist: /work/absent for "rollback-repo"']);
     assert.ok(!ports.store.entries.some((entry) => entry.id === "rollback-repo"));
     assert.equal(ports.store.files.size, 0);
     assert.deepEqual(ports.store.localPaths, { "alpha-app": "/work/alpha-app" });
@@ -297,8 +335,7 @@ describe("add use case", () => {
       data: { description: "Rollback.", remote: "https://example.com/wanted.git" },
       localPath: "/work/new-repo",
     });
-    assert.equal(result.status, 1);
-    assert.deepEqual(result.validation.errors, ['local/paths.toml: remote does not match "https://example.com/wanted.git" for "rollback-new"']);
+    assert.deepEqual(details(failed(result, "invalid-entry")).errors, ['local/paths.toml: remote does not match "https://example.com/wanted.git" for "rollback-new"']);
     assert.ok(!ports.store.entries.some((entry) => entry.id === "rollback-new"));
     assert.equal(ports.store.localPaths, null);
   });
@@ -312,8 +349,7 @@ describe("add use case", () => {
       data: { description: "Changed." },
       localPath: "/work/absent",
     });
-    assert.equal(result.status, 1);
-    assert.deepEqual(result.validation.errors, [
+    assert.deepEqual(details(failed(result, "invalid-entry")).errors, [
       'local/paths.toml: path does not exist: /work/absent for "changed"',
       "local/paths.toml changed during rollback and was not restored",
       "new entry changed during rollback and was not removed",
@@ -321,12 +357,14 @@ describe("add use case", () => {
     assert.ok(ports.store.entries.some((entry) => entry.id === "changed"));
   });
 
-  test("reports a failed write with exit status 1", () => {
+  test("reports a failed write as external", () => {
     const ports = catalog();
     ports.store.failWrite = "disk full";
     const result = add(ports, { kind: "system", id: "new-system", data: { description: "New." } });
-    assert.equal(result.status, 1);
-    assert.deepEqual(result.validation.errors, ["could not write entry: disk full"]);
+    const error = failed(result, "external");
+    assert.equal(error.category, "external");
+    assert.equal(error.message, "could not add system new-system: could not write entry: disk full");
+    assert.deepEqual(error.details, { errors: ["could not write entry: disk full"], warnings: [] });
   });
 });
 
@@ -334,22 +372,20 @@ describe("set use case", () => {
   test("protects an existing key and allows a deliberate replacement", () => {
     const ports = catalog();
     const same = set(ports, { id: "alpha-app", data: { key: "ALP" } });
-    assert.equal(same.ok, true);
+    assert.ok(same.ok);
     assert.deepEqual(same.changed, []);
 
     const refused = set(ports, { id: "alpha-app", data: { key: "BET" } });
-    assert.equal(refused.status, 2);
-    assert.deepEqual(refused.validation.errors, [
+    assert.deepEqual(details(failed(refused, "invalid-entry")).errors, [
       "repositories/alpha-app.toml: changing an existing key requires --replace-key",
     ]);
     assert.equal(ports.store.entries.find((entry) => entry.id === "alpha-app")?.data.key, "ALP");
 
     const missingKey = set(ports, { id: "alpha-app", data: { description: "Updated." }, replaceKey: true });
-    assert.equal(missingKey.status, 2);
-    assert.deepEqual(missingKey.validation.errors, ["--replace-key requires key in --data"]);
+    assert.equal(failed(missingKey, "usage").message, "--replace-key requires key in --data");
 
     const replaced = set(ports, { id: "alpha-app", data: { key: "BET" }, replaceKey: true });
-    assert.equal(replaced.ok, true);
+    assert.ok(replaced.ok);
     assert.deepEqual(replaced.changed, ["key"]);
     assert.equal(ports.store.entries.find((entry) => entry.id === "alpha-app")?.data.key, "BET");
   });
@@ -364,8 +400,6 @@ describe("set use case", () => {
     });
     const cases = [
       { data: { extra: true }, expected: "repositories/beta-lib.toml: unknown field(s): extra" },
-      { data: { id: "other" }, expected: "--data must not contain id" },
-      { data: { description: null }, expected: "--data must not contain JSON null values" },
       { data: { tags: ["missing"] }, expected: 'repositories/beta-lib.toml: tag "missing" is not defined in tags.toml' },
       { data: { system: "missing" }, expected: 'repositories/beta-lib.toml: system "missing" does not name a system' },
       { data: { "depends-on": [{ id: "missing" }] }, expected: 'repositories/beta-lib.toml: depends-on[0] ID "missing" does not exist' },
@@ -375,25 +409,44 @@ describe("set use case", () => {
       const entriesBefore = structuredClone(ports.store.entries);
       const filesBefore = new Map(ports.store.files);
       const result = set(ports, { id: "beta-lib", ...item });
-      assert.equal(result.status, 2, item.expected);
-      assert.ok(result.validation.errors.includes(item.expected), JSON.stringify(result.validation.errors));
+      const { errors } = details(failed(result, "invalid-entry", item.expected));
+      assert.ok(errors.includes(item.expected), JSON.stringify(errors));
       assert.deepEqual(ports.store.entries, entriesBefore);
       assert.deepEqual(ports.store.files, filesBefore);
     }
   });
 
+  test("refuses options that do not fit the data or the entry as usage errors", () => {
+    const ports = catalog();
+    const cases = [
+      { options: { data: { id: "other" } }, expected: "--data must not contain id" },
+      { options: { data: { description: null } }, expected: "--data must not contain JSON null values" },
+      { options: { id: "stripe", localPath: "/work/new-repo" }, expected: "--local-path is valid only for a repository" },
+      { options: {}, expected: "set requires --data or --local-path" },
+    ];
+    for (const item of cases) {
+      const error = failed(set(ports, { id: "alpha-app", ...item.options }), "usage", item.expected);
+      assert.deepEqual([error.message, error.details], [item.expected, {}]);
+    }
+  });
+
   test("reports unknown and unreadable IDs", () => {
     const ports = catalog();
-    const unknown = set(ports, { id: "missing", data: { description: "No entry." } });
-    assert.equal(unknown.status, 2);
-    assert.equal(unknown.type, null);
-    assert.deepEqual(unknown.validation.errors, ['unknown ID "missing"']);
+    const unknown = failed(set(ports, { id: "missing", data: { description: "No entry." } }), "entry-not-found");
+    assert.deepEqual([unknown.message, unknown.details], ["unknown entry ID: missing", { id: "missing" }]);
 
     ports.store.unreadable.push("repositories/broken.toml");
-    const unreadable = set(ports, { id: "broken", data: { description: "No entry." } });
-    assert.equal(unreadable.status, 2);
-    assert.equal(unreadable.path, "repositories/broken.toml");
-    assert.deepEqual(unreadable.validation.errors, ["cannot read entry repositories/broken.toml"]);
+    const unreadable = failed(set(ports, { id: "broken", data: { description: "No entry." } }), "invalid-entry");
+    assert.equal(unreadable.message, "could not set entry broken: validation failed");
+    assert.deepEqual(details(unreadable).errors, ["cannot read entry repositories/broken.toml"]);
+  });
+
+  test("reports a failed write as external", () => {
+    const ports = catalog();
+    ports.store.failWrite = "disk full";
+    const error = failed(set(ports, { id: "alpha-app", data: { description: "Updated." } }), "external");
+    assert.match(error.message, /^could not set repository alpha-app: /);
+    assert.ok(details(error).errors.length > 0);
   });
 
   test("returns success and does not write when current values are supplied", () => {
@@ -402,7 +455,7 @@ describe("set use case", () => {
       id: "alpha-app",
       data: { description: "Alpha application.", key: "ALP", system: "alpha" },
     });
-    assert.equal(result.ok, true);
+    assert.ok(result.ok);
     assert.deepEqual(result.changed, []);
     assert.equal(ports.store.files.size, 0);
   });
@@ -416,7 +469,7 @@ describe("set use case", () => {
       file: "repositories/beta-lib.toml",
     });
     const result = set(ports, { id: "beta-lib", data: { key: "BET" } });
-    assert.equal(result.ok, true);
+    assert.ok(result.ok);
     assert.deepEqual(result.changed, ["key"]);
     assert.equal(ports.store.entries.find((entry) => entry.id === "beta-lib")?.data.key, "BET");
   });
