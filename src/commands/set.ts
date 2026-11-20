@@ -33,7 +33,7 @@ function containsNull(value: unknown): boolean {
  * Updates fields on an existing catalog entry and validates the whole catalog.
  * A failure is `entry-not-found` for an unknown ID, `usage` for options that do
  * not fit the entry, `invalid-entry` for validation errors, `refused` when Git
- * does not ignore the entry file, and `external` when Git or a write fails;
+ * does not ignore the entry file, and `external` when Git, a write, or the rollback fails;
  * except for the first two, its details hold the errors and warnings.
  */
 export function set(ports: Ports, options: SetOptions): SetResult {
@@ -41,8 +41,7 @@ export function set(ports: Ports, options: SetOptions): SetResult {
   const snapshot = store.load();
   const index = new CatalogIndex(snapshot);
   const current = index.get(options.id);
-  const failure = (errors: string[], code: ErrorCode = "invalid-entry", warnings: string[] = []): SetResult => {
-    const reason = code === "invalid-entry" ? "validation failed" : errors[0];
+  const failure = (errors: string[], code: ErrorCode = "invalid-entry", warnings: string[] = [], reason = "validation failed"): SetResult => {
     const name = current ? `${current.kind} ${options.id}` : `entry ${options.id}`;
     return { ok: false, error: new ChartsError(code, `could not set ${name}: ${reason}`, { errors, warnings }) };
   };
@@ -70,8 +69,8 @@ export function set(ports: Ports, options: SetOptions): SetResult {
   if (newTags.length > 0 && current.kind !== "repository") return usage("--new-tag is valid only for a repository");
 
   const ignored = git.isIgnored(path);
-  if ("error" in ignored) return failure([`could not check Git ignore rule: ${ignored.error}`], "external");
-  if (!ignored.ignored) return failure([`${path} is not ignored by Git`], "refused");
+  if ("error" in ignored) return failure([`could not check Git ignore rule: ${ignored.error}`], "external", [], "the Git ignore rule could not be checked");
+  if (!ignored.ignored) return failure([`${path} is not ignored by Git`], "refused", [], "Git does not ignore the entry file");
 
   const merged = mergeEntryData(current.data, data ?? {});
   if (
@@ -108,7 +107,7 @@ export function set(ports: Ports, options: SetOptions): SetResult {
 
   const updated = store.updateEntry(current.kind, options.id, merged.data, merged.changed, localPath, newTags);
   if (updated.status === "invalid") return failure(updated.errors, "invalid-entry", finding.warnings);
-  if (updated.status === "failed") return failure(updated.errors, "external", finding.warnings);
+  if (updated.status === "failed") return failure(updated.errors, "external", finding.warnings, "a write failed");
 
   let validation: Finding;
   try {
@@ -118,13 +117,16 @@ export function set(ports: Ports, options: SetOptions): SetResult {
       [`catalog validation failed: ${errorMessage(error)}`, ...updated.rollback()],
       "external",
       updated.warnings,
+      "catalog validation failed",
     );
   }
   if (validation.errors.length) {
+    const rollbackErrors = updated.rollback();
     return failure(
-      [...validation.errors, ...updated.rollback()],
-      "invalid-entry",
+      [...validation.errors, ...rollbackErrors],
+      rollbackErrors.length ? "external" : "invalid-entry",
       [...validation.warnings, ...updated.warnings],
+      rollbackErrors.length ? "validation failed, and the rollback failed" : "validation failed",
     );
   }
   validation = { ...validation, warnings: [...validation.warnings, ...updated.warnings] };

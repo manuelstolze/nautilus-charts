@@ -280,7 +280,7 @@ exit: 3
 --- stdout
 --- stderr
 ERROR: systems/unignored.toml is not ignored by Git
-ERROR: could not add system unignored: systems/unignored.toml is not ignored by Git
+ERROR: could not add system unignored: Git does not ignore the entry file
 --- file systems/unignored.toml
 (absent)
 
@@ -291,7 +291,7 @@ exit: 3
 {
   "error": {
     "code": "refused",
-    "message": "could not add system unignored: systems/unignored.toml is not ignored by Git",
+    "message": "could not add system unignored: Git does not ignore the entry file",
     "details": {
       "errors": [
         "systems/unignored.toml is not ignored by Git"

@@ -281,7 +281,7 @@ describe("add use case", () => {
     ports.git.notIgnored.add("systems/new-system.toml");
     const result = add(ports, { kind: "system", id: "new-system", data: { description: "New." } });
     const error = failed(result, "refused");
-    assert.equal(error.message, "could not add system new-system: systems/new-system.toml is not ignored by Git");
+    assert.equal(error.message, "could not add system new-system: Git does not ignore the entry file");
     assert.deepEqual(details(error).errors, ["systems/new-system.toml is not ignored by Git"]);
     assert.equal(ports.store.files.size, 0);
   });
@@ -340,7 +340,7 @@ describe("add use case", () => {
     assert.equal(ports.store.localPaths, null);
   });
 
-  test("reports rollback errors when files changed before the rollback", () => {
+  test("reports a failed rollback as external with its errors", () => {
     const ports = catalog();
     ports.store.changeBeforeRollback = new Set(["entry", "localPaths"]);
     const result = add(ports, {
@@ -349,7 +349,9 @@ describe("add use case", () => {
       data: { description: "Changed." },
       localPath: "/work/absent",
     });
-    assert.deepEqual(details(failed(result, "invalid-entry")).errors, [
+    const error = failed(result, "external");
+    assert.equal(error.message, "could not add repository changed: validation failed, and the rollback failed");
+    assert.deepEqual(details(error).errors, [
       'local/paths.toml: path does not exist: /work/absent for "changed"',
       "local/paths.toml changed during rollback and was not restored",
       "new entry changed during rollback and was not removed",
@@ -363,7 +365,7 @@ describe("add use case", () => {
     const result = add(ports, { kind: "system", id: "new-system", data: { description: "New." } });
     const error = failed(result, "external");
     assert.equal(error.category, "external");
-    assert.equal(error.message, "could not add system new-system: could not write entry: disk full");
+    assert.equal(error.message, "could not add system new-system: a write failed");
     assert.deepEqual(error.details, { errors: ["could not write entry: disk full"], warnings: [] });
   });
 });

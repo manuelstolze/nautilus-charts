@@ -1300,7 +1300,7 @@ describe("typed errors", () => {
       ["add", "system", "unignored", "--data", '{"description":"Unignored."}'],
       "refused",
       3,
-      "could not add system unignored: systems/unignored.toml is not ignored by Git",
+      "could not add system unignored: Git does not ignore the entry file",
     );
     assert.deepEqual(error.details.errors, ["systems/unignored.toml is not ignored by Git"]);
     assert.equal(existsSync(join(root, "systems/unignored.toml")), false);
