@@ -7,7 +7,7 @@ import type { Ports } from "./context.ts";
 
 export type AddOptions = { kind: Kind; id: string; data: Data; localPath?: string; newTags?: readonly NewTag[] };
 export type AddResult =
-  | { ok: true; type: Kind; id: string; path: string; validation: Finding; newTags: string[] }
+  | { ok: true; type: Kind; id: string; validation: Finding; newTags: string[] }
   | { ok: false; error: ChartsError };
 
 /**
@@ -65,5 +65,5 @@ export function add(ports: Ports, { kind, id, data, localPath, newTags = [] }: A
     );
   }
   validation = { ...validation, warnings: [...validation.warnings, ...created.warnings] };
-  return { ok: true, type: kind, id, path, validation, newTags: newTags.map(({ name }) => name) };
+  return { ok: true, type: kind, id, validation, newTags: newTags.map(({ name }) => name) };
 }

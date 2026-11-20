@@ -325,9 +325,9 @@ describe("charts add", () => {
     assert.equal(system.result, 0, JSON.stringify({ output: system.output, errors: system.errors }));
     assert.equal(systemPayload.type, "system");
     assert.equal(systemPayload.id, "new-system");
-    assert.equal(systemPayload.path, "systems/new-system.toml");
+    assert.equal("path" in systemPayload, false);
     assert.equal(systemPayload.validation.ok, true);
-    const systemContent = readFileSync(join(root, systemPayload.path), "utf8");
+    const systemContent = readFileSync(join(root, "systems/new-system.toml"), "utf8");
     assert.deepEqual(JSON.parse(JSON.stringify(parseToml(systemContent))), systemData);
     assert.ok(!systemContent.includes("Display name"));
     assert.ok(systemContent.indexOf('owner = "Team Example"') < systemContent.indexOf('ticket-key = "ABC"'));
@@ -952,13 +952,16 @@ describe("charts add", () => {
     const payload = JSON.parse(result.output.join("\\n"));
     assert.equal(result.result, 0);
     assert.deepEqual(payload.new_tags, ["first-tag", "second-tag"]);
-    assert.deepEqual(Object.keys(payload), ["ok", "type", "id", "path", "validation", "new_tags"]);
+    assert.equal("path" in payload, false);
+    assert.deepEqual(Object.keys(payload), ["ok", "type", "id", "validation", "new_tags"]);
   });
 
   test("reports text success and JSON argument errors", () => {
     const text = add("external", "text-entry", { description: "Text output." });
     assert.equal(text.result, 0);
-    assert.ok(text.output.join("\\n").includes("Created external text-entry at externals/text-entry.toml; validation ok"));
+    const output = text.output.join("\\n");
+    assert.ok(output.includes("Created external text-entry; validation ok"));
+    assert.doesNotMatch(output, /\.toml|(?:repositories|systems|externals|local)\//);
 
     const jsonError = capture(() => main(["add", "repository", "bad-json-output", "--data", "{", "--json"], root));
     const payload = JSON.parse(jsonError.output.join("\\n"));
@@ -983,6 +986,20 @@ describe("charts set", () => {
     if (data !== undefined) args.push("--data", typeof data === "string" ? data : JSON.stringify(data));
     return capture(() => main([...args, ...extra], root));
   }
+
+  test("returns no store path in text or JSON", () => {
+    const jsonResult = update("alpha-app", { description: "Updated from JSON." }, ["--json"]);
+    const payload = JSON.parse(jsonResult.output.join("\\n"));
+    assert.equal(jsonResult.result, 0);
+    assert.equal("path" in payload, false);
+    assert.doesNotMatch(JSON.stringify(payload), /\.toml|(?:repositories|systems|externals|local)\//);
+
+    const textResult = update("beta-lib", { description: "Updated from text." });
+    const output = textResult.output.join("\\n");
+    assert.equal(textResult.result, 0);
+    assert.match(output, /Updated repository beta-lib; changed fields: description; validation ok/);
+    assert.doesNotMatch(output, /\.toml|(?:repositories|systems|externals|local)\//);
+  });
 
   test("adds a missing field in template order and keeps all other text", () => {
     const original = '# header\ndescription = "Alpha application."\n# before system\nsystem = "alpha"\ntags = ["utility"]\n# footer\n';
