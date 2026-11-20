@@ -1,21 +1,33 @@
 ## no command
 $ charts
-exit: 1
+exit: 0
 --- stdout
+Usage: charts <command> [arguments] [--json]
+Commands:
+  find [<text>] [--system <id>] [--tag <tag>] [--status <status>] [--owner <text>]
+  show <id>
+  deps <id>
+  rdeps <id>
+  check
+  add <system|repository|external> <id> --data '<JSON>' [--local-path <path>] [--new-tag <name>=<description>]...
+  set <id> [--data '<JSON>'] [--local-path <path>] [--new-tag <name>=<description>]... [--replace-key]
+  describe
 --- stderr
-ERROR: usage: charts <find|show|deps|rdeps|check|add|set> [arguments] [--json]
 
 ## no command (--json)
 $ charts "--json"
-exit: 1
+exit: 0
 --- stdout
-{
-  "error": {
-    "code": "usage",
-    "message": "usage: charts <find|show|deps|rdeps|check|add|set> [arguments] [--json]",
-    "details": {}
-  }
-}
+Usage: charts <command> [arguments] [--json]
+Commands:
+  find [<text>] [--system <id>] [--tag <tag>] [--status <status>] [--owner <text>]
+  show <id>
+  deps <id>
+  rdeps <id>
+  check
+  add <system|repository|external> <id> --data '<JSON>' [--local-path <path>] [--new-tag <name>=<description>]...
+  set <id> [--data '<JSON>'] [--local-path <path>] [--new-tag <name>=<description>]... [--replace-key]
+  describe
 --- stderr
 
 ## unknown command
@@ -23,7 +35,7 @@ $ charts "list"
 exit: 1
 --- stdout
 --- stderr
-ERROR: usage: charts <find|show|deps|rdeps|check|add|set> [arguments] [--json]
+ERROR: usage: charts <find|show|deps|rdeps|check|add|set|describe> [arguments] [--json]
 
 ## unknown command (--json)
 $ charts "list" "--json"
@@ -32,7 +44,7 @@ exit: 1
 {
   "error": {
     "code": "usage",
-    "message": "usage: charts <find|show|deps|rdeps|check|add|set> [arguments] [--json]",
+    "message": "usage: charts <find|show|deps|rdeps|check|add|set|describe> [arguments] [--json]",
     "details": {}
   }
 }
