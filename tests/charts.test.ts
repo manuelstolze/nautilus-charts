@@ -1265,6 +1265,39 @@ describe("typed errors", () => {
     }
   });
 
+  test("show, deps, and rdeps give entry-not-found with the ID for an unknown ID", () => {
+    for (const command of ["show", "deps", "rdeps"]) {
+      const error = assertError([command, "missing"], "entry-not-found", 2, "unknown entry ID: missing");
+      assert.deepEqual(error.details, { id: "missing" }, command);
+    }
+  });
+
+  test("add and set give invalid-entry with the validation errors and warnings", () => {
+    write("externals/old-api.toml", 'description = "Retired API."\nstatus = "archived"\n');
+    const added = assertError(
+      ["add", "repository", "bad-repo", "--data", JSON.stringify({ description: "Bad.", tags: ["unknown"], "depends-on": [{ id: "old-api" }] })],
+      "invalid-entry",
+      3,
+      "could not add repository bad-repo: validation failed",
+    );
+    assert.deepEqual(added.details, {
+      errors: ['repositories/bad-repo.toml: tag "unknown" is not defined in tags.toml'],
+      warnings: ['repositories/bad-repo.toml: depends-on[0] points to archived entry "old-api"'],
+    });
+    const updated = assertError(
+      ["set", "beta-lib", "--data", JSON.stringify({ system: "missing" })],
+      "invalid-entry",
+      3,
+      "could not set repository beta-lib: validation failed",
+    );
+    assert.deepEqual(updated.details, { errors: ['repositories/beta-lib.toml: system "missing" does not name a system'], warnings: [] });
+  });
+
+  test("deps on an external entry is a usage error with the ID", () => {
+    const error = assertError(["deps", "stripe"], "usage", 1, "deps supports repositories and systems, not external entries: stripe");
+    assert.deepEqual(error.details, { id: "stripe" });
+  });
+
   test("an error that is not a Charts error is external", () => {
     const json = capture(() => renderError(true, new Error("disk full")));
     assert.equal(json.result, 4);
