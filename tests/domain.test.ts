@@ -63,8 +63,8 @@ describe("validation", () => {
     assert.deepEqual(validateNewTags(tags, newTags, ["data-pipeline", "Data_Pipeline", "toString", "utility", "constructor"]), [
       'new tag "Data_Pipeline" must be lowercase kebab-case',
       'new tag "toString" must be lowercase kebab-case',
-      'tag "utility" is already defined in tags.toml',
-      'tag "constructor" is already defined in tags.toml',
+      'tag "utility" is already defined in the tag list',
+      'tag "constructor" is already defined in the tag list',
       'new tag "unused-tag" is not used by the entry',
     ]);
     assert.deepEqual(validateNewTags(tags, [newTags[0]], ["data-pipeline"]), []);
@@ -149,7 +149,7 @@ describe("validation", () => {
       "external no-description: missing required field: description",
       "external no-description: provider must be a string",
       'repository paused: invalid status "paused"',
-      'repository paused: tag "unknown" is not defined in tags.toml',
+      'repository paused: tag "unknown" is not defined in the tag list',
       "repository bad-tags: description must be a string",
       "repository bad-tags: tags must be a list of strings",
     ]);
@@ -163,7 +163,7 @@ describe("validation", () => {
     const { errors } = validateCatalog(snapshot([
       entry("repository", "tagged", { description: "Tagged.", tags: [...inherited, "utility"] }),
     ], { tags }), NO_FACTS);
-    assert.deepEqual(errors, inherited.map((name) => `repository tagged: tag ${JSON.stringify(name)} is not defined in tags.toml`));
+    assert.deepEqual(errors, inherited.map((name) => `repository tagged: tag ${JSON.stringify(name)} is not defined in the tag list`));
   });
 
   test("accepts an inherited name that the tags table defines as its own key", () => {
@@ -240,7 +240,7 @@ describe("validation", () => {
   test("reports load errors, tags, local paths, and the ignore rule", () => {
     const result = validateCatalog(
       snapshot([entry("repository", "alpha-app", { description: "Alpha." })], {
-        loadErrors: ["systems/broken.toml: invalid TOML: bad"],
+        loadErrors: ["system broken: invalid TOML: bad"],
         tags: { library: 3 },
         tagsExists: false,
         localPaths: { "alpha-app": "/work/alpha-app", stripe: "/work/stripe", other: 5 },
@@ -251,17 +251,17 @@ describe("validation", () => {
       },
     );
     assert.deepEqual(result.errors, [
-      "systems/broken.toml: invalid TOML: bad",
-      "tags.toml is missing",
-      'tags.toml: description for "library" must be a string',
-      'local/paths.toml: path does not exist: /work/alpha-app for "alpha-app"',
-      'local/paths.toml: "stripe" does not name a repository',
-      'local/paths.toml: path for "other" must be a string',
-      "local/paths.toml is not ignored by Git",
+      "system broken: invalid TOML: bad",
+      "the tag list is missing",
+      'the tag list: description for "library" must be a string',
+      'the local paths: path does not exist: /work/alpha-app for "alpha-app"',
+      'the local paths: "stripe" does not name a repository',
+      'the local paths: path for "other" must be a string',
+      "the local paths are not ignored by Git",
     ]);
     assert.deepEqual(
       validateCatalog(snapshot([], { localPaths: null, localPathsExists: false }), { ...NO_FACTS, localPathsIgnored: { error: "spawn failed" } }),
-      { errors: ["could not check Git ignore rule: spawn failed"], warnings: ["local/paths.toml is missing; local path checks were skipped"] },
+      { errors: ["could not check Git ignore rule: spawn failed"], warnings: ["the local paths are missing; local path checks were skipped"] },
     );
   });
 });

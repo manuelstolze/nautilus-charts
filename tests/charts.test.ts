@@ -84,7 +84,36 @@ describe("catalog validation", () => {
   test("accepts a missing local paths file", () => {
     const result = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
     assert.deepEqual(result.errors, []);
-    assert.ok(result.warnings.some((warning) => warning.includes("local/paths.toml is missing")));
+    assert.ok(result.warnings.some((warning) => warning.includes("the local paths are missing")));
+  });
+
+  test("keeps store paths out of add, set, and check output", () => {
+    writeFileSync(join(root, ".gitignore"), "/repositories/*.toml\n/externals/*.toml\n/local/paths.toml\n", "utf8");
+    write("systems/broken.toml", "description = [\n");
+
+    const addArguments = ["add", "repository", "new-repo", "--data", '{"description":"New repository."}'];
+    const setArguments = ["set", "alpha-app", "--data", '{"description":"Updated application."}'];
+    for (const json of [false, true]) {
+      const format = json ? "--json" : undefined;
+      for (const arguments_ of [addArguments, setArguments, ["check"]]) {
+        const result = capture(() => main(format ? [...arguments_, format] : arguments_, root));
+        assert.equal(result.result, 3);
+        const output = [...result.output, ...result.errors].join("\n");
+        assert.match(output, /system broken: invalid TOML/);
+        assert.match(output, /the local paths are missing/);
+        assert.doesNotMatch(output, /\.toml|(?:repositories|systems|externals|local)\//);
+      }
+
+      const unignored = capture(() => main(
+        format
+          ? ["add", "system", "new-system", "--data", '{"description":"New system."}', format]
+          : ["add", "system", "new-system", "--data", '{"description":"New system."}'],
+        root,
+      ));
+      assert.equal(unignored.result, 3);
+      assert.match([...unignored.output, ...unignored.errors].join("\n"), /system new-system is not ignored by Git/);
+      assert.doesNotMatch([...unignored.output, ...unignored.errors].join("\n"), /\.toml|(?:repositories|systems|externals|local)\//);
+    }
   });
 
   test("reports invalid TOML, unknown fields, and missing required fields", () => {
@@ -92,7 +121,7 @@ describe("catalog validation", () => {
     write("systems/unknown.toml", 'description = "Extra field."\nextra = true\n');
     write("externals/no-description.toml", 'provider = "vendor"\n');
     const { errors } = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
-    assert.ok(errors.some((error) => error.includes("systems/broken.toml: invalid TOML")));
+    assert.ok(errors.some((error) => error.includes("system broken: invalid TOML")));
     assert.ok(errors.some((error) => error.includes("unknown field(s): extra")));
     assert.ok(errors.some((error) => error.includes("missing required field: description")));
   });
@@ -169,7 +198,7 @@ describe("catalog validation", () => {
     writeFileSync(join(root, ".gitignore"), "", "utf8");
     write("local/paths.toml", 'alpha-app = "/missing"\n');
     const { errors } = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
-    assert.ok(errors.some((error) => error.includes("local/paths.toml is not ignored")));
+    assert.ok(errors.some((error) => error.includes("the local paths are not ignored")));
   });
 
   test("accepts a repository key and returns it from show and find", () => {
@@ -231,15 +260,15 @@ describe("catalog validation", () => {
     const { errors } = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
 
     for (const id of ["lower-key", "short-key", "long-key", "digit-key", "number-key"]) {
-      assert.deepEqual(errors.filter((error) => error.startsWith(`repositories/${id}.toml:`)), [`repositories/${id}.toml: ${form}`]);
+      assert.deepEqual(errors.filter((error) => error.startsWith(`repository ${id}:`)), [`repository ${id}: ${form}`]);
     }
     assert.deepEqual(
       errors.filter((error) => error.includes("duplicate key")),
-      ['repositories/second-key.toml: duplicate key "NBR"; also used by repositories/first-key.toml'],
+      ['repository second-key: duplicate key "NBR"; also used by repository first-key'],
     );
     assert.deepEqual(
-      errors.filter((error) => error.startsWith("systems/system-key.toml:")),
-      ["systems/system-key.toml: unknown field(s): key"],
+      errors.filter((error) => error.startsWith("system system-key:")),
+      ["system system-key: unknown field(s): key"],
     );
   });
 
@@ -262,10 +291,10 @@ describe("catalog validation", () => {
     write("repositories/inherited-tags.toml", 'description = "Inherited tags."\ntags = ["toString", "constructor", "__proto__", "utility"]\n');
     const { result, output } = capture(() => main(["check"], root));
     assert.notEqual(result, 0);
-    assert.deepEqual(output.filter((line) => line.includes("repositories/inherited-tags.toml")), [
-      'ERROR: repositories/inherited-tags.toml: tag "toString" is not defined in tags.toml',
-      'ERROR: repositories/inherited-tags.toml: tag "constructor" is not defined in tags.toml',
-      'ERROR: repositories/inherited-tags.toml: tag "__proto__" is not defined in tags.toml',
+    assert.deepEqual(output.filter((line) => line.includes("repository inherited-tags")), [
+      'ERROR: repository inherited-tags: tag "toString" is not defined in the tag list',
+      'ERROR: repository inherited-tags: tag "constructor" is not defined in the tag list',
+      'ERROR: repository inherited-tags: tag "__proto__" is not defined in the tag list',
     ]);
   });
 
@@ -406,7 +435,7 @@ describe("charts add", () => {
         const payload = JSON.parse(result.output.join("\n"));
         const directory = kind === "system" ? "systems" : "repositories";
         assert.equal(payload.error.code, "invalid-entry");
-        assert.deepEqual(payload.error.details.errors, [`${directory}/${id}.toml: ${form}`]);
+        assert.deepEqual(payload.error.details.errors, [`${kind} ${id}: ${form}`]);
         assert.equal(existsSync(join(root, `${directory}/${id}.toml`)), false);
       }
     }
@@ -521,7 +550,7 @@ describe("charts add", () => {
     const payload = JSON.parse(result.output.join("\\n"));
     assert.equal(result.result, 0);
     assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), `stale-json = ${JSON.stringify(localRepository)}  # note\n`);
-    assert.deepEqual(payload.validation.warnings, ['replaced the existing local path for "stale-json" in local/paths.toml']);
+    assert.deepEqual(payload.validation.warnings, ['replaced the existing local path for "stale-json" in the local paths']);
     assert.equal(capture(() => main(["check"], root)).result, 0);
   });
 
@@ -547,7 +576,7 @@ describe("charts add", () => {
       readFileSync(join(root, "local/paths.toml"), "utf8"),
       `\uFEFF"bom-path" = ${JSON.stringify(newRepository)} # note\r\n`,
     );
-    assert.deepEqual(payload.validation.warnings, ['replaced the existing local path for "bom-path" in local/paths.toml']);
+    assert.deepEqual(payload.validation.warnings, ['replaced the existing local path for "bom-path" in the local paths']);
   });
 
   test("keeps CRLF when it appends a local path", () => {
@@ -586,7 +615,7 @@ describe("charts add", () => {
       ["--local-path", localRepository],
     );
     assert.equal(result.result, 0);
-    assert.ok(result.output.includes('WARNING: replaced the existing local path for "stale-text" in local/paths.toml'));
+    assert.ok(result.output.includes('WARNING: replaced the existing local path for "stale-text" in the local paths'));
     assert.equal(capture(() => main(["check"], root)).result, 0);
   });
 
@@ -611,7 +640,7 @@ describe("charts add", () => {
       const payload = JSON.parse(result.output.join("\\n"));
       assert.equal(result.result, 3, id);
       assert.deepEqual(payload.error.details.errors, [
-        `local/paths.toml: cannot replace the existing local path for ${JSON.stringify(id)}; edit the file by hand`,
+        `the local paths: cannot replace the existing local path for ${JSON.stringify(id)}; edit the file by hand`,
       ]);
       assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), text);
       assert.equal(existsSync(join(root, `repositories/${id}.toml`)), false);
@@ -819,7 +848,7 @@ describe("charts add", () => {
     const result = add("repository", "missing-tag", { description: "Missing tag.", tags: ["data-pipeline"] }, ["--json"]);
     const payload = JSON.parse(result.output.join("\\n"));
     assert.equal(result.result, 3);
-    assert.ok(payload.error.details.errors.includes('repositories/missing-tag.toml: tag "data-pipeline" is not defined in tags.toml'));
+    assert.ok(payload.error.details.errors.includes('repository missing-tag: tag "data-pipeline" is not defined in the tag list'));
     assert.equal(existsSync(join(root, "repositories/missing-tag.toml")), false);
     assert.equal(readFileSync(join(root, "tags.toml"), "utf8"), originalTags);
     assert.equal(existsSync(join(root, "local/paths.toml")), false);
@@ -1084,9 +1113,9 @@ describe("charts set", () => {
     write("local/paths.toml", "external path change\n");
     write("tags.toml", "external tag change\n");
     const errors = updated.rollback();
-    assert.ok(errors.includes("repositories/alpha-app.toml changed during rollback and was not restored"));
-    assert.ok(errors.includes("local/paths.toml changed during rollback and was not restored"));
-    assert.ok(errors.includes("tags.toml changed during rollback and was not restored"));
+    assert.ok(errors.includes("repository alpha-app changed during rollback and was not restored"));
+    assert.ok(errors.includes("the local paths changed during rollback and could not be restored"));
+    assert.ok(errors.includes("the tag list changed during rollback and could not be restored"));
     assert.equal(readFileSync(join(root, "repositories/alpha-app.toml"), "utf8"), "external entry change\n");
     assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), "external path change\n");
     assert.equal(readFileSync(join(root, "tags.toml"), "utf8"), "external tag change\n");
@@ -1300,9 +1329,9 @@ describe("typed errors", () => {
       ["add", "system", "unignored", "--data", '{"description":"Unignored."}'],
       "refused",
       3,
-      "could not add system unignored: Git does not ignore the entry file",
+      "could not add system unignored: Git does not ignore the entry",
     );
-    assert.deepEqual(error.details.errors, ["systems/unignored.toml is not ignored by Git"]);
+    assert.deepEqual(error.details.errors, ["system unignored is not ignored by Git"]);
     assert.equal(existsSync(join(root, "systems/unignored.toml")), false);
   });
 
@@ -1338,8 +1367,8 @@ describe("typed errors", () => {
       "could not add repository bad-repo: validation failed",
     );
     assert.deepEqual(added.details, {
-      errors: ['repositories/bad-repo.toml: tag "unknown" is not defined in tags.toml'],
-      warnings: ['repositories/bad-repo.toml: depends-on[0] points to archived entry "old-api"'],
+      errors: ['repository bad-repo: tag "unknown" is not defined in the tag list'],
+      warnings: ['repository bad-repo: depends-on[0] points to archived entry "old-api"'],
     });
     const updated = assertError(
       ["set", "beta-lib", "--data", JSON.stringify({ system: "missing" })],
@@ -1347,7 +1376,7 @@ describe("typed errors", () => {
       3,
       "could not set repository beta-lib: validation failed",
     );
-    assert.deepEqual(updated.details, { errors: ['repositories/beta-lib.toml: system "missing" does not name a system'], warnings: [] });
+    assert.deepEqual(updated.details, { errors: ['repository beta-lib: system "missing" does not name a system'], warnings: [] });
   });
 
   test("deps on an external entry is a usage error with the ID", () => {
