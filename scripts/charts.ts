@@ -1,17 +1,22 @@
 #!/usr/bin/env node
 // The composition root: it wires the adapters to the use cases.
+import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   parseArgs,
+  readInvocation,
   renderAdd,
   renderCheck,
+  renderDescribe,
   renderEdges,
   renderError,
   renderFind,
+  renderHelp,
   renderShow,
   renderSet,
   renderUsageError,
+  type ModuleInfo,
   type Options,
 } from "../src/adapters/cli.ts";
 import { GitCli } from "../src/adapters/git-cli.ts";
@@ -26,7 +31,14 @@ import { set } from "../src/commands/set.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
+/** The module's name and version from `package.json`, the one place that holds the version. */
+export function moduleInfo(): ModuleInfo {
+  const { version } = JSON.parse(readFileSync(resolve(ROOT, "package.json"), "utf8")) as { version: string };
+  return { module: "charts", version };
+}
+
 export function main(argv = process.argv.slice(2), root = ROOT): number {
+  if (readInvocation(argv).help) return renderHelp();
   let options: Options;
   try {
     options = parseArgs(argv);
@@ -62,6 +74,8 @@ export function main(argv = process.argv.slice(2), root = ROOT): number {
         return renderEdges(options.json, deps(ports, options.id!), false);
       case "rdeps":
         return renderEdges(options.json, rdeps(ports, options.id!), true);
+      case "describe":
+        return renderDescribe(options.json, moduleInfo());
     }
   } catch (error) {
     return renderError(options.json, error);
