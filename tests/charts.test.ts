@@ -1355,6 +1355,19 @@ describe("typed errors", () => {
     assert.deepEqual(error.details, { id: "stripe" });
   });
 
+  test("-h as an option value is not a request for help", () => {
+    const result = capture(() => main(["set", "alpha-app", "--local-path", "-h", "--json"], root));
+    assert.equal(result.result, 3, result.output.join("\n"));
+    assert.equal(JSON.parse(result.output.join("\n")).error.code, "invalid-entry");
+    assert.ok(capture(() => main(["-h"], root)).output[0].startsWith("Usage: charts"));
+  });
+
+  test("--json before the command applies to it", () => {
+    const result = capture(() => main(["--json", "find", "alpha-app"], root));
+    assert.equal(result.result, 0, result.errors.join("\n"));
+    assert.deepEqual(JSON.parse(result.output.join("\n")).entries.map((entry: { id: string }) => entry.id), ["alpha-app"]);
+  });
+
   test("an error that is not a Charts error is external", () => {
     const json = capture(() => renderError(true, new Error("disk full")));
     assert.equal(json.result, 4);

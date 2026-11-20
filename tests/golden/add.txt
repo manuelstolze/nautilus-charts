@@ -673,7 +673,7 @@ exit: 1
 {
   "error": {
     "code": "usage",
-    "message": "add requires --data '<JSON>'",
+    "message": "--local-path requires a value",
     "details": {}
   }
 }

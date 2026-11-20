@@ -41,10 +41,16 @@ export function moduleInfo(): ModuleInfo {
 export function main(argv = process.argv.slice(2), root = ROOT): number {
   const invocation = readInvocation(argv);
   if (invocation.help) return renderHelp();
-  if (invocation.version) return renderVersion(invocation.json, moduleInfo());
+  if (invocation.version) {
+    try {
+      return renderVersion(invocation.json, moduleInfo());
+    } catch (error) {
+      return renderError(invocation.json, error);
+    }
+  }
   let options: Options;
   try {
-    options = parseArgs(argv);
+    options = { ...parseArgs(invocation.args), json: invocation.json };
   } catch (error) {
     return renderUsageError(argv, error);
   }
