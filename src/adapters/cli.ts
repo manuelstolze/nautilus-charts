@@ -417,11 +417,15 @@ export function helpText(): string {
 
 export type Invocation = { json: boolean; help: boolean; version: boolean; args: string[] };
 
-/** Detects `--json` anywhere in the arguments and a request for help or for the version. */
+/**
+ * Splits off `--json` anywhere in the arguments and detects a request for help
+ * or for the version. Help needs `--help` or `-h` in place of the command, so
+ * an option value such as `--local-path -h` is not read as one.
+ */
 export function readInvocation(argv: string[]): Invocation {
   const json = argv.includes("--json");
   const args = argv.filter((argument) => argument !== "--json");
-  const help = args.length === 0 || args.includes("--help") || args.includes("-h");
+  const help = args.length === 0 || args[0] === "--help" || args[0] === "-h";
   const version = args.length === 1 && args[0] === "--version";
   return { json, help, version, args };
 }
