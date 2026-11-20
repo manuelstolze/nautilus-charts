@@ -2,7 +2,7 @@
 $ charts "add" "system" "new-system" "--data" "{\"description\":\"Line one.\\nLine two.\",\"name\":\"Quoted \\\"System\\\"\",\"status\":\"planned\"}"
 exit: 0
 --- stdout
-Created system new-system at systems/new-system.toml; validation ok
+Created system new-system; validation ok
 --- stderr
 --- file systems/new-system.toml
 name = "Quoted \"System\""
@@ -17,7 +17,6 @@ exit: 0
   "ok": true,
   "type": "system",
   "id": "new-system",
-  "path": "systems/new-system.toml",
   "validation": {
     "ok": true,
     "errors": [],
@@ -34,7 +33,7 @@ status = "planned"
 $ charts "add" "repository" "new-repo" "--data" "{\"depends-on\":[{\"id\":\"beta-lib\",\"via\":\"npm package\"},{\"id\":\"stripe\"}],\"tags\":[\"library\",\"utility\"],\"system\":\"alpha\",\"key\":\"NEW\",\"remote\":\"https://example.com/shop/new-repo.git\",\"description\":\"A new repository.\",\"default-branch\":\"main\"}" "--local-path" "<TMP>/work/new-repo"
 exit: 0
 --- stdout
-Created repository new-repo at repositories/new-repo.toml; validation ok
+Created repository new-repo; validation ok
 --- stderr
 --- file repositories/new-repo.toml
 description = "A new repository."
@@ -56,7 +55,6 @@ exit: 0
   "ok": true,
   "type": "repository",
   "id": "new-repo",
-  "path": "repositories/new-repo.toml",
   "validation": {
     "ok": true,
     "errors": [],
@@ -80,7 +78,7 @@ new-repo = "<TMP>/work/new-repo"
 $ charts "add" "repository" "fresh-repo" "--data" "{\"description\":\"Fresh.\"}" "--local-path" "<TMP>/work/fresh-repo"
 exit: 0
 --- stdout
-Created repository fresh-repo at repositories/fresh-repo.toml; validation ok
+Created repository fresh-repo; validation ok
 --- stderr
 --- file repositories/fresh-repo.toml
 description = "Fresh."
@@ -95,7 +93,6 @@ exit: 0
   "ok": true,
   "type": "repository",
   "id": "fresh-repo",
-  "path": "repositories/fresh-repo.toml",
   "validation": {
     "ok": true,
     "errors": [],
@@ -112,8 +109,8 @@ fresh-repo = "<TMP>/work/fresh-repo"
 $ charts "add" "external" "new-api" "--data" "{\"kind\":\"saas\",\"provider\":\"example\",\"description\":\"New API.\"}"
 exit: 0
 --- stdout
-WARNING: repositories/delta-app.toml: depends-on[0] points to deprecated entry "gamma-app"
-Created external new-api at externals/new-api.toml; validation ok
+WARNING: repository delta-app: depends-on[0] points to deprecated entry "gamma-app"
+Created external new-api; validation ok
 --- stderr
 --- file externals/new-api.toml
 description = "New API."
@@ -128,12 +125,11 @@ exit: 0
   "ok": true,
   "type": "external",
   "id": "new-api",
-  "path": "externals/new-api.toml",
   "validation": {
     "ok": true,
     "errors": [],
     "warnings": [
-      "repositories/delta-app.toml: depends-on[0] points to deprecated entry \"gamma-app\""
+      "repository delta-app: depends-on[0] points to deprecated entry \"gamma-app\""
     ]
   }
 }
@@ -147,13 +143,13 @@ kind = "saas"
 $ charts "add" "repository" "bad-input" "--data" "{\"description\":\"Bad.\",\"key\":\"ALP\",\"status\":\"paused\",\"tags\":[\"unknown\"],\"extra\":1,\"depends-on\":[{\"id\":\"alpha\"},{\"id\":\"old-api\"}]}"
 exit: 3
 --- stdout
-WARNING: repositories/bad-input.toml: depends-on[1] points to archived entry "old-api"
+WARNING: repository bad-input: depends-on[1] points to archived entry "old-api"
 --- stderr
-ERROR: repositories/bad-input.toml: unknown field(s): extra
-ERROR: repositories/bad-input.toml: invalid status "paused"
-ERROR: repositories/bad-input.toml: duplicate key "ALP"; also used by repositories/alpha-app.toml
-ERROR: repositories/bad-input.toml: tag "unknown" is not defined in tags.toml
-ERROR: repositories/bad-input.toml: depends-on[0] ID "alpha" is not a repository or external
+ERROR: repository bad-input: unknown field(s): extra
+ERROR: repository bad-input: invalid status "paused"
+ERROR: repository bad-input: duplicate key "ALP"; also used by repository alpha-app
+ERROR: repository bad-input: tag "unknown" is not defined in the tag list
+ERROR: repository bad-input: depends-on[0] ID "alpha" is not a repository or external
 ERROR: could not add repository bad-input: validation failed
 --- file repositories/bad-input.toml
 (absent)
@@ -168,14 +164,14 @@ exit: 3
     "message": "could not add repository bad-input: validation failed",
     "details": {
       "errors": [
-        "repositories/bad-input.toml: unknown field(s): extra",
-        "repositories/bad-input.toml: invalid status \"paused\"",
-        "repositories/bad-input.toml: duplicate key \"ALP\"; also used by repositories/alpha-app.toml",
-        "repositories/bad-input.toml: tag \"unknown\" is not defined in tags.toml",
-        "repositories/bad-input.toml: depends-on[0] ID \"alpha\" is not a repository or external"
+        "repository bad-input: unknown field(s): extra",
+        "repository bad-input: invalid status \"paused\"",
+        "repository bad-input: duplicate key \"ALP\"; also used by repository alpha-app",
+        "repository bad-input: tag \"unknown\" is not defined in the tag list",
+        "repository bad-input: depends-on[0] ID \"alpha\" is not a repository or external"
       ],
       "warnings": [
-        "repositories/bad-input.toml: depends-on[1] points to archived entry \"old-api\""
+        "repository bad-input: depends-on[1] points to archived entry \"old-api\""
       ]
     }
   }
@@ -189,7 +185,7 @@ $ charts "add" "system" "no-description" "--data" "{\"name\":\"No description\"}
 exit: 3
 --- stdout
 --- stderr
-ERROR: systems/no-description.toml: missing required field: description
+ERROR: system no-description: missing required field: description
 ERROR: could not add system no-description: validation failed
 --- file systems/no-description.toml
 (absent)
@@ -204,7 +200,7 @@ exit: 3
     "message": "could not add system no-description: validation failed",
     "details": {
       "errors": [
-        "systems/no-description.toml: missing required field: description"
+        "system no-description: missing required field: description"
       ],
       "warnings": []
     }
@@ -279,8 +275,8 @@ $ charts "add" "system" "unignored" "--data" "{\"description\":\"Unignored.\"}"
 exit: 3
 --- stdout
 --- stderr
-ERROR: systems/unignored.toml is not ignored by Git
-ERROR: could not add system unignored: Git does not ignore the entry file
+ERROR: system unignored is not ignored by Git
+ERROR: could not add system unignored: Git does not ignore the entry
 --- file systems/unignored.toml
 (absent)
 
@@ -291,10 +287,10 @@ exit: 3
 {
   "error": {
     "code": "refused",
-    "message": "could not add system unignored: Git does not ignore the entry file",
+    "message": "could not add system unignored: Git does not ignore the entry",
     "details": {
       "errors": [
-        "systems/unignored.toml is not ignored by Git"
+        "system unignored is not ignored by Git"
       ],
       "warnings": []
     }
@@ -309,7 +305,7 @@ $ charts "add" "repository" "rollback-repo" "--data" "{\"description\":\"Rollbac
 exit: 3
 --- stdout
 --- stderr
-ERROR: local/paths.toml: path does not exist: <TMP>/work/absent for "rollback-repo"
+ERROR: the local paths: path does not exist: <TMP>/work/absent for "rollback-repo"
 ERROR: could not add repository rollback-repo: validation failed
 --- file repositories/rollback-repo.toml
 (absent)
@@ -326,7 +322,7 @@ exit: 3
     "message": "could not add repository rollback-repo: validation failed",
     "details": {
       "errors": [
-        "local/paths.toml: path does not exist: <TMP>/work/absent for \"rollback-repo\""
+        "the local paths: path does not exist: <TMP>/work/absent for \"rollback-repo\""
       ],
       "warnings": []
     }
@@ -343,7 +339,7 @@ $ charts "add" "repository" "rollback-new" "--data" "{\"description\":\"Rollback
 exit: 3
 --- stdout
 --- stderr
-ERROR: local/paths.toml: remote does not match "https://example.com/wanted.git" for "rollback-new"
+ERROR: the local paths: remote does not match "https://example.com/wanted.git" for "rollback-new"
 ERROR: could not add repository rollback-new: validation failed
 --- file repositories/rollback-new.toml
 (absent)
@@ -360,7 +356,7 @@ exit: 3
     "message": "could not add repository rollback-new: validation failed",
     "details": {
       "errors": [
-        "local/paths.toml: remote does not match \"https://example.com/wanted.git\" for \"rollback-new\""
+        "the local paths: remote does not match \"https://example.com/wanted.git\" for \"rollback-new\""
       ],
       "warnings": []
     }
@@ -377,7 +373,7 @@ $ charts "add" "system" "after-broken" "--data" "{\"description\":\"After broken
 exit: 3
 --- stdout
 --- stderr
-ERROR: systems/unknown.toml: unknown field(s): extra
+ERROR: system unknown: unknown field(s): extra
 ERROR: could not add system after-broken: validation failed
 --- file systems/after-broken.toml
 (absent)
@@ -392,7 +388,7 @@ exit: 3
     "message": "could not add system after-broken: validation failed",
     "details": {
       "errors": [
-        "systems/unknown.toml: unknown field(s): extra"
+        "system unknown: unknown field(s): extra"
       ],
       "warnings": []
     }
@@ -407,7 +403,7 @@ $ charts "add" "repository" "map-error" "--data" "{\"description\":\"Map error.\
 exit: 3
 --- stdout
 --- stderr
-ERROR: cannot update local/paths.toml: Invalid TOML document: invalid value
+ERROR: cannot update the local paths: Invalid TOML document: invalid value
 
 1:  alpha-app = [
 
@@ -427,7 +423,7 @@ exit: 3
     "message": "could not add repository map-error: validation failed",
     "details": {
       "errors": [
-        "cannot update local/paths.toml: Invalid TOML document: invalid value\n\n1:  alpha-app = [\n"
+        "cannot update the local paths: Invalid TOML document: invalid value\n\n1:  alpha-app = [\n"
       ],
       "warnings": []
     }

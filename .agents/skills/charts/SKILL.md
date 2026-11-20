@@ -68,3 +68,8 @@ If a result is ambiguous, ask the catalog owner which entry they mean. A path in
 ## Check
 
 Run `charts check` after every catalog change and before you report completion. The command checks entry data, references, tags, local paths, configured remotes, and the Git ignore rule for `local/paths.toml`. Errors cause exit code 3 and the report lists them. Warnings alone do not.
+
+Success from `add` and `set` names the entry by type and ID and reports validation. It does not expose a Charts store location. Findings name entries or catalog parts, for example:
+
+- `repository shop: tag "unknown" is not defined in the tag list`
+- `the local paths are missing; local path checks were skipped`
