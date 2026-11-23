@@ -52,6 +52,8 @@ beforeEach(() => {
     GIT_COMMITTER_NAME: "Test",
     GIT_COMMITTER_EMAIL: "test@example.com",
   };
+  // A Git hook may export these; they would point Git at the wrong repository.
+  for (const name of ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"]) delete env[name];
   git(temporary, "init", "-q", "--bare", remote);
   git(temporary, "init", "-q", "-b", "main", work);
   writeFileSync(join(work, "package.json"), `${JSON.stringify({ name: "shop", version: "1.2.3" })}\n`, "utf8");
@@ -97,6 +99,22 @@ describe("tag-version script", () => {
     assert.match(result.stdout, /v1\.2\.3 already exists/);
     assert.deepEqual(remoteTags(), [`v1.2.3 ${tagged}`]);
     assert.equal(git(work, "tag", "--list"), "");
+  });
+
+  test("tags HEAD and pushes when only a stale local v<version> exists", () => {
+    git(work, "tag", "v1.2.3");
+    const head = commit("second");
+    const result = runScript();
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(remoteTags(), [`v1.2.3 ${head}`]);
+  });
+
+  test("fails without tagging when package.json has no version", () => {
+    writeFileSync(join(work, "package.json"), `${JSON.stringify({ name: "shop" })}\n`, "utf8");
+    const result = runScript();
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /package\.json has no version/);
+    assert.deepEqual(remoteTags(), []);
   });
 
   test("fails with a non-zero exit when a Git command fails", () => {
