@@ -116,7 +116,7 @@ Charts has a semantic version in `package.json`, which `charts --version` and `c
 - **Minor:** a command, option, `--json` field, or error code is added.
 - **Patch:** a change that callers cannot see, such as a fix or a documentation change.
 
-A change that changes the contract sets the new version in `package.json` in its merge request. After the merge, the change owner tags the merge commit with `v<version>`, for example `git tag v1.0.0 && git push origin v1.0.0`.
+A change that changes the contract sets the new version in `package.json` in its merge request. After the merge, the [`tag-version` workflow](./.github/workflows/tag-version.yml) tags `v<version>` on `main`; do not tag by hand.
 
 ## Validation
 
