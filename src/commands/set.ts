@@ -1,5 +1,5 @@
 import { CatalogIndex } from "../domain/catalog.ts";
-import { entryFile, errorMessage, isRecord, type Data, type Finding, type Kind } from "../domain/entry.ts";
+import { ENTRY_DIRS, errorMessage, isRecord, type Data, type Finding, type Kind } from "../domain/entry.ts";
 import { ChartsError, entryNotFound, type ErrorCode } from "../domain/errors.ts";
 import {
   mergeEntryData,
@@ -19,7 +19,7 @@ export type SetOptions = {
   replaceKey?: boolean;
 };
 export type SetResult =
-  | { ok: true; type: Kind; id: string; path: string; changed: string[]; newTags: string[]; validation: Finding }
+  | { ok: true; type: Kind; id: string; changed: string[]; newTags: string[]; validation: Finding }
   | { ok: false; error: ChartsError };
 
 function containsNull(value: unknown): boolean {
@@ -49,10 +49,10 @@ export function set(ports: Ports, options: SetOptions): SetResult {
 
   if (!current) {
     if (store.entryFileExists(options.id)) {
-      const unreadablePath = snapshot.loadErrors
-        .map((error) => error.slice(0, error.indexOf(":")))
-        .find((file) => file.endsWith(`/${options.id}.toml`));
-      return failure([unreadablePath ? `cannot read entry ${unreadablePath}` : `entry ${JSON.stringify(options.id)} exists but cannot be read`]);
+      const unreadable = snapshot.loadErrors.find((error) =>
+        ENTRY_DIRS.some(([kind]) => error.startsWith(`${kind} ${options.id}:`))
+      );
+      return failure([unreadable ?? `entry ${JSON.stringify(options.id)} exists but cannot be read`]);
     }
     return { ok: false, error: entryNotFound(options.id) };
   }
@@ -70,7 +70,7 @@ export function set(ports: Ports, options: SetOptions): SetResult {
 
   const ignored = git.isIgnored(path);
   if ("error" in ignored) return failure([`could not check Git ignore rule: ${ignored.error}`], "external", [], "the Git ignore rule could not be checked");
-  if (!ignored.ignored) return failure([`${path} is not ignored by Git`], "refused", [], "Git does not ignore the entry file");
+  if (!ignored.ignored) return failure([`${current.kind} ${options.id} is not ignored by Git`], "refused", [], "Git does not ignore the entry");
 
   const merged = mergeEntryData(current.data, data ?? {});
   if (
@@ -79,11 +79,11 @@ export function set(ports: Ports, options: SetOptions): SetResult {
     && merged.changed.includes("key")
     && !replaceKey
   ) {
-    return failure([`${path}: changing an existing key requires --replace-key`]);
+    return failure([`${current.kind} ${options.id}: changing an existing key requires --replace-key`]);
   }
 
   const newTagErrors = validateNewTags(index.snapshot.tags, newTags, merged.data.tags);
-  if (newTagErrors.length) return failure(newTagErrors.map((error) => `${path}: ${error}`));
+  if (newTagErrors.length) return failure(newTagErrors);
 
   const effectiveTags = Object.assign(Object.create(null) as Data, index.snapshot.tags);
   for (const tag of newTags) Object.defineProperty(effectiveTags, tag.name, { value: tag.description, enumerable: true, writable: true });
@@ -98,7 +98,6 @@ export function set(ports: Ports, options: SetOptions): SetResult {
       ok: true,
       type,
       id: options.id,
-      path,
       changed: [],
       newTags: [],
       validation: finding,
@@ -134,7 +133,6 @@ export function set(ports: Ports, options: SetOptions): SetResult {
     ok: true,
     type,
     id: options.id,
-    path: entryFile(current.kind, options.id),
     changed: merged.changed,
     newTags: newTags.map(({ name }) => name),
     validation,

@@ -181,7 +181,7 @@ For repository `show --json`, Charts adds `resolved_ticket_key` and `ticket_key_
 - Files that are not valid TOML or have unknown or missing fields.
 - IDs that are not kebab-case or that repeat across entry types.
 - Repository keys with an invalid form or used by more than one repository.
-- `ticket-key` values that do not match the stated form, with the entry file and rule.
+- `ticket-key` values that do not match the stated form, with the entry label and rule.
 - `system` and `depends-on` IDs that name no entry, and repositories that depend on themselves.
 - Tags missing from `tags.toml` and invalid status values.
 - Local paths that are missing or not Git repositories, and local paths whose Git remotes do not match `remote`.
@@ -237,7 +237,7 @@ For a missing repository tag, propose a lowercase kebab-case name and a descript
 
 After writing, Charts validates the full catalog. If a write or validation fails, it removes the new entry and restores `local/paths.toml` and `tags.toml` to their prior contents. It does not overwrite a file that changed after Charts wrote it; it reports a rollback error instead. `tags.toml` is shared and tracked by Git. A successful add leaves it uncommitted. Charts never stages or commits it; the catalog owner decides whether to commit it. Entry and path files stay ignored by Git. The Charts skill asks the catalog owner to confirm a proposed remote before adding it.
 
-Use `--json` for machine-readable results. Success reports the type, ID, path, and validation result. When new tags are added, it also reports `new_tags` in option order. Text output names the tags and says that the shared tag list has uncommitted changes. Failure prints an error object, `invalid-entry` with the validation errors and warnings in `details` when validation fails ([Errors and exit codes](#errors-and-exit-codes)).
+Use `--json` for machine-readable results. Success reports the type, ID, and validation result. It does not report a Charts store path. When new tags are added, it also reports `new_tags` in option order. Text output names the tags and says that the shared tag list has uncommitted changes. Catalog findings name an entry or catalog part, for example `repository shop: tag "unknown" is not defined in the tag list` or `the local paths are missing; local path checks were skipped`. Failure prints an error object, `invalid-entry` with the validation errors and warnings in `details` when validation fails ([Errors and exit codes](#errors-and-exit-codes)).
 
 ## Updating and removing entries
 

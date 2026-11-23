@@ -79,6 +79,8 @@ charts describe [--json]
 charts --version [--json]
 ```
 
+`add` and `set` success results identify the entry by type and ID and report validation; they do not include a Charts store path. Catalog findings name an entry or catalog part, for example `repository shop: tag "unknown" is not defined in the tag list` or `the local paths are missing; local path checks were skipped`.
+
 For example:
 
 ```bash
