@@ -1,0 +1,26 @@
+# Tags each push to main with v<version> from package.json when the tag
+# does not exist yet (nautilus-bridge ADR 0017). Nobody tags by hand.
+name: tag-version
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tag-version
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the pushed commit with its tags
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Tag v<version> if it is missing
+        run: node scripts/tag-version.mjs
