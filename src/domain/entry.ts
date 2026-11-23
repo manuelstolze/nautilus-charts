@@ -17,7 +17,7 @@ export const ENTRY_DIRS: Array<[Kind, string]> = [
 export const LOCAL_PATHS_FILE = "local/paths.toml";
 
 export function localPathReplacementWarning(id: string): string {
-  return `replaced the existing local path for ${JSON.stringify(id)} in ${LOCAL_PATHS_FILE}`;
+  return `replaced the existing local path for ${JSON.stringify(id)} in the local paths`;
 }
 
 export const STATUSES = new Set(["planned", "active", "deprecated", "archived"]);

@@ -41,7 +41,12 @@ export class MemoryStore implements CatalogStore {
       tagsExists: this.tags !== null,
       localPaths: this.localPaths,
       localPathsExists: this.localPaths !== null,
-      loadErrors: this.unreadable.map((file) => `${file}: invalid TOML: unreadable`),
+      loadErrors: this.unreadable.map((file) => {
+        const match = ENTRY_DIRS.find(([, directory]) => file.startsWith(`${directory}/`));
+        if (!match) return "catalog entry: invalid TOML: unreadable";
+        const [kind, directory] = match;
+        return `${kind} ${file.slice(directory.length + 1, -5)}: invalid TOML: unreadable`;
+      }),
     });
   }
 
@@ -60,7 +65,7 @@ export class MemoryStore implements CatalogStore {
     newTags: readonly NewTag[] = [],
   ): ReturnType<CatalogStore["createEntry"]> {
     const path = entryFile(kind, id);
-    if (this.failWrite) return { status: "failed", path, errors: [`could not write entry: ${this.failWrite}`] };
+    if (this.failWrite) return { status: "failed", path, errors: [`could not write ${kind} ${id}: ${this.failWrite}`] };
     const entry: Entry = { kind, id, data: structuredClone(data), file: path };
     const text = JSON.stringify(data);
     const previousLocalPaths = this.localPaths;
@@ -81,15 +86,15 @@ export class MemoryStore implements CatalogStore {
       if (this.changeBeforeRollback.has("localPaths")) this.localPaths = { ...(this.localPaths ?? {}), other: "changed" };
       if (this.changeBeforeRollback.has("tags")) this.tags = { ...(this.tags ?? {}), other: "changed" };
       if (newTags.length) {
-        if (this.tags !== writtenTags) errors.push("tags.toml changed during rollback and was not restored");
+        if (this.tags !== writtenTags) errors.push("the tag list changed during rollback and could not be restored");
         else this.tags = previousTags;
       }
       if (localPath !== undefined) {
-        if (this.localPaths !== writtenLocalPaths) errors.push("local/paths.toml changed during rollback and was not restored");
+        if (this.localPaths !== writtenLocalPaths) errors.push("the local paths changed during rollback and could not be restored");
         else this.localPaths = previousLocalPaths;
       }
       if (this.files.get(path) !== text) {
-        errors.push("new entry changed during rollback and was not removed");
+        errors.push(`${kind} ${id} changed during rollback and was not removed`);
       } else {
         this.entries = this.entries.filter((item) => item !== entry);
         this.files.delete(path);
@@ -110,8 +115,8 @@ export class MemoryStore implements CatalogStore {
   ): ReturnType<CatalogStore["updateEntry"]> {
     const path = entryFile(kind, id);
     const entry = this.entries.find((item) => item.kind === kind && item.id === id);
-    if (!entry) return { status: "invalid", path, errors: [`cannot read entry ${path}`] };
-    if (this.failWrite) return { status: "failed", path, errors: [`could not write entry: ${this.failWrite}`] };
+    if (!entry) return { status: "invalid", path, errors: [`cannot read ${kind} ${id}: entry does not exist`] };
+    if (this.failWrite) return { status: "failed", path, errors: [`could not write ${kind} ${id}: ${this.failWrite}`] };
 
     const previousData = structuredClone(entry.data);
     const hadFile = this.files.has(path);
@@ -140,14 +145,14 @@ export class MemoryStore implements CatalogStore {
       if (pathChanges && this.changeBeforeRollback.has("localPaths")) this.localPaths = { ...(this.localPaths ?? {}), other: "changed" };
       if (newTags.length && this.changeBeforeRollback.has("tags")) this.tags = { ...(this.tags ?? {}), other: "changed" };
       if (newTags.length) {
-        if (this.tags !== writtenTags) errors.push("tags.toml changed during rollback and was not restored");
+        if (this.tags !== writtenTags) errors.push("the tag list changed during rollback and could not be restored");
         else this.tags = previousTags;
       }
       if (pathChanges) {
-        if (this.localPaths !== writtenLocalPaths) errors.push("local/paths.toml changed during rollback and was not restored");
+        if (this.localPaths !== writtenLocalPaths) errors.push("the local paths changed during rollback and could not be restored");
         else this.localPaths = previousLocalPaths;
       }
-      if (this.files.get(path) !== text) errors.push(`${path} changed during rollback and was not restored`);
+      if (this.files.get(path) !== text) errors.push(`${kind} ${id} changed during rollback and was not restored`);
       else {
         entry.data = previousData;
         if (hadFile) this.files.set(path, previousText);

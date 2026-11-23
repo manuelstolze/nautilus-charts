@@ -195,7 +195,7 @@ describe("add use case", () => {
       [{ name: "data-pipeline", description: "Moves data." }],
     );
     assert.equal(created.status, "created");
-    assert.deepEqual(created.rollback(), ["tags.toml changed during rollback and was not restored"]);
+    assert.deepEqual(created.rollback(), ["the tag list changed during rollback and could not be restored"]);
     assert.deepEqual(store.tags, { utility: "Shared tools.", "data-pipeline": "Moves data.", other: "changed" });
   });
 
@@ -211,7 +211,6 @@ describe("add use case", () => {
       ok: true,
       type: "repository",
       id: "new-repo",
-      path: "repositories/new-repo.toml",
       validation: { errors: [], warnings: [] },
       newTags: [],
     });
@@ -236,7 +235,7 @@ describe("add use case", () => {
     });
     assert.ok(result.ok);
     const catalogWarning = result.validation.warnings.findIndex((warning) => warning.includes('deprecated entry "old-service"'));
-    const pathWarning = result.validation.warnings.findIndex((warning) => warning === 'replaced the existing local path for "new-repo" in local/paths.toml');
+    const pathWarning = result.validation.warnings.findIndex((warning) => warning === 'replaced the existing local path for "new-repo" in the local paths');
     assert.ok(catalogWarning >= 0);
     assert.ok(pathWarning > catalogWarning);
     assert.deepEqual(ports.store.localPaths, { "alpha-app": "/work/alpha-app", "new-repo": "/work/new-repo" });
@@ -254,7 +253,7 @@ describe("add use case", () => {
     });
     const error = details(failed(result, "invalid-entry"));
     assert.ok(error.errors.some((message) => message.includes("path does not exist")));
-    assert.deepEqual(error.warnings, ['replaced the existing local path for "rollback-repo" in local/paths.toml']);
+    assert.deepEqual(error.warnings, ['replaced the existing local path for "rollback-repo" in the local paths']);
     assert.deepEqual(ports.store.localPaths, original);
     assert.equal(ports.store.entries.some((entry) => entry.id === "rollback-repo"), false);
   });
@@ -281,8 +280,8 @@ describe("add use case", () => {
     ports.git.notIgnored.add("systems/new-system.toml");
     const result = add(ports, { kind: "system", id: "new-system", data: { description: "New." } });
     const error = failed(result, "refused");
-    assert.equal(error.message, "could not add system new-system: Git does not ignore the entry file");
-    assert.deepEqual(details(error).errors, ["systems/new-system.toml is not ignored by Git"]);
+    assert.equal(error.message, "could not add system new-system: Git does not ignore the entry");
+    assert.deepEqual(details(error).errors, ["system new-system is not ignored by Git"]);
     assert.equal(ports.store.files.size, 0);
   });
 
@@ -290,8 +289,8 @@ describe("add use case", () => {
     const ports = catalog();
     const result = add(ports, { kind: "repository", id: "bad", data: { description: "Bad.", key: "ALP", tags: ["unknown"] } });
     assert.deepEqual(details(failed(result, "invalid-entry")).errors, [
-      'repositories/bad.toml: duplicate key "ALP"; also used by repositories/alpha-app.toml',
-      'repositories/bad.toml: tag "unknown" is not defined in tags.toml',
+      'repository bad: duplicate key "ALP"; also used by repository alpha-app',
+      'repository bad: tag "unknown" is not defined in the tag list',
     ]);
     assert.equal(ports.store.files.size, 0);
   });
@@ -304,7 +303,7 @@ describe("add use case", () => {
       data: { description: "Inherited tag.", tags: ["toString"] },
       localPath: "/work/new-repo",
     });
-    assert.deepEqual(details(failed(result, "invalid-entry")).errors, ['repositories/inherited-tag.toml: tag "toString" is not defined in tags.toml']);
+    assert.deepEqual(details(failed(result, "invalid-entry")).errors, ['repository inherited-tag: tag "toString" is not defined in the tag list']);
     assert.ok(!ports.store.entries.some((entry) => entry.id === "inherited-tag"));
     assert.equal(ports.store.files.size, 0);
     assert.deepEqual(ports.store.localPaths, { "alpha-app": "/work/alpha-app" });
@@ -320,7 +319,7 @@ describe("add use case", () => {
       localPath: "/work/absent",
       newTags: [{ name: "data-pipeline", description: "Moves data." }],
     });
-    assert.deepEqual(details(failed(result, "invalid-entry")).errors, ['local/paths.toml: path does not exist: /work/absent for "rollback-repo"']);
+    assert.deepEqual(details(failed(result, "invalid-entry")).errors, ['the local paths: path does not exist: /work/absent for "rollback-repo"']);
     assert.ok(!ports.store.entries.some((entry) => entry.id === "rollback-repo"));
     assert.equal(ports.store.files.size, 0);
     assert.deepEqual(ports.store.localPaths, { "alpha-app": "/work/alpha-app" });
@@ -335,7 +334,7 @@ describe("add use case", () => {
       data: { description: "Rollback.", remote: "https://example.com/wanted.git" },
       localPath: "/work/new-repo",
     });
-    assert.deepEqual(details(failed(result, "invalid-entry")).errors, ['local/paths.toml: remote does not match "https://example.com/wanted.git" for "rollback-new"']);
+    assert.deepEqual(details(failed(result, "invalid-entry")).errors, ['the local paths: remote does not match "https://example.com/wanted.git" for "rollback-new"']);
     assert.ok(!ports.store.entries.some((entry) => entry.id === "rollback-new"));
     assert.equal(ports.store.localPaths, null);
   });
@@ -352,9 +351,9 @@ describe("add use case", () => {
     const error = failed(result, "external");
     assert.equal(error.message, "could not add repository changed: validation failed, and the rollback failed");
     assert.deepEqual(details(error).errors, [
-      'local/paths.toml: path does not exist: /work/absent for "changed"',
-      "local/paths.toml changed during rollback and was not restored",
-      "new entry changed during rollback and was not removed",
+      'the local paths: path does not exist: /work/absent for "changed"',
+      "the local paths changed during rollback and could not be restored",
+      "repository changed changed during rollback and was not removed",
     ]);
     assert.ok(ports.store.entries.some((entry) => entry.id === "changed"));
   });
@@ -366,7 +365,7 @@ describe("add use case", () => {
     const error = failed(result, "external");
     assert.equal(error.category, "external");
     assert.equal(error.message, "could not add system new-system: a write failed");
-    assert.deepEqual(error.details, { errors: ["could not write entry: disk full"], warnings: [] });
+    assert.deepEqual(error.details, { errors: ["could not write system new-system: disk full"], warnings: [] });
   });
 });
 
@@ -379,7 +378,7 @@ describe("set use case", () => {
 
     const refused = set(ports, { id: "alpha-app", data: { key: "BET" } });
     assert.deepEqual(details(failed(refused, "invalid-entry")).errors, [
-      "repositories/alpha-app.toml: changing an existing key requires --replace-key",
+      "repository alpha-app: changing an existing key requires --replace-key",
     ]);
     assert.equal(ports.store.entries.find((entry) => entry.id === "alpha-app")?.data.key, "ALP");
 
@@ -401,11 +400,11 @@ describe("set use case", () => {
       file: "repositories/beta-lib.toml",
     });
     const cases = [
-      { data: { extra: true }, expected: "repositories/beta-lib.toml: unknown field(s): extra" },
-      { data: { tags: ["missing"] }, expected: 'repositories/beta-lib.toml: tag "missing" is not defined in tags.toml' },
-      { data: { system: "missing" }, expected: 'repositories/beta-lib.toml: system "missing" does not name a system' },
-      { data: { "depends-on": [{ id: "missing" }] }, expected: 'repositories/beta-lib.toml: depends-on[0] ID "missing" does not exist' },
-      { data: { key: "ALP" }, replaceKey: true, expected: 'repositories/beta-lib.toml: duplicate key "ALP"; also used by repositories/alpha-app.toml' },
+      { data: { extra: true }, expected: "repository beta-lib: unknown field(s): extra" },
+      { data: { tags: ["missing"] }, expected: 'repository beta-lib: tag "missing" is not defined in the tag list' },
+      { data: { system: "missing" }, expected: 'repository beta-lib: system "missing" does not name a system' },
+      { data: { "depends-on": [{ id: "missing" }] }, expected: 'repository beta-lib: depends-on[0] ID "missing" does not exist' },
+      { data: { key: "ALP" }, replaceKey: true, expected: 'repository beta-lib: duplicate key "ALP"; also used by repository alpha-app' },
     ];
     for (const item of cases) {
       const entriesBefore = structuredClone(ports.store.entries);
@@ -440,7 +439,7 @@ describe("set use case", () => {
     ports.store.unreadable.push("repositories/broken.toml");
     const unreadable = failed(set(ports, { id: "broken", data: { description: "No entry." } }), "invalid-entry");
     assert.equal(unreadable.message, "could not set entry broken: validation failed");
-    assert.deepEqual(details(unreadable).errors, ["cannot read entry repositories/broken.toml"]);
+    assert.deepEqual(details(unreadable).errors, ["repository broken: invalid TOML: unreadable"]);
   });
 
   test("reports a failed write as external", () => {

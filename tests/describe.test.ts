@@ -85,6 +85,17 @@ describe("command table", () => {
     for (const command of COMMANDS) assert.deepEqual(problems(command), [], command.name);
   });
 
+  test("add and set do not describe a store path in their output", () => {
+    const description = JSON.parse(run(["describe", "--json"]).stdout) as {
+      commands: Array<{ name: string; output: { fields: Record<string, string> } }>;
+    };
+    for (const name of ["add", "set"]) {
+      const output = description.commands.find((command) => command.name === name)?.output;
+      assert.ok(output, name);
+      assert.equal("path" in output.fields, false, name);
+    }
+  });
+
   test("finds an entry without a summary, a schema, or error codes", () => {
     const [find] = COMMANDS;
     assert.deepEqual(problems({ ...find, summary: "" }), ["summary"]);
@@ -115,8 +126,8 @@ describe("command table", () => {
 describe("version", () => {
   const manifest = JSON.parse(readFileSync(join(REPO_ROOT, "package.json"), "utf8")) as { version: string };
 
-  test("package.json starts Charts at version 1.0.0", () => {
-    assert.equal(manifest.version, "1.0.0");
+  test("package.json starts Charts at version 2.0.0", () => {
+    assert.equal(manifest.version, "2.0.0");
   });
 
   test("--version prints the module and the version from package.json, as text or JSON", () => {

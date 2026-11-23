@@ -281,7 +281,6 @@ const CHANGE_FIELDS: Record<string, string> = {
   ok: "true",
   type: "the entry type",
   id: "the entry ID",
-  path: "the entry file, relative to Charts",
   validation: "ok, and the catalog's errors and warnings after the change",
 };
 
@@ -567,7 +566,6 @@ export function renderSet(json: boolean, result: SetResult): number {
       ok: result.ok,
       type: result.type,
       id: result.id,
-      path: result.path,
       changed: result.changed,
       new_tags: result.newTags,
       validation: { ok: result.validation.errors.length === 0, ...result.validation },
@@ -576,10 +574,10 @@ export function renderSet(json: boolean, result: SetResult): number {
   }
   for (const warning of result.validation.warnings) console.log(`WARNING: ${warning}`);
   if (result.changed.length === 0 && result.newTags.length === 0) {
-    console.log(`No change to ${result.type} ${result.id} at ${result.path}`);
+    console.log(`No change to ${result.type} ${result.id}`);
   } else {
     const changed = result.changed.length ? result.changed.join(", ") : "none";
-    console.log(`Updated ${result.type} ${result.id} at ${result.path}; changed fields: ${changed}; validation ok`);
+    console.log(`Updated ${result.type} ${result.id}; changed fields: ${changed}; validation ok`);
     if (result.newTags.length) {
       console.log(`New tags: ${result.newTags.join(", ")}. The shared tag list has uncommitted changes.`);
     }
@@ -594,7 +592,6 @@ export function renderAdd(json: boolean, result: AddResult): number {
       ok: result.ok,
       type: result.type,
       id: result.id,
-      path: result.path,
       validation: { ok: result.validation.errors.length === 0, ...result.validation },
     };
     if (result.newTags.length) output.new_tags = result.newTags;
@@ -602,7 +599,7 @@ export function renderAdd(json: boolean, result: AddResult): number {
     return 0;
   }
   for (const warning of result.validation.warnings) console.log(`WARNING: ${warning}`);
-  console.log(`Created ${result.type} ${result.id} at ${result.path}; validation ok`);
+  console.log(`Created ${result.type} ${result.id}; validation ok`);
   if (result.newTags.length) {
     console.log(`New tags: ${result.newTags.join(", ")}. The shared tag list has uncommitted changes.`);
   }
