@@ -2,7 +2,8 @@
 // Tags HEAD with v<version> from package.json when the remote `origin`
 // has no such tag yet. The tag-version workflow runs it on pushes to main.
 // It uses Node alone, so a test can run it against a local bare remote.
-// It exits non-zero only when a Git command fails.
+// It exits non-zero when package.json has no version or a Git command
+// fails. Rule III of the constitution binds the charts script, not this.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -27,7 +28,8 @@ try {
   if (git(["ls-remote", "--tags", "origin", `refs/tags/${tag}`]).trim() !== "") {
     console.log(`${tag} already exists on origin; nothing to do`);
   } else {
-    git(["tag", tag]);
+    // --force moves a stale local tag that origin does not have onto HEAD.
+    git(["tag", "--force", tag]);
     git(["push", "origin", `refs/tags/${tag}`]);
     console.log(`created and pushed ${tag}`);
   }
