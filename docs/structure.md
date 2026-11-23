@@ -18,6 +18,7 @@ nautilus-charts/
 ├── templates/                # entry templates
 ├── bin/charts.js             # the charts command: Node check, then scripts/charts.ts
 ├── scripts/charts.ts         # composition root
+├── scripts/tag-version.mjs   # tags v<version>; run by .github/workflows/
 ├── src/
 │   ├── domain/               # catalog rules, no I/O
 │   ├── commands/             # one use case per command, and the ports
