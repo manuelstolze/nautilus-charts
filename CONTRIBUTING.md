@@ -77,14 +77,13 @@ Use the templates in `templates/` when adding entries. Keep one entry per file. 
 
 ## Skills
 
-Skills live in `.agents/skills/`. For Claude Code, link them into the ignored `.claude/skills/`:
+Skills live in `.agents/skills/`. The links in `.claude/skills/` are tracked. When you add a skill, create its link with this command. Use the skill's path under `.agents/skills/` as `<path>`:
 
 ```bash
-mkdir -p .claude/skills
-for skill in .agents/skills/charts .agents/skills/engineering/*; do
-  ln -sfn "../../$skill" ".claude/skills/$(basename "$skill")"
-done
+ln -s ../../.agents/skills/<path> .claude/skills/<name>
 ```
+
+On Windows, enable Developer Mode and run `git config --global core.symlinks true` before cloning. Otherwise, Git checks out symlinks as text files.
 
 The engineering skills in `.agents/skills/engineering/` are copies from nautilus-bridge. Change them in the Bridge first, then copy the folder unchanged from the Charts root:
 

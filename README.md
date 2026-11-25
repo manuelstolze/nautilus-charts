@@ -121,14 +121,13 @@ The link puts the `charts` command on `PATH` when `~/.local/bin` is on it, which
 
 The catalog starts empty. Add systems, repositories, and externals with `charts add`, or ask the `charts` skill to register them. Git ignores your entries, so back them up yourself, for example in a private repository.
 
-Skills live in `.agents/skills/`. For Claude Code, link them into the ignored `.claude/skills/`:
+Skills live in `.agents/skills/`. The links in `.claude/skills/` are tracked. When you add a skill, create its link with this command. Use the skill's path under `.agents/skills/` as `<path>`:
 
 ```bash
-mkdir -p .claude/skills
-for skill in .agents/skills/charts .agents/skills/engineering/*; do
-  ln -sfn "../../$skill" ".claude/skills/$(basename "$skill")"
-done
+ln -s ../../.agents/skills/<path> .claude/skills/<name>
 ```
+
+On Windows, enable Developer Mode and run `git config --global core.symlinks true` before cloning. Otherwise, Git checks out symlinks as text files.
 
 On a new machine, create `local/paths.toml` and add the repositories you have checked out:
 
