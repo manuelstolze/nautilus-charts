@@ -1,6 +1,5 @@
 /local/paths.toml
 /node_modules/
-.claude/skills/
 /systems/*.toml
 /repositories/*.toml
 /externals/*.toml
