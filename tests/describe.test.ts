@@ -29,7 +29,7 @@ describe("describe", () => {
     assert.equal(described.status, 0, described.stderr);
     const commands = (JSON.parse(described.stdout) as { commands: Array<{ name: string }> }).commands.map(({ name }) => name);
     assert.deepEqual(commands, helpCommands(help.stdout));
-    assert.deepEqual(commands, ["find", "show", "deps", "rdeps", "check", "add", "set", "migrate", "catalog", "describe"]);
+    assert.deepEqual(commands, ["find", "show", "deps", "rdeps", "check", "add", "set", "catalog", "describe"]);
   });
 
   test("has the structure of the Logbook's describe output", () => {

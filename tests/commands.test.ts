@@ -3,7 +3,6 @@ import { describe, test } from "node:test";
 import { syncDueCatalogs } from "../src/adapters/catalog-sync.ts";
 import { add } from "../src/commands/add.ts";
 import { check } from "../src/commands/check.ts";
-import { migrate } from "../src/commands/migrate.ts";
 import { deps, rdeps } from "../src/commands/deps.ts";
 import { set } from "../src/commands/set.ts";
 import { show } from "../src/commands/show.ts";
@@ -125,59 +124,6 @@ describe("deps use cases", () => {
       assert.deepEqual(external.error.details, { id: "stripe" });
     }
     assert.equal(rdeps(ports, "stripe").ok, true);
-  });
-});
-
-describe("root entry migration", () => {
-  test("copies an entry, needed tag, and local path, commits locally, and does not sync", () => {
-    const source = new MemoryStore({
-      entries: [{
-        kind: "repository",
-        id: "migrate-repo",
-        data: { description: "Migrated repository.", remote: "https://example.com/migrate.git", system: "target-system", tags: ["utility"] },
-      }],
-      tags: { utility: "Shared tools." },
-      localPaths: { "migrate-repo": "/work/migrate-repo" },
-    });
-    const sourceBefore = structuredClone(source.load());
-    const destinationMemory = new MemoryStore({
-      entries: [{ kind: "system", id: "target-system", data: { description: "Target system." } }],
-      tags: {},
-      localPaths: null,
-    });
-    const loadDestination = destinationMemory.load.bind(destinationMemory);
-    destinationMemory.load = () => ({ ...loadDestination(), catalogName: "work" });
-    const commits: Array<{ files: readonly string[]; message: string }> = [];
-    let syncWrites = 0;
-    const catalogGit = {
-      initialize() {},
-      clone() {},
-      assertWriteClean() {},
-      commit(_path: string, files: readonly string[], message: string) { commits.push({ files, message }); },
-      syncRead() {},
-      syncWrite() { syncWrites += 1; },
-    };
-    const destination: Ports = {
-      store: destinationMemory,
-      git: new FakeGit({ repositories: { "/work/migrate-repo": ["https://example.com/migrate.git"] } }),
-      catalogName: "work",
-      catalogPath: "/catalog/work",
-      catalogRemote: "https://example.com/work.git",
-      catalogGit,
-    };
-    const result = migrate({
-      source,
-      sourceGit: new FakeGit({ repositories: { "/work/migrate-repo": ["https://example.com/migrate.git"] } }),
-      destination,
-    }, "migrate-repo");
-
-    assert.equal(result.ok, true);
-    assert.deepEqual(destinationMemory.entries.map((entry) => entry.id), ["target-system", "migrate-repo"]);
-    assert.deepEqual(destinationMemory.tags, { utility: "Shared tools." });
-    assert.deepEqual(destinationMemory.localPaths, { "migrate-repo": "/work/migrate-repo" });
-    assert.deepEqual(source.load(), sourceBefore);
-    assert.deepEqual(commits, [{ files: ["repositories/migrate-repo.toml", "tags.toml"], message: "Migrate repository migrate-repo" }]);
-    assert.equal(syncWrites, 0);
   });
 });
 
