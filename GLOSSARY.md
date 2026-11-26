@@ -13,7 +13,7 @@ A Git repository registered in Charts. It belongs to at most one System and one 
 _Avoid_: Repo, project, codebase
 
 **Named catalog**:
-A named set of System, Repository, and External entries, such as `folio` or `personal`. A Repository belongs to one Named catalog, and entry IDs are unique across all Named catalogs.
+A named set of System, Repository, and External entries, such as `work` or `personal`. A Repository belongs to one Named catalog, and entry IDs are unique across all Named catalogs.
 _Avoid_: Volume, shelf, profile
 
 **Independent repository**:
