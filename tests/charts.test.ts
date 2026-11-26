@@ -59,7 +59,7 @@ function makeFixture(): void {
   }
   const remote = join(temporary, "nautilus.git");
   execFileSync("git", ["init", "--bare", "--quiet", remote]);
-  new CatalogGitCli(REPO_ROOT).initialize(root, remote);
+  new CatalogGitCli().initialize(root, remote);
   execFileSync("git", ["-C", root, "config", "user.name", "Charts Test"]);
   execFileSync("git", ["-C", root, "config", "user.email", "charts@example.com"]);
   new FileCatalogRegistry(registryPath).register({ name: "nautilus", path: root, remote });
@@ -105,7 +105,7 @@ describe("named catalog setup", () => {
   test("initializes and clones independent catalogs with machine-local paths", () => {
     const remote = join(temporary, "catalog.git");
     execFileSync("git", ["init", "--bare", "--quiet", remote]);
-    const catalogGit = new CatalogGitCli(REPO_ROOT);
+    const catalogGit = new CatalogGitCli();
     const firstPath = join(temporary, "machine-a", "catalog");
     const secondPath = join(temporary, "machine-b", "catalog");
 
@@ -114,6 +114,7 @@ describe("named catalog setup", () => {
     firstRegistry.register({ name: "work", path: firstPath, remote });
     assert.deepEqual(firstRegistry.list(), [{ name: "work", path: firstPath, remote }]);
     assert.equal(firstRegistry.get("work")?.path, firstPath);
+    assert.equal(existsSync(join(firstPath, "templates")), false);
     assert.deepEqual(new TomlStore(firstPath).load().entries, []);
     assert.equal(new TomlStore(firstPath).load().tagsExists, true);
     assert.deepEqual(execFileSync("git", ["-C", firstPath, "remote"], { encoding: "utf8" }).trim(), "origin");
@@ -150,7 +151,7 @@ describe("named catalog setup", () => {
     const localPath = join(temporary, "local-catalog");
     const peerPath = join(temporary, "peer-catalog");
     execFileSync("git", ["init", "--bare", "--quiet", remote]);
-    const catalogGit = new CatalogGitCli(REPO_ROOT);
+    const catalogGit = new CatalogGitCli();
     catalogGit.initialize(localPath, remote);
     execFileSync("git", ["-C", localPath, "config", "user.name", "Charts Test"]);
     execFileSync("git", ["-C", localPath, "config", "user.email", "charts@example.com"]);
@@ -212,7 +213,7 @@ describe("named catalog setup", () => {
     const sharedRemote = join(temporary, "shared.git");
     const seedPath = join(temporary, "seed");
     execFileSync("git", ["init", "--bare", "--quiet", sharedRemote]);
-    new CatalogGitCli(REPO_ROOT).initialize(seedPath, sharedRemote);
+    new CatalogGitCli().initialize(seedPath, sharedRemote);
     writeFileSync(join(seedPath, "repositories", "shared-lib.toml"),
       'description = "Shared library."\nremote = "https://example.com/shared-lib.git"\n', "utf8");
     execFileSync("git", ["-C", seedPath, "add", "-A"]);
@@ -265,7 +266,10 @@ describe("named catalog setup", () => {
     const firstCommitFiles = execFileSync("git", ["-C", workPath, "show", "--pretty=format:", "--name-only", "HEAD"], { encoding: "utf8" }).trim().split("\n");
     assert.ok(firstCommitFiles.includes("repositories/app.toml"));
     assert.ok(firstCommitFiles.includes("tags.toml"));
-    assert.ok(firstCommitFiles.includes("templates/repository.toml"));
+    assert.equal(existsSync(join(workPath, "templates")), false);
+    assert.equal(firstCommitFiles.some((file) => file.startsWith("templates/")), false);
+    const firstCommitTree = execFileSync("git", ["-C", workPath, "ls-tree", "-r", "--name-only", "HEAD"], { encoding: "utf8" }).trim().split("\n");
+    assert.equal(firstCommitTree.some((file) => file.startsWith("templates/")), false);
     assert.ok(!firstCommitFiles.includes("local/paths.toml"));
     assert.equal(spawnSync("git", ["-C", workPath, "check-ignore", "-q", "local/paths.toml"]).status, 0);
 

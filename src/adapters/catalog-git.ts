@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { resolve, join } from "node:path";
 import type { CatalogGit as CatalogGitPort } from "../commands/ports.ts";
 import { remoteHasCredentials } from "../domain/validation.ts";
@@ -48,9 +48,6 @@ function assertSingleRemote(path: string, remote: string): void {
 const INITIAL_FILES = [
   ".gitignore",
   "tags.toml",
-  "templates/system.toml",
-  "templates/repository.toml",
-  "templates/external.toml",
 ];
 
 function hasCommit(path: string): boolean {
@@ -60,22 +57,13 @@ function hasCommit(path: string): boolean {
 
 /** Git setup for named catalog repositories. Never used for listed code repositories. */
 export class CatalogGitCli implements CatalogGitPort {
-  readonly templatesRoot: string;
-
-  constructor(templatesRoot: string) {
-    this.templatesRoot = resolve(templatesRoot);
-  }
-
   initialize(rawPath: string, remote: string): void {
     validateRemote(remote);
     const path = resolve(rawPath);
     assertEmptyOrMissing(path);
     mkdirSync(path, { recursive: true });
-    for (const directory of ["systems", "repositories", "externals", "local", "templates"]) {
+    for (const directory of ["systems", "repositories", "externals", "local"]) {
       mkdirSync(join(path, directory), { recursive: true });
-    }
-    for (const kind of ["system", "repository", "external"]) {
-      copyFileSync(join(this.templatesRoot, "templates", `${kind}.toml`), join(path, "templates", `${kind}.toml`));
     }
     writeFileSync(join(path, "tags.toml"), "", { encoding: "utf8", flag: "wx" });
     writeFileSync(join(path, ".gitignore"), "/local/paths.toml\n", { encoding: "utf8", flag: "wx" });
