@@ -5,6 +5,25 @@ import type { IgnoreCheck, LocalPathFact, NewTag } from "../domain/validation.ts
 /**
  * The catalog store: entry files, `tags.toml`, the templates, and `local/paths.toml`.
  */
+export interface CatalogRegistration {
+  name: string;
+  path: string;
+  remote: string;
+}
+
+/** Machine-local registry for named Charts catalogs. */
+export interface CatalogRegistry {
+  list(): CatalogRegistration[];
+  get(name: string): CatalogRegistration | null;
+  register(catalog: CatalogRegistration): void;
+}
+
+/** Git operations for named Charts catalogs only. */
+export interface CatalogGit {
+  initialize(path: string, remote: string): void;
+  clone(path: string, remote: string): void;
+}
+
 export interface CatalogStore {
   /** Reads the whole catalog. Unreadable files become load errors. */
   load(): Snapshot;
