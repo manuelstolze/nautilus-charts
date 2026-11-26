@@ -39,7 +39,7 @@ export interface CatalogStore {
   entryFileExists(id: string): boolean;
   /**
    * Writes a new entry from its template's field order, records its local path,
-   * and appends any new tags. `path` is the root-relative entry file.
+   * and appends any new tags. `path` is the catalog-relative entry file.
    * - `invalid`: nothing was written.
    * - `failed`: a write failed; the store already rolled back, and `errors`
    *   include any rollback errors.
@@ -75,6 +75,6 @@ export interface CatalogStore {
 export interface GitInspector {
   /** Resolves a configured local path and checks that it is a Git root with the given remote. */
   inspectLocalPath(rawPath: string, remote?: unknown, catalogName?: string): LocalPathFact;
-  /** Whether Git ignores a path relative to the catalog root. */
+  /** Whether Git ignores a path relative to the catalog. */
   isIgnored(relativePath: string): IgnoreCheck;
 }
