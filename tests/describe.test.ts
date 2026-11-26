@@ -135,8 +135,8 @@ describe("command table", () => {
 describe("version", () => {
   const manifest = JSON.parse(readFileSync(join(REPO_ROOT, "package.json"), "utf8")) as { version: string };
 
-  test("package.json starts Charts at version 2.1.0", () => {
-    assert.equal(manifest.version, "2.1.0");
+  test("package.json starts Charts at version 3.0.0", () => {
+    assert.equal(manifest.version, "3.0.0");
   });
 
   test("--version prints the module and the version from package.json, as text or JSON", () => {

@@ -125,13 +125,13 @@ Run checks that match the files you changed. From the repository root, check for
 git diff --check
 ```
 
-Run the type check, the tests, and the charts check with:
+Run the type check and tests with:
 
 ```bash
 npm run check
 ```
 
-`charts check --catalog <name>` validates a named catalog, its links to other registered catalogs, tags, local paths, and code-repository remotes. For skill, template, or documentation changes, check links and examples and exercise the changed instructions when practical. Record the checks and results when requesting review. Explain any unrelated failures.
+Run `charts check --catalog <name>` separately to validate a named catalog, its links to other registered catalogs, tags, local paths, and code-repository remotes. The source repository stores no catalog data, so `npm run check` does not run this command. For skill, template, or documentation changes, check links and examples and exercise the changed instructions when practical. Record the checks and results when requesting review. Explain any unrelated failures.
 
 ## Merge request checklist
 
