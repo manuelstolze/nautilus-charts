@@ -107,7 +107,7 @@ export function set(ports: Ports, options: SetOptions): SetResult {
   }
 
   if (ports.catalogName !== undefined) {
-    if (!ports.catalogGit || !ports.catalogPath) return failure(["catalog Git support is not configured"], "external", [], "the catalog could not be committed");
+    if (!ports.catalogGit || !ports.catalogPath || !ports.catalogRemote) return failure(["catalog Git support is not configured"], "external", [], "the catalog could not be committed");
     try {
       ports.catalogGit.assertWriteClean(ports.catalogPath, [path, "tags.toml"]);
     } catch (error) {
@@ -158,6 +158,14 @@ export function set(ports: Ports, options: SetOptions): SetResult {
         validation.warnings,
         rollbackErrors.length ? "the catalog commit and rollback failed" : "the catalog commit failed",
       );
+    }
+    try {
+      ports.catalogGit!.syncWrite(ports.catalogPath!, ports.catalogRemote!);
+    } catch {
+      validation = {
+        ...validation,
+        warnings: [...validation.warnings, `catalog ${JSON.stringify(ports.catalogName)} could not sync; local changes were kept`],
+      };
     }
   }
   return {

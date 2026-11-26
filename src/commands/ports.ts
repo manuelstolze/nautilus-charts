@@ -26,6 +26,10 @@ export interface CatalogGit {
   assertWriteClean(path: string, files: readonly string[]): void;
   /** Commits only the named catalog files. Never contacts a remote. */
   commit(path: string, files: readonly string[], message: string): void;
+  /** Fast-forwards one named catalog from its configured remote. */
+  syncRead(path: string, remote: string): void;
+  /** Pushes the selected named catalog branch without force. */
+  syncWrite(path: string, remote: string): void;
 }
 
 export interface CatalogStore {
