@@ -42,6 +42,7 @@ Workflow modules use Charts. Today this is the Bridge, and Sonar is planned to u
 - Repository tags come from the selected catalog's `tags.toml`.
 - The source repository still has a legacy root catalog. Its entry files stay Git-ignored. Named catalogs store entries and tags in separate Git repositories.
 - Each named catalog has one configured `origin` remote (`origin` is Git's local name for the remote address). Each machine maps catalog names to local folders. A code Repository belongs to one Named catalog, and entry IDs are unique across all catalogs.
+- For this setup, `folio` is the planned catalog for all Repository entries. Put each linked System in `folio` too. Other catalog names remain supported.
 - `depends-on` links can cross catalogs. A Repository's `system` link must name a System in the same catalog.
 - Catalog paths and code-repository paths stay on each machine. Git ignores each catalog's `local/paths.toml` file.
 - A due read syncs all registered catalogs. The default interval is 15 minutes. A write syncs only the catalog it changes. Charts uses fast-forward sync, which updates local history only when it can move forward without a merge. A failed sync warns and keeps local data. Charts never force-pushes.
@@ -96,7 +97,7 @@ When no named catalogs are registered, commands without `--catalog` use the lega
 For example:
 
 ```bash
-charts add system shop --catalog work --data '{"description":"Online shop system."}'
+charts add system shop --catalog folio --data '{"description":"Online shop system."}'
 ```
 
 The `--data` value is a JSON object. JSON is a text format for structured data. Include a required `description`. Do not include an `id`; pass it as the second positional value. Use only fields defined for that entry type. Charts uses the matching template and omits optional fields you do not supply. It does not generate IDs or repository keys.
@@ -131,7 +132,7 @@ npm run check
 
 The link puts the `charts` command on `PATH` when `~/.local/bin` is on it, whichever Node version nvm has active; do not use `npm link`. Link it once per machine. The command runs with plain Node and works from any folder.
 
-Use `charts catalog create` to start an empty named catalog, or `charts catalog clone` to copy one from its configured remote. Charts stores the name-to-folder registry at `${XDG_CONFIG_HOME:-~/.config}/nautilus-charts/catalogs.json`; each machine keeps its own copy. Due reads sync all registered catalogs every 15 minutes by default. Set `CHARTS_READ_SYNC_INTERVAL_MS` to change the interval. Use `0` to sync on every read.
+Use `charts catalog create` to start an empty named catalog, or `charts catalog clone` to copy one from its configured remote. When setting up this owner’s catalog, use the name `folio`. Charts stores the name-to-folder registry at `${XDG_CONFIG_HOME:-~/.config}/nautilus-charts/catalogs.json`; each machine keeps its own copy. Due reads sync all registered catalogs every 15 minutes by default. Set `CHARTS_READ_SYNC_INTERVAL_MS` to change the interval. Use `0` to sync on every read.
 
 The legacy root catalog stays available until its owner confirms migration. Copy one root entry at a time with `charts migrate <id> --catalog <name>`. Migration copies needed tag definitions and this machine's local path, checks and commits the destination locally, and does not sync. Review the copied entry, then run `charts catalog sync <name>` to share it. Migration does not delete or change the root entry.
 
