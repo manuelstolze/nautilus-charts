@@ -154,9 +154,16 @@ nautilus-bridge = "~/code/nautilus/nautilus-bridge"
 
 [CONSTITUTION.md](CONSTITUTION.md) holds Charts' mandatory rules, including what Charts is and is not responsible for.
 
+## Support
+
+Charts provides fixes for the latest release only. Older versions are not supported. The maintainer reviews issues and pull requests as time allows. There is no response-time promise.
+
 ## More
 
 - [docs/structure.md](docs/structure.md): entry fields, IDs, status values, and the `charts` command in detail.
 - [CONSTITUTION.md](CONSTITUTION.md): the mandatory rules.
 - [GLOSSARY.md](GLOSSARY.md): the terms Charts uses.
 - [CONTRIBUTING.md](CONTRIBUTING.md): how to change Charts.
+- [LICENSE](LICENSE): terms for using Charts.
+- [SECURITY.md](SECURITY.md): how to report security issues.
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md): community standards and reporting.
