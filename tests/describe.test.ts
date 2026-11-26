@@ -32,6 +32,15 @@ describe("describe", () => {
     assert.deepEqual(commands, ["find", "show", "deps", "rdeps", "check", "add", "set", "catalog", "describe"]);
   });
 
+  test("describes catalog list with name, path, and remote fields", () => {
+    const catalog = COMMANDS.find(({ name }) => name === "catalog");
+    assert.ok(catalog);
+    assert.match(catalog.usage, /list/);
+    const argumentsSchema = catalog.arguments as { prefixItems: Array<{ enum?: string[] }> };
+    assert.ok(argumentsSchema.prefixItems[0].enum?.includes("list"));
+    assert.match(catalog.output.fields.catalogs, /name, path, and remote/);
+  });
+
   test("has the structure of the Logbook's describe output", () => {
     const description = JSON.parse(run(["describe", "--json"]).stdout) as Record<string, unknown> & { commands: Array<Record<string, unknown>> };
     assert.deepEqual(Object.keys(description), ["module", "version", "errors", "commands"]);

@@ -8,6 +8,7 @@ import {
   readInvocation,
   renderAdd,
   renderCatalog,
+  renderCatalogList,
   renderCheck,
   renderDescribe,
   renderEdges,
@@ -28,6 +29,7 @@ import { FileCatalogSyncState } from "../src/adapters/catalog-sync-state.ts";
 import { GitCli } from "../src/adapters/git-cli.ts";
 import { TomlStore } from "../src/adapters/toml-store.ts";
 import { add } from "../src/commands/add.ts";
+import { catalogList } from "../src/commands/catalog-list.ts";
 import { check } from "../src/commands/check.ts";
 import type { Ports } from "../src/commands/context.ts";
 import { deps, rdeps } from "../src/commands/deps.ts";
@@ -175,7 +177,8 @@ function readSyncInterval(override?: number): number {
   return interval;
 }
 
-function createOrCloneCatalog(options: Options, root: string, registry: FileCatalogRegistry): number {
+function runCatalogCommand(options: Options, root: string, registry: FileCatalogRegistry): number {
+  if (options.catalogAction === "list") return renderCatalogList(options.json, catalogList(registry));
   const name = options.catalogName!;
   if (options.catalogAction === "sync") {
     const catalog = registry.get(name);
@@ -227,7 +230,7 @@ export function main(argv = process.argv.slice(2), root = ROOT, registryPath?: s
       ? defaultCatalogRegistryPath()
       : join(resolvedRoot, "local", "catalogs.json"));
     const registry = new FileCatalogRegistry(localRegistryPath);
-    if (options.command === "catalog") return createOrCloneCatalog(options, resolvedRoot, registry);
+    if (options.command === "catalog") return runCatalogCommand(options, resolvedRoot, registry);
     if (options.command === "describe") return renderDescribe(options.json, moduleInfo());
 
     const ports = buildPorts(options, resolvedRoot, registry);

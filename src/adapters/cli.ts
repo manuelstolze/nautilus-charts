@@ -37,7 +37,7 @@ export type Options = {
   status?: string;
   owner?: string;
   catalogName?: string;
-  catalogAction?: "create" | "clone" | "sync";
+  catalogAction?: "list" | "create" | "clone" | "sync";
   path?: string;
   remote?: string;
 };
@@ -236,7 +236,11 @@ function parseQuery(command: "find" | "show" | "deps" | "rdeps" | "check", rest:
 
 function parseCatalog(rest: string[]): Options {
   const action = rest[0];
-  if (action !== "create" && action !== "clone" && action !== "sync") throw new Error("catalog requires create, clone, or sync");
+  if (action === "list") {
+    if (rest.slice(1).some((argument) => argument !== "--json")) throw new Error("catalog list takes no arguments");
+    return { command: "catalog", catalogAction: "list", json: rest.includes("--json") };
+  }
+  if (action !== "create" && action !== "clone" && action !== "sync") throw new Error("catalog requires list, create, clone, or sync");
   const options: Options = { command: "catalog", catalogAction: action, json: false };
   const positional: string[] = [];
   for (let index = 1; index < rest.length; index += 1) {
@@ -447,11 +451,24 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     name: "catalog",
-    usage: "<create|clone|sync> <name> [--path <path> --remote <url>]",
-    summary: "Creates, clones, or syncs a named catalog.",
-    arguments: positionalSchema([{ type: "string", enum: ["create", "clone", "sync"] }, { ...text("the catalog's lowercase kebab-case name"), title: "name" }]),
+    usage: "<list|create|clone|sync> [name] [--path <path> --remote <url>]",
+    summary: "Lists registered catalogs, or creates, clones, or syncs one.",
+    arguments: {
+      type: "array",
+      prefixItems: [
+        { type: "string", enum: ["list", "create", "clone", "sync"] },
+        { ...text("the catalog's lowercase kebab-case name"), title: "name" },
+      ],
+      items: false,
+      minItems: 1,
+      maxItems: 2,
+      oneOf: [
+        { prefixItems: [{ type: "string", const: "list" }], minItems: 1, maxItems: 1 },
+        { prefixItems: [{ type: "string", enum: ["create", "clone", "sync"] }, { type: "string" }], minItems: 2, maxItems: 2 },
+      ],
+    },
     options: optionsSchema({ path: text("the local catalog folder; create or clone only"), remote: text("the catalog Git remote URL; create or clone only") }),
-    output: { type: "object", fields: { ok: "true", action: "create, clone, or sync", name: "the catalog name", remote: "the catalog's Git remote", warnings: "sync warnings, only when needed" } },
+    output: { type: "object", fields: { catalogs: "registered catalogs, each with name, path, and remote; list only", ok: "true", action: "create, clone, or sync", name: "the catalog name", remote: "the catalog's Git remote", warnings: "sync warnings, only when needed" } },
     errors: ["usage", "external"],
     parse: parseCatalog,
   },
@@ -710,6 +727,23 @@ export function describeModule(info: ModuleInfo): Description {
       errors,
     })),
   };
+}
+
+export function renderCatalogList(
+  json: boolean,
+  catalogs: Array<{ name: string; path: string; remote: string }>,
+): number {
+  if (json) {
+    printJson({ catalogs });
+    return 0;
+  }
+  if (catalogs.length === 0) {
+    console.log("No catalogs registered.");
+    return 0;
+  }
+  console.log("NAME\tPATH\tREMOTE");
+  for (const catalog of catalogs) console.log(`${catalog.name}\t${catalog.path}\t${catalog.remote}`);
+  return 0;
 }
 
 export function renderCatalog(
