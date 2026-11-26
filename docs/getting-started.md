@@ -89,11 +89,13 @@ On every further machine, clone the catalog from its remote instead of creating 
    charts catalog clone work --path ./folio/work --remote https://example.com/charts-work.git
    ```
 
-2. The entries arrived with the clone, but this machine has no local paths yet. `charts show shop-storefront` reports `local_path_status=missing`. Record the path of this machine's clone:
+2. The entries arrived with the clone, but this machine has no local paths yet. `charts show shop-storefront` reports `local_path_status=not configured`. Record the path of this machine's clone:
 
    ```bash
    charts set shop-storefront --catalog work --local-path ~/code/shop/shop-storefront
    ```
+
+   Charts prints `No change to repository shop-storefront` because the entry itself stays the same; the path goes to this machine's local path map.
 
 3. Check the result:
 
