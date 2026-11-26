@@ -69,7 +69,7 @@ Include exactly one matching emoji and type. Use `charts` as the scope, or a nar
 
 ## Catalog entries
 
-Entries in `systems/`, `repositories/`, and `externals/` in the Charts source repository remain private. Each named catalog stores its entries and `tags.toml` in a separate Git repository with one configured `origin` remote. Charts commits writes in the selected catalog and syncs only that catalog after the write. It may sync all registered catalogs on a due read. It never contacts code-repository remotes. Keep the catalog registry and code-repository paths on the machine, as [rule I of the constitution](./CONSTITUTION.md#i-catalog-data-stays-owner-controlled) sets out.
+Entries in `systems/`, `repositories/`, and `externals/` in the Charts source repository remain private. Each named catalog stores its entries and `tags.toml` in a separate Git repository with one configured `origin` remote. Charts commits writes in the selected catalog and syncs only that catalog after the write. It may sync all registered catalogs on a due read. It never contacts code-repository remotes. Keep the catalog registry and code-repository paths on the machine, as [rule I of the constitution](./CONSTITUTION.md#i-catalog-data-stays-owner-controlled) sets out. The source repository ignores `/folio/` for this owner's local catalog repositories.
 
 Read [docs/structure.md](./docs/structure.md) for entry types, fields, ID rules, catalog commands, and migration. Follow the [charts skill](./.agents/skills/charts/SKILL.md) when finding or changing entries or resolving a local repository path.
 

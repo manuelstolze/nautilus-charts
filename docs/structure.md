@@ -15,6 +15,7 @@ nautilus-charts/
 ├── externals/<id>.toml       # git-ignored, legacy root catalog
 ├── tags.toml                 # legacy root tags
 ├── local/paths.toml          # git-ignored, legacy root paths
+├── folio/                    # git-ignored, local catalog repositories
 ├── templates/                # entry templates
 ├── bin/charts.js             # the charts command: Node check, then scripts/charts.ts
 ├── scripts/charts.ts         # composition root
@@ -31,7 +32,7 @@ nautilus-charts/
 └── .agents/skills/charts/SKILL.md
 ```
 
-One file per entry keeps lookups small. An agent reads only the entries it needs, and edits touch one file each. Named catalog repositories live in owner-selected folders outside this source tree. The registry is at `~/.config/nautilus-charts/catalogs.json`, or `$XDG_CONFIG_HOME/nautilus-charts/catalogs.json` when set.
+One file per entry keeps lookups small. An agent reads only the entries it needs, and edits touch one file each. Named catalog repositories live in owner-selected folders. For this setup, store them under `./folio/` from the Charts root. The source repository ignores that folder. The registry is at `~/.config/nautilus-charts/catalogs.json`, or `$XDG_CONFIG_HOME/nautilus-charts/catalogs.json` when set.
 
 ## Code structure
 
@@ -165,7 +166,7 @@ Charts contacts only registered catalog repositories. It never contacts listed c
 
 `charts catalog create <name> --path <folder> --remote <url>` makes an empty local catalog. `charts catalog clone <name> --path <folder> --remote <url>` clones a catalog. Both register the selected folder and its one remote in this machine's registry. A `--catalog <name>` option selects a catalog for scoped commands. If no named catalogs are registered, commands without `--catalog` use the legacy root. When named catalogs are registered, `add`, `set`, `deps`, `rdeps`, `check`, and general text search need `--catalog`. Without it, `show <id>` and exact-ID `find <id>` search named catalogs only.
 
-For this setup, the owner groups catalog repositories under a local parent directory called `folio/`, such as `folio/work/.git` and `folio/private/.git`. Each child directory is a separate named catalog; `folio/` itself is not a catalog. Other catalog names remain supported. The legacy root catalog remains available until its owner chooses migration. `charts migrate <id> --catalog <name>` copies one root entry, its needed tag definitions, and this machine's local path mapping into the selected catalog. It checks and commits the copy locally, but does not sync or change the root. The owner reviews the copy, then starts sync with `charts catalog sync <name>`.
+For this setup, the owner groups catalog repositories under `./folio/`, such as `./folio/work/.git` and `./folio/private/.git`. Each child directory is a separate named catalog; `./folio/` itself is not a catalog. Other catalog names remain supported. The legacy root catalog remains available until its owner chooses migration. `charts migrate <id> --catalog <name>` copies one root entry, its needed tag definitions, and this machine's local path mapping into the selected catalog. It checks and commits the copy locally, but does not sync or change the root. The owner reviews the copy, then starts sync with `charts catalog sync <name>`.
 
 ## The `charts` command
 
