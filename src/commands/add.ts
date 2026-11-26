@@ -47,6 +47,21 @@ export function add(ports: Ports, { kind, id, data, localPath, newTags = [] }: A
   const inputFinding = validateEntryData(effectiveIndex, { kind, id, data, file: path }, maps.seen, maps.keys);
   if (inputFinding.errors.length) return failure(inputFinding.errors, "invalid-entry", inputFinding.warnings);
 
+  if (ports.catalogName !== undefined) {
+    if (!ports.catalogGit || !ports.catalogPath) return failure(["catalog Git support is not configured"], "external", [], "the catalog could not be committed");
+    try {
+      ports.catalogGit.assertWriteClean(ports.catalogPath, [path, "tags.toml"]);
+    } catch (error) {
+      const dirty = errorMessage(error) === "catalog has uncommitted changes to an entry or tag file";
+      return failure(
+        [dirty ? errorMessage(error) : "could not check catalog files before the write"],
+        dirty ? "refused" : "external",
+        [],
+        dirty ? "catalog files have uncommitted changes" : "the catalog could not be checked",
+      );
+    }
+  }
+
   const created = store.createEntry(kind, id, data, localPath, newTags);
   if (created.status === "invalid") return failure(created.errors);
   if (created.status === "failed") return failure(created.errors, "external", [], "a write failed");
@@ -67,5 +82,18 @@ export function add(ports: Ports, { kind, id, data, localPath, newTags = [] }: A
     );
   }
   validation = { ...validation, warnings: [...validation.warnings, ...created.warnings] };
+  if (ports.catalogName !== undefined) {
+    try {
+      ports.catalogGit!.commit(ports.catalogPath!, [path, "tags.toml"], `Add ${kind} ${id}`);
+    } catch (error) {
+      const rollbackErrors = created.rollback();
+      return failure(
+        ["could not commit the catalog write", ...rollbackErrors],
+        "external",
+        validation.warnings,
+        rollbackErrors.length ? "the catalog commit and rollback failed" : "the catalog commit failed",
+      );
+    }
+  }
   return { ok: true, type: kind, id, validation, newTags: newTags.map(({ name }) => name) };
 }

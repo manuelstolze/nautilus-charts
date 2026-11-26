@@ -22,6 +22,10 @@ export interface CatalogRegistry {
 export interface CatalogGit {
   initialize(path: string, remote: string): void;
   clone(path: string, remote: string): void;
+  /** Refuses a write when its entry or tag files have uncommitted changes. */
+  assertWriteClean(path: string, files: readonly string[]): void;
+  /** Commits only the named catalog files. Never contacts a remote. */
+  commit(path: string, files: readonly string[], message: string): void;
 }
 
 export interface CatalogStore {

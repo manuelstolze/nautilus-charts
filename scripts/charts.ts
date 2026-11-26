@@ -149,6 +149,7 @@ function buildPorts(options: Options, root: string, registry: FileCatalogRegistr
   return {
     store,
     git,
+    ...(registration ? { catalogGit: new CatalogGitCli(root), catalogPath: registration.path } : {}),
     catalogName: registration?.name,
     catalogs: [],
     allCatalogs,

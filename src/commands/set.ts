@@ -106,6 +106,22 @@ export function set(ports: Ports, options: SetOptions): SetResult {
     };
   }
 
+  if (ports.catalogName !== undefined) {
+    if (!ports.catalogGit || !ports.catalogPath) return failure(["catalog Git support is not configured"], "external", [], "the catalog could not be committed");
+    try {
+      ports.catalogGit.assertWriteClean(ports.catalogPath, [path, "tags.toml"]);
+    } catch (error) {
+      const message = errorMessage(error);
+      const dirty = message === "catalog has uncommitted changes to an entry or tag file";
+      return failure(
+        [dirty ? message : "could not check catalog files before the write"],
+        dirty ? "refused" : "external",
+        [],
+        dirty ? "catalog files have uncommitted changes" : "the catalog could not be checked",
+      );
+    }
+  }
+
   const updated = store.updateEntry(current.kind, options.id, merged.data, merged.changed, localPath, newTags);
   if (updated.status === "invalid") return failure(updated.errors, "invalid-entry", finding.warnings);
   if (updated.status === "failed") return failure(updated.errors, "external", finding.warnings, "a write failed");
@@ -131,6 +147,19 @@ export function set(ports: Ports, options: SetOptions): SetResult {
     );
   }
   validation = { ...validation, warnings: [...validation.warnings, ...updated.warnings] };
+  if (ports.catalogName !== undefined) {
+    try {
+      ports.catalogGit!.commit(ports.catalogPath!, [path, "tags.toml"], `Update ${current.kind} ${options.id}`);
+    } catch (error) {
+      const rollbackErrors = updated.rollback();
+      return failure(
+        ["could not commit the catalog write", ...rollbackErrors],
+        "external",
+        validation.warnings,
+        rollbackErrors.length ? "the catalog commit and rollback failed" : "the catalog commit failed",
+      );
+    }
+  }
   return {
     ok: true,
     type,
