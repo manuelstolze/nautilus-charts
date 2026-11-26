@@ -9,6 +9,8 @@ import { parse as parseToml } from "smol-toml";
 import { main } from "../scripts/charts.ts";
 import { renderError } from "../src/adapters/cli.ts";
 import { GitCli } from "../src/adapters/git-cli.ts";
+import { CatalogGitCli } from "../src/adapters/catalog-git.ts";
+import { FileCatalogRegistry } from "../src/adapters/catalog-registry.ts";
 import { TomlStore } from "../src/adapters/toml-store.ts";
 import { checkCatalog as validateCatalog } from "../src/commands/check.ts";
 import { showEntry } from "../src/commands/show.ts";
@@ -79,6 +81,51 @@ function capture<T>(action: () => T): { result: T; output: string[]; errors: str
 
 beforeEach(makeFixture);
 afterEach(() => rmSync(temporary, { recursive: true, force: true }));
+
+describe("named catalog setup", () => {
+  test("initializes and clones independent catalogs with machine-local paths", () => {
+    const remote = join(temporary, "catalog.git");
+    execFileSync("git", ["init", "--bare", "--quiet", remote]);
+    const catalogGit = new CatalogGitCli(REPO_ROOT);
+    const firstPath = join(temporary, "machine-a", "catalog");
+    const secondPath = join(temporary, "machine-b", "catalog");
+
+    catalogGit.initialize(firstPath, remote);
+    const firstRegistry = new FileCatalogRegistry(join(temporary, "machine-a", "config", "catalogs.json"));
+    firstRegistry.register({ name: "work", path: firstPath, remote });
+    assert.deepEqual(firstRegistry.list(), [{ name: "work", path: firstPath, remote }]);
+    assert.equal(firstRegistry.get("work")?.path, firstPath);
+    assert.deepEqual(new TomlStore(firstPath).load().entries, []);
+    assert.equal(new TomlStore(firstPath).load().tagsExists, true);
+    assert.deepEqual(execFileSync("git", ["-C", firstPath, "remote"], { encoding: "utf8" }).trim(), "origin");
+    assert.equal(execFileSync("git", ["-C", firstPath, "remote", "get-url", "origin"], { encoding: "utf8" }).trim(), remote);
+    assert.equal(spawnSync("git", ["-C", firstPath, "check-ignore", "-q", "local/paths.toml"]).status, 0);
+    assert.equal(spawnSync("git", ["-C", firstPath, "check-ignore", "-q", "repositories/example.toml"]).status, 1);
+    writeFileSync(join(firstPath, "systems", "example.toml"), 'description = "Example system."\n', "utf8");
+    writeFileSync(join(firstPath, "tags.toml"), 'utility = "Shared tools."\n', "utf8");
+    assert.deepEqual(new TomlStore(firstPath).load().entries.map((entry) => entry.id), ["example"]);
+    assert.deepEqual(Object.keys(new TomlStore(firstPath).load().tags), ["utility"]);
+
+    catalogGit.clone(secondPath, remote);
+    const secondRegistry = new FileCatalogRegistry(join(temporary, "machine-b", "config", "catalogs.json"));
+    secondRegistry.register({ name: "work", path: secondPath, remote });
+    assert.deepEqual(secondRegistry.list(), [{ name: "work", path: secondPath, remote }]);
+    assert.notEqual(firstRegistry.get("work")?.path, secondRegistry.get("work")?.path);
+    assert.deepEqual(new TomlStore(secondPath).load().entries, []);
+    assert.equal(execFileSync("git", ["-C", secondPath, "remote", "get-url", "origin"], { encoding: "utf8" }).trim(), remote);
+    assert.notEqual(firstRegistry.path, secondRegistry.path);
+  });
+
+  test("rejects unsafe names, credential URLs, and duplicate registrations", () => {
+    const registry = new FileCatalogRegistry(join(temporary, "config", "catalogs.json"));
+    assert.throws(() => registry.register({ name: "Bad_Name", path: temporary, remote: "https://example.com/catalog.git" }), /lowercase kebab-case/);
+    assert.throws(() => registry.register({ name: "work", path: temporary, remote: "https://user:token@example.com/catalog.git" }), /credentials/);
+    registry.register({ name: "work", path: temporary, remote: "https://example.com/catalog.git" });
+    assert.throws(() => registry.register({ name: "work", path: temporary, remote: "https://example.com/catalog.git" }), /already registered/);
+    assert.throws(() => registry.register({ name: "other", path: join(temporary, "other"), remote: "https://example.com/catalog.git" }), /path or remote is already registered/);
+    assert.throws(() => registry.register({ name: "other", path: temporary, remote: "https://example.com/other.git" }), /path or remote is already registered/);
+  });
+});
 
 describe("catalog validation", () => {
   test("accepts a missing local paths file", () => {
