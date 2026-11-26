@@ -57,7 +57,7 @@ Charts recommends keeping catalog repositories in the [Folio](../GLOSSARY.md#mac
    charts add system shop --catalog work --data '{"description":"Online shop system."}'
    ```
 
-   Charts commits the entry in the catalog and pushes it to the remote. This first push fills the empty remote.
+   Charts prints `Created system shop; validation ok`, commits the entry in the catalog, and pushes it to the remote. This first push fills the empty remote. The local-path warning from step 2 can appear again; it goes away once step 4 records a path.
 
 4. Add a first Repository in that System and record where it is on this machine:
 
