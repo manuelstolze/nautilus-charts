@@ -5,6 +5,14 @@ This file holds the earlier Sync Impact Reports of [CONSTITUTION.md](../CONSTITU
 Each open follow-up ends with `(open)`, or with `(closed: <change or document>)` naming what closed it. A report with no follow-up has no marker. A later change that resolves an open follow-up marks it closed.
 
 ```text
+1.2.1 (2026-11-13)
+- Version: 1.2.0 → 1.2.1
+- Changed rules: rule VI reworded; terminal output is rendered by the CLI
+  adapter, not reached through a core port. The meaning is unchanged.
+- Affected guidance: none. The "Code structure" section of docs/structure.md
+  already matches.
+- Open follow-up: none.
+
 1.2.0 (2026-11-13)
 - Version: 1.1.0 → 1.2.0
 - Changed rules: new rule VI. The core does no I/O; Charts uses lean hexagonal

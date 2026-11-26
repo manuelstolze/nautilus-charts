@@ -9,8 +9,12 @@ A named bundle of Repositories that together form one product or platform, for e
 _Avoid_: Project, group, collection
 
 **Repository**:
-A Git repository registered in Charts. It belongs to at most one System.
+A Git repository registered in Charts. It belongs to at most one System and one Named catalog.
 _Avoid_: Repo, project, codebase
+
+**Named catalog**:
+A named set of System, Repository, and External entries, such as `work` or `personal`. A Repository belongs to one Named catalog.
+_Avoid_: Volume, shelf, profile
 
 **Independent repository**:
 A Repository that belongs to no System because it is not part of any product or platform, for example a personal tool.
@@ -46,7 +50,7 @@ _Avoid_: Component, service
 ## People
 
 **Catalog owner**:
-The one person whose catalog it is, who keeps it on their machine and confirms each write an agent proposes.
+The person who owns the Named catalogs and confirms each write an agent proposes.
 _Avoid_: Owner (unqualified), user
 
 **System owner**:
@@ -60,5 +64,5 @@ _Avoid_: Owner (unqualified), maintainer
 ## Machine
 
 **Local path**:
-The one folder on a machine where Charts finds a Repository. Each machine records its own.
+A folder on one machine where Charts finds a Repository or a Named catalog. Each machine records its own.
 _Avoid_: Checkout, working copy, clone, main local copy

@@ -1,26 +1,28 @@
 <!--
 Sync Impact Report
 
-1.2.1 (2026-11-13)
-- Version: 1.2.0 → 1.2.1
-- Changed rules: rule VI reworded; terminal output is rendered by the CLI
-  adapter, not reached through a core port. The meaning is unchanged.
-- Affected guidance: none. The "Code structure" section of docs/structure.md
-  already matches.
-- Open follow-up: none.
+2.0.0 (2026-11-26)
+- Version: 1.2.1 → 2.0.0
+- Changed rules: I allows named catalog data in separate Git repositories and
+  sync to owner-configured remotes; III allows remote Git only for named
+  catalogs, not listed code repositories; IV adds catalog management and sync.
+- Affected guidance: README.md, CONTRIBUTING.md, docs/structure.md,
+  GLOSSARY.md, .agents/skills/charts/SKILL.md, docs/adr/README.md, and
+  docs/adr/0002-named-catalogs.md.
+- Open follow-up: implement named catalogs and remote sync in Charts. (open)
 -->
 
 # nautilus-charts Constitution
 
-Version 1.2.1
+Version 2.0.0
 
 These are the mandatory rules for Charts. They bind every change to this repository and every agent that runs its skills. Other guidance in this repository links to these rules instead of repeating them. Conventions, such as branch names, commit messages, and checks, are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Rules
 
-### I. The catalog stays private
+### I. Catalog data stays owner-controlled
 
-Catalog entries in `systems/`, `repositories/`, and `externals/`, and `local/paths.toml`, are each user's own. Git ignores them because they can name private systems, internal hosts, and remotes. Never commit them, and never force-add them with `git add -f`. Remote links never contain credentials.
+Entries in `systems/`, `repositories/`, and `externals/` in the Charts source repository remain each user's own. Git ignores them because they can name private systems, internal hosts, and remotes. Named catalogs store their entries in separate Git repositories. Charts may sync a named catalog only to remotes configured by its owner. The mapping from catalog names to local folders, and paths to code repositories, stay on each machine and are not synced. Remote links never contain credentials.
 
 Examples in documentation, templates, and tests use neutral names such as `shop` or `example.com`, never a real company, internal host, or private repository.
 
@@ -28,14 +30,15 @@ Examples in documentation, templates, and tests use neutral names such as `shop`
 
 Charts keeps only its own data. It calls no other module, reads no other module's files, and does not check IDs that other modules use. The Bridge resolves those IDs against Charts (nautilus-bridge ADR 0002).
 
-### III. Charts works locally and never touches repositories
+### III. Charts syncs only its own catalogs
 
-The `charts` script uses local Git data only. It never contacts remote servers, clones, or fetches. Removing an entry never deletes the repository or its files.
+Charts may contact remote servers only to clone or sync named catalog repositories with remotes configured by their owner. It never contacts, clones, fetches, or pushes code repositories listed in a catalog. Removing an entry never deletes the listed repository or its files.
 
 ### IV. Charts stays within its responsibilities
 
 Charts is responsible for:
 
+- Registering, selecting, and syncing named catalogs to their configured remotes.
 - Registering, finding, updating, and removing systems, repositories, and externals.
 - Recording dependencies between repositories and on external services.
 - Deriving dependencies between systems. They are never recorded by hand.
@@ -47,7 +50,7 @@ Charts is not responsible for:
 - Knowledge about systems, such as how-tos or spike results. That belongs in `nautilus-library`.
 - Specifications, plans, and task lists for changes. They belong in `nautilus-logbook`.
 - Checking IDs that other modules use.
-- Cloning or fetching repositories.
+- Cloning, fetching, or pushing code repositories listed in a catalog.
 
 Work that belongs to another module goes to that module.
 

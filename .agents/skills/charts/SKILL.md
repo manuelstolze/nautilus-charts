@@ -17,6 +17,8 @@ charts find
 
 If `charts` is not found, stop and ask the catalog owner to link the command as the [README](../../../README.md#setup) shows. `charts describe --json` lists every command and error code. With `--json`, a failure prints `{"error": {"code", "message", "details"}}`; act on the `code`, not the message. Use the Charts repository root only when you edit an entry file by hand, and take it from the task or project context. If you do not know the root, ask the catalog owner. Do not guess a path on the machine.
 
+Named catalogs and catalog sync are approved follow-up work, but the current command does not support them yet. When available, use only Charts commands to sync a named catalog. Never use remote Git operations on code repositories listed in a catalog.
+
 ## Find and show entries
 
 1. Search by ID, name, or description with `find [text]`.
@@ -35,7 +37,7 @@ If a result is ambiguous, ask the catalog owner which entry they mean. A path in
 3. For a repository, add `system` only when it belongs to that system. Use tags listed in `tags.toml`. If the repository needs a missing tag, propose a lowercase kebab-case name and a description, then ask the catalog owner to confirm both before passing `--new-tag '<name>=<description>'`. `tags.toml` is shared and tracked by Git. Charts never stages or commits it; the catalog owner decides whether to commit it. Record only dependencies you can verify. A dependency can name a repository or an external. Charts derives system dependencies; do not add them by hand. Add a repository `key` only when needed. Search with `find <key>` and ask the catalog owner to choose a unique key; Charts checks that it is unique.
    For ticket tracking, set an optional `ticket-key` only when the catalog owner names one. Prefer setting it on the System. Use 2–10 characters: an uppercase letter, then uppercase letters or digits. A Repository's own value takes precedence over its System's value. If neither sets a value, no ticket key resolves. Ticket keys are not unique and may equal a Repository's `key`. Check the resolved value with `show <repository> --json`; read `resolved_ticket_key` and `ticket_key_source`.
 
-4. Before you record a suggested remote, inspect local Git remote settings and ask the catalog owner to confirm the remote. Never record credentials. Do not connect to a remote, clone, or fetch.
+4. Before you record a suggested code-repository remote, inspect local Git remote settings and ask the catalog owner to confirm the remote. Never record credentials. Do not connect to a code-repository remote, clone, or fetch that repository. Catalog sync is separate and applies only to Charts-owned named catalogs.
 5. Run `charts add`. It uses the matching template, checks the full catalog, and removes its new entry if validation fails:
 
    ```sh
@@ -67,7 +69,7 @@ If a result is ambiguous, ask the catalog owner which entry they mean. A path in
 
 ## Check
 
-Run `charts check` after every catalog change and before you report completion. The command checks entry data, references, tags, local paths, configured remotes, and the Git ignore rule for `local/paths.toml`. Errors cause exit code 3 and the report lists them. Warnings alone do not.
+Run `charts check` after every catalog change and before you report completion. The command checks entry data, references, tags, local paths, code-repository remotes, and the Git ignore rule for `local/paths.toml`. Errors cause exit code 3 and the report lists them. Warnings alone do not.
 
 Success from `add` and `set` names the entry by type and ID and reports validation. It does not expose a Charts store location. Findings name entries or catalog parts, for example:
 

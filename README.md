@@ -14,7 +14,7 @@
   </picture>
 </p>
 
-Charts lists the Git repositories you work with, the systems they form, the external services they use, and how they depend on each other. A repository belongs to at most one system. Each machine keeps the local path of each repository separately.
+Charts lists the Git repositories you work with, the systems they form, the external services they use, and how they depend on each other. A repository belongs to at most one system and one named catalog. Each machine keeps catalog and code-repository paths separately.
 
 ## Service map
 
@@ -40,7 +40,9 @@ Workflow modules use Charts. Today this is the Bridge, and Sonar is planned to u
 - A repository may name its `system` and list what it `depends-on`: other repositories or externals.
 - Charts derives system dependencies from repository dependencies. They are never recorded by hand.
 - Repository tags come from `tags.toml`.
-- Git ignores all entries. Each machine keeps its own catalog, so private systems and remotes are never published.
+- Entries in this Charts source repository remain Git-ignored. Named catalogs will store entries in separate Git repositories and may sync to remotes set by their owner.
+- A code repository belongs to one named catalog. The catalog-name registry and code-repository paths stay on each machine and are not synced.
+- The current command still uses one root catalog. Named catalogs and catalog sync are approved follow-up work; they are not implemented yet.
 - `local/paths.toml` maps repository IDs to local paths on this machine. Git ignores it.
 
 ```toml
@@ -97,7 +99,7 @@ Use `--local-path` only for a repository. Charts checks the full catalog, includ
 
 Use `charts set <id>` to add or replace fields on an existing entry. Its `--data` value is a partial JSON object. Each named field replaces the full old value; other fields stay unchanged. `--local-path` and `--new-tag` follow the repository rules above. Changing an existing repository key needs `--replace-key`; check in the Logbook that no other module uses the key, then ask the catalog owner before using this option. Charts changes only the named TOML lines, validates the full catalog, and restores the entry, `local/paths.toml`, and `tags.toml` when validation fails. Unsafe layouts, such as duplicate or dotted fields and TOML table sections, are refused. A request that changes nothing succeeds without writing.
 
-Find prints one line per entry. Add `--json` when another tool reads a result. With `--json`, a failure prints `{"error": {"code", "message", "details"}}` and exits with 1 for a usage error, 2 for not found, 3 for a refusal, and 4 for an external failure; [docs/structure.md](docs/structure.md#errors-and-exit-codes) lists the codes. `charts check` with errors exits with 3 and keeps its report as output. `charts describe --json` lists every command and error code. The command uses local Git data only. It never contacts remote servers, clones, or fetches.
+Find prints one line per entry. Add `--json` when another tool reads a result. With `--json`, a failure prints `{"error": {"code", "message", "details"}}` and exits with 1 for a usage error, 2 for not found, 3 for a refusal, and 4 for an external failure; [docs/structure.md](docs/structure.md#errors-and-exit-codes) lists the codes. `charts check` with errors exits with 3 and keeps its report as output. `charts describe --json` lists every command and error code. The current command uses local Git data only. The named-catalog feature will allow remote Git operations only for Charts' own catalog repositories. It will not contact or change code repositories listed in a catalog.
 
 ## Requirements
 
@@ -119,7 +121,7 @@ npm run check
 
 The link puts the `charts` command on `PATH` when `~/.local/bin` is on it, whichever Node version nvm has active; do not use `npm link`. Link it once per machine. The command runs with plain Node and works from any folder.
 
-The catalog starts empty. Add systems, repositories, and externals with `charts add`, or ask the `charts` skill to register them. Git ignores your entries, so back them up yourself, for example in a private repository.
+The current root catalog starts empty. Add systems, repositories, and externals with `charts add`, or ask the `charts` skill to register them. Git ignores these current entries, so back them up yourself, for example in a private repository. Named catalogs and catalog sync are approved follow-up work, not yet available.
 
 Skills live in `.agents/skills/`. The links in `.claude/skills/` are tracked. When you add a skill, create its link with this command. Use the skill's path under `.agents/skills/` as `<path>`:
 
