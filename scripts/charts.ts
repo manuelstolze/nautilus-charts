@@ -8,13 +8,13 @@ import {
   readInvocation,
   renderAdd,
   renderCatalog,
+  renderCatalogList,
   renderCheck,
   renderDescribe,
   renderEdges,
   renderError,
   renderFind,
   renderHelp,
-  renderMigrate,
   renderShow,
   renderSet,
   renderUsageError,
@@ -29,8 +29,8 @@ import { FileCatalogSyncState } from "../src/adapters/catalog-sync-state.ts";
 import { GitCli } from "../src/adapters/git-cli.ts";
 import { TomlStore } from "../src/adapters/toml-store.ts";
 import { add } from "../src/commands/add.ts";
+import { catalogList } from "../src/commands/catalog-list.ts";
 import { check } from "../src/commands/check.ts";
-import { migrate } from "../src/commands/migrate.ts";
 import type { Ports } from "../src/commands/context.ts";
 import { deps, rdeps } from "../src/commands/deps.ts";
 import { find } from "../src/commands/find.ts";
@@ -90,8 +90,8 @@ class CatalogPathInspector implements GitInspector {
   private readonly primary: GitCli;
   private readonly byName: Map<string, GitCli>;
 
-  constructor(root: string, registration: CatalogRegistration | undefined, catalogs: CatalogRegistration[]) {
-    this.primary = new GitCli(registration?.path ?? root);
+  constructor(registration: CatalogRegistration, catalogs: CatalogRegistration[]) {
+    this.primary = new GitCli(registration.path);
     this.byName = new Map(catalogs.map((catalog) => [catalog.name, new GitCli(catalog.path)]));
   }
 
@@ -115,6 +115,9 @@ function bridgeLookupError(index: CatalogIndex): ChartsError | null {
 
 function buildPorts(options: Options, root: string, registry: FileCatalogRegistry): Ports {
   const registrations = registry.list();
+  if (registrations.length === 0) {
+    throw new ChartsError("usage", "no catalogs are registered; run charts catalog create or charts catalog clone");
+  }
   let registration: CatalogRegistration | undefined;
   let includeRelated = false;
   let allCatalogs = false;
@@ -122,7 +125,7 @@ function buildPorts(options: Options, root: string, registry: FileCatalogRegistr
   if (options.catalogName !== undefined) {
     registration = registry.get(options.catalogName) ?? undefined;
     if (!registration) throw new ChartsError("usage", `unknown catalog: ${options.catalogName}`);
-  } else if (registrations.length > 0) {
+  } else {
     if (options.command === "show") {
       registration = registrations[0];
       includeRelated = true;
@@ -144,12 +147,12 @@ function buildPorts(options: Options, root: string, registry: FileCatalogRegistr
 
   const related = includeRelated && registration
     ? registrations.filter((catalog) => catalog.name !== registration!.name)
-    : options.catalogName && registration && ["add", "set", "check", "deps", "rdeps", "migrate"].includes(options.command)
+    : options.catalogName && registration && ["add", "set", "check", "deps", "rdeps"].includes(options.command)
       ? registrations.filter((catalog) => catalog.name !== registration!.name)
       : [];
-  const base = new TomlStore(registration?.path ?? root);
+  const base = new TomlStore(registration!.path);
   const store = new IndexedCatalogStore(base, registration, related);
-  const git = new CatalogPathInspector(root, registration, registrations);
+  const git = new CatalogPathInspector(registration!, registrations);
   return {
     store,
     git,
@@ -174,7 +177,8 @@ function readSyncInterval(override?: number): number {
   return interval;
 }
 
-function createOrCloneCatalog(options: Options, root: string, registry: FileCatalogRegistry): number {
+function runCatalogCommand(options: Options, root: string, registry: FileCatalogRegistry): number {
+  if (options.catalogAction === "list") return renderCatalogList(options.json, catalogList(registry));
   const name = options.catalogName!;
   if (options.catalogAction === "sync") {
     const catalog = registry.get(name);
@@ -226,7 +230,8 @@ export function main(argv = process.argv.slice(2), root = ROOT, registryPath?: s
       ? defaultCatalogRegistryPath()
       : join(resolvedRoot, "local", "catalogs.json"));
     const registry = new FileCatalogRegistry(localRegistryPath);
-    if (options.command === "catalog") return createOrCloneCatalog(options, resolvedRoot, registry);
+    if (options.command === "catalog") return runCatalogCommand(options, resolvedRoot, registry);
+    if (options.command === "describe") return renderDescribe(options.json, moduleInfo());
 
     const ports = buildPorts(options, resolvedRoot, registry);
     if (["find", "show", "deps", "rdeps", "check"].includes(options.command)) {
@@ -261,12 +266,6 @@ export function main(argv = process.argv.slice(2), root = ROOT, registryPath?: s
         }));
       case "check":
         return renderCheck(options.json, check(ports));
-      case "migrate":
-        return renderMigrate(options.json, migrate({
-          source: new TomlStore(resolvedRoot),
-          sourceGit: new GitCli(resolvedRoot),
-          destination: ports,
-        }, options.id!));
       case "find": {
         const result = find(ports, options);
         if (!ports.allCatalogs) return renderFind(options.json, result);
@@ -289,8 +288,6 @@ export function main(argv = process.argv.slice(2), root = ROOT, registryPath?: s
         return renderEdges(options.json, deps(ports, options.id!), false);
       case "rdeps":
         return renderEdges(options.json, rdeps(ports, options.id!), true);
-      case "describe":
-        return renderDescribe(options.json, moduleInfo());
     }
   } catch (error) {
     return renderError(options.json, error);

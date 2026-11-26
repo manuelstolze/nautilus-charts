@@ -187,7 +187,7 @@ describe("validation", () => {
     assert.deepEqual(errors, [
       'repository loop: system "missing-system" does not name a system',
       "repository loop: depends-on[0] cannot point to the same repository",
-      'repository loop: depends-on[1] ID "missing" does not exist',
+      'repository loop: depends-on[1] ID "missing" does not exist in any registered catalog',
       "repository loop: depends-on[2] has unknown field(s): extra",
       'repository loop: depends-on[2] ID "alpha" is not a repository or external',
       "repository loop: depends-on[2] via must be a string",

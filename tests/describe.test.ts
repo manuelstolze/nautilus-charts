@@ -29,7 +29,16 @@ describe("describe", () => {
     assert.equal(described.status, 0, described.stderr);
     const commands = (JSON.parse(described.stdout) as { commands: Array<{ name: string }> }).commands.map(({ name }) => name);
     assert.deepEqual(commands, helpCommands(help.stdout));
-    assert.deepEqual(commands, ["find", "show", "deps", "rdeps", "check", "add", "set", "migrate", "catalog", "describe"]);
+    assert.deepEqual(commands, ["find", "show", "deps", "rdeps", "check", "add", "set", "catalog", "describe"]);
+  });
+
+  test("describes catalog list with name, path, and remote fields", () => {
+    const catalog = COMMANDS.find(({ name }) => name === "catalog");
+    assert.ok(catalog);
+    assert.match(catalog.usage, /list/);
+    const argumentsSchema = catalog.arguments as { prefixItems: Array<{ enum?: string[] }> };
+    assert.ok(argumentsSchema.prefixItems[0].enum?.includes("list"));
+    assert.match(catalog.output.fields.catalogs, /name, path, and remote/);
   });
 
   test("has the structure of the Logbook's describe output", () => {
@@ -126,8 +135,8 @@ describe("command table", () => {
 describe("version", () => {
   const manifest = JSON.parse(readFileSync(join(REPO_ROOT, "package.json"), "utf8")) as { version: string };
 
-  test("package.json starts Charts at version 2.1.0", () => {
-    assert.equal(manifest.version, "2.1.0");
+  test("package.json starts Charts at version 3.0.0", () => {
+    assert.equal(manifest.version, "3.0.0");
   });
 
   test("--version prints the module and the version from package.json, as text or JSON", () => {
