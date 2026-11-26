@@ -3,7 +3,8 @@ import type { Data, Kind } from "../domain/entry.ts";
 import type { IgnoreCheck, LocalPathFact, NewTag } from "../domain/validation.ts";
 
 /**
- * The catalog store: entry files, `tags.toml`, the templates, and `local/paths.toml`.
+ * The catalog store: entry files, `tags.toml`, and `local/paths.toml`.
+ * Entry templates come from Charts' own `templates/` folder.
  */
 export interface CatalogRegistration {
   name: string;
@@ -39,7 +40,7 @@ export interface CatalogStore {
   /** Whether a file for this ID exists under any entry type, readable or not. */
   entryFileExists(id: string): boolean;
   /**
-   * Writes a new entry from its template's field order, records its local path,
+   * Writes a new entry in Charts' template field order, records its local path,
    * and appends any new tags. `path` is the catalog-relative entry file.
    * - `invalid`: nothing was written.
    * - `failed`: a write failed; the store already rolled back, and `errors`
