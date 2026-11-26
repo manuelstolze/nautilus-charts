@@ -1,12 +1,12 @@
 ## system
-$ charts "show" "alpha"
+$ charts "show" "alpha" "--catalog" "nautilus"
 exit: 0
 --- stdout
 system alpha — name=Alpha — description=Alpha system. — owner=Team Alpha
 --- stderr
 
 ## system (--json)
-$ charts "show" "alpha" "--json"
+$ charts "show" "alpha" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -19,14 +19,14 @@ exit: 0
 --- stderr
 
 ## repository with an ok path
-$ charts "show" "alpha-app"
+$ charts "show" "alpha-app" "--catalog" "nautilus"
 exit: 0
 --- stdout
 repository alpha-app — name=Alpha App — description=Alpha application. — key=ALP — system=alpha — owner=Team Alpha — tags=utility — remote=https://example.com/shop/alpha-app.git — default-branch=main — depends-on=id=beta-lib, via=npm, id=stripe, via=API — local_path=<TMP>/work/alpha-app — local_path_status=ok
 --- stderr
 
 ## repository with an ok path (--json)
-$ charts "show" "alpha-app" "--json"
+$ charts "show" "alpha-app" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -60,14 +60,14 @@ exit: 0
 --- stderr
 
 ## repository with an inherited ticket key
-$ charts "show" "alpha-app"
+$ charts "show" "alpha-app" "--catalog" "nautilus"
 exit: 0
 --- stdout
 repository alpha-app — name=Alpha App — description=Alpha application. — key=ALP — system=alpha — owner=Team Alpha — tags=utility — remote=https://example.com/shop/alpha-app.git — default-branch=main — depends-on=id=beta-lib, via=npm, id=stripe, via=API — local_path=<TMP>/work/alpha-app — local_path_status=ok — resolved_ticket_key=ABC — ticket_key_source=system
 --- stderr
 
 ## repository with an inherited ticket key (--json)
-$ charts "show" "alpha-app" "--json"
+$ charts "show" "alpha-app" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -101,14 +101,14 @@ exit: 0
 --- stderr
 
 ## repository with no path configured
-$ charts "show" "beta-lib"
+$ charts "show" "beta-lib" "--catalog" "nautilus"
 exit: 0
 --- stdout
 repository beta-lib — name=beta-lib — description=Beta library. — key=BET — system=beta — tags=library — local_path_status=not configured
 --- stderr
 
 ## repository with no path configured (--json)
-$ charts "show" "beta-lib" "--json"
+$ charts "show" "beta-lib" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -129,14 +129,14 @@ exit: 0
 --- stderr
 
 ## external
-$ charts "show" "stripe"
+$ charts "show" "stripe" "--catalog" "nautilus"
 exit: 0
 --- stdout
 external stripe — name=stripe — description=Payment service. — provider=example — kind=saas
 --- stderr
 
 ## external (--json)
-$ charts "show" "stripe" "--json"
+$ charts "show" "stripe" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -150,14 +150,14 @@ exit: 0
 --- stderr
 
 ## unknown ID
-$ charts "show" "missing"
+$ charts "show" "missing" "--catalog" "nautilus"
 exit: 2
 --- stdout
 --- stderr
 ERROR: unknown entry ID: missing
 
 ## unknown ID (--json)
-$ charts "show" "missing" "--json"
+$ charts "show" "missing" "--catalog" "nautilus" "--json"
 exit: 2
 --- stdout
 {
@@ -172,14 +172,14 @@ exit: 2
 --- stderr
 
 ## repository with a missing path
-$ charts "show" "alpha-app"
+$ charts "show" "alpha-app" "--catalog" "nautilus"
 exit: 0
 --- stdout
 repository alpha-app — name=Alpha App — description=Alpha application. — key=ALP — system=alpha — owner=Team Alpha — tags=utility — remote=https://example.com/shop/alpha-app.git — default-branch=main — depends-on=id=beta-lib, via=npm, id=stripe, via=API — local_path_status=path does not exist: <TMP>/work/absent
 --- stderr
 
 ## repository with a missing path (--json)
-$ charts "show" "alpha-app" "--json"
+$ charts "show" "alpha-app" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -213,14 +213,14 @@ exit: 0
 --- stderr
 
 ## repository with a remote mismatch
-$ charts "show" "alpha-app"
+$ charts "show" "alpha-app" "--catalog" "nautilus"
 exit: 0
 --- stdout
 repository alpha-app — name=Alpha App — description=Alpha application. — key=ALP — system=alpha — owner=Team Alpha — tags=utility — remote=https://example.com/shop/alpha-app.git — default-branch=main — depends-on=id=beta-lib, via=npm, id=stripe, via=API — local_path_status=remote does not match "https://example.com/shop/alpha-app.git"
 --- stderr
 
 ## repository with a remote mismatch (--json)
-$ charts "show" "alpha-app" "--json"
+$ charts "show" "alpha-app" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -254,14 +254,14 @@ exit: 0
 --- stderr
 
 ## repository path that is not a Git root
-$ charts "show" "beta-lib"
+$ charts "show" "beta-lib" "--catalog" "nautilus"
 exit: 0
 --- stdout
 repository beta-lib — name=beta-lib — description=Beta library. — key=BET — system=beta — tags=library — local_path_status=not a Git repository root: <TMP>/work/plain
 --- stderr
 
 ## repository path that is not a Git root (--json)
-$ charts "show" "beta-lib" "--json"
+$ charts "show" "beta-lib" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {

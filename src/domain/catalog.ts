@@ -30,13 +30,13 @@ export class CatalogIndex {
   private readonly byId = new Map<string, Entry>();
   private readonly catalogByEntry = new Map<Entry, string | undefined>();
   private readonly snapshotByEntry = new Map<Entry, Snapshot>();
-  private readonly loadedCatalogs: NamedCatalogSnapshot[];
+  private readonly loadedCatalogs: Array<{ name?: string; snapshot: Snapshot }>;
 
   constructor(snapshot: Snapshot, options: CatalogIndexOptions = {}) {
     this.snapshot = snapshot;
     this.catalogName = options.catalogName ?? snapshot.catalogName;
     this.loadedCatalogs = [
-      { name: this.catalogName ?? "current", snapshot },
+      { ...(this.catalogName === undefined ? {} : { name: this.catalogName }), snapshot },
       ...(options.catalogs ?? snapshot.catalogs ?? []),
     ];
     for (const [position, catalog] of this.loadedCatalogs.entries()) {
@@ -75,7 +75,9 @@ export class CatalogIndex {
   }
 
   unreadableCatalogs(): NamedCatalogSnapshot[] {
-    return this.loadedCatalogs.filter(({ snapshot }) => snapshot.loadErrors.length > 0);
+    return this.loadedCatalogs.filter((catalog): catalog is NamedCatalogSnapshot =>
+      catalog.name !== undefined && catalog.snapshot.loadErrors.length > 0
+    );
   }
 
   entriesFor(kind: Kind): Entry[] {

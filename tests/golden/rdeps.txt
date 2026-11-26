@@ -1,5 +1,5 @@
 ## repository
-$ charts "rdeps" "beta-lib"
+$ charts "rdeps" "beta-lib" "--catalog" "nautilus"
 exit: 0
 --- stdout
 beta-lib <- repository alpha-app
@@ -7,7 +7,7 @@ beta-lib <- repository gamma-app
 --- stderr
 
 ## repository (--json)
-$ charts "rdeps" "beta-lib" "--json"
+$ charts "rdeps" "beta-lib" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -29,14 +29,14 @@ exit: 0
 --- stderr
 
 ## repository without dependents
-$ charts "rdeps" "alpha-app"
+$ charts "rdeps" "alpha-app" "--catalog" "nautilus"
 exit: 0
 --- stdout
 alpha-app: no dependents
 --- stderr
 
 ## repository without dependents (--json)
-$ charts "rdeps" "alpha-app" "--json"
+$ charts "rdeps" "alpha-app" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -47,14 +47,14 @@ exit: 0
 --- stderr
 
 ## external
-$ charts "rdeps" "stripe"
+$ charts "rdeps" "stripe" "--catalog" "nautilus"
 exit: 0
 --- stdout
 stripe <- repository alpha-app
 --- stderr
 
 ## external (--json)
-$ charts "rdeps" "stripe" "--json"
+$ charts "rdeps" "stripe" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -71,7 +71,7 @@ exit: 0
 --- stderr
 
 ## system
-$ charts "rdeps" "beta"
+$ charts "rdeps" "beta" "--catalog" "nautilus"
 exit: 0
 --- stdout
 beta <- repository alpha-app
@@ -81,7 +81,7 @@ beta <- system gamma via repositories gamma-app
 --- stderr
 
 ## system (--json)
-$ charts "rdeps" "beta" "--json"
+$ charts "rdeps" "beta" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -119,14 +119,14 @@ exit: 0
 --- stderr
 
 ## unknown ID
-$ charts "rdeps" "missing"
+$ charts "rdeps" "missing" "--catalog" "nautilus"
 exit: 2
 --- stdout
 --- stderr
 ERROR: unknown entry ID: missing
 
 ## unknown ID (--json)
-$ charts "rdeps" "missing" "--json"
+$ charts "rdeps" "missing" "--catalog" "nautilus" "--json"
 exit: 2
 --- stdout
 {

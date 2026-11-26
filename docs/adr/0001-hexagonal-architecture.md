@@ -8,7 +8,7 @@ Every Nautilus module uses lean hexagonal architecture: the core does no I/O, po
 
 The reasons are that implementation agents write most of the code, so the boundary must be one that a test can check; that the rules that cross modules need one shape in every module; and that the Bridge needs workflows that can be tested even when they interleave I/O, such as asking Charts for a path, creating a worktree, and starting an agent.
 
-In Charts, the core is `src/domain/` (the catalog rules) and `src/commands/` (one use case per command and the port interfaces). The core defines exactly two ports: a store port for entry files, `tags.toml`, the templates, and `local/paths.toml`, which keeps `add` atomic with its rollback; and a Git port for repository roots, remotes, and ignore checks. Adapters in `src/adapters/` implement them and handle the terminal. `scripts/charts.ts` is the composition root.
+In Charts, the core is `src/domain/` (the catalog rules) and `src/commands/` (one use case per command and the port interfaces). The core defines ports for catalog entry files, tags, templates, machine-local path maps, catalog registration, and Git checks. These ports keep `add` atomic with its rollback. Adapters in `src/adapters/` implement them and handle the terminal. `scripts/charts.ts` is the composition root.
 
 ## Considered options
 

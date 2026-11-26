@@ -1,5 +1,5 @@
 ## success
-$ charts "set" "alpha-app" "--data" "{\"description\":\"Updated application.\"}"
+$ charts "set" "alpha-app" "--data" "{\"description\":\"Updated application.\"}" "--catalog" "nautilus"
 exit: 0
 --- stdout
 Updated repository alpha-app; changed fields: description; validation ok
@@ -16,7 +16,7 @@ default-branch = "main"
 depends-on = [{ id = "beta-lib", via = "npm" }, { id = "stripe", via = "API" }]
 
 ## success (--json)
-$ charts "set" "alpha-app" "--data" "{\"description\":\"Updated application.\"}" "--json"
+$ charts "set" "alpha-app" "--data" "{\"description\":\"Updated application.\"}" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -46,7 +46,7 @@ default-branch = "main"
 depends-on = [{ id = "beta-lib", via = "npm" }, { id = "stripe", via = "API" }]
 
 ## no change
-$ charts "set" "alpha-app" "--data" "{\"description\":\"Alpha application.\"}"
+$ charts "set" "alpha-app" "--data" "{\"description\":\"Alpha application.\"}" "--catalog" "nautilus"
 exit: 0
 --- stdout
 No change to repository alpha-app
@@ -63,7 +63,7 @@ default-branch = "main"
 depends-on = [{ id = "beta-lib", via = "npm" }, { id = "stripe", via = "API" }]
 
 ## no change (--json)
-$ charts "set" "alpha-app" "--data" "{\"description\":\"Alpha application.\"}" "--json"
+$ charts "set" "alpha-app" "--data" "{\"description\":\"Alpha application.\"}" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -91,7 +91,7 @@ default-branch = "main"
 depends-on = [{ id = "beta-lib", via = "npm" }, { id = "stripe", via = "API" }]
 
 ## refused key change
-$ charts "set" "alpha-app" "--data" "{\"key\":\"NEW\"}"
+$ charts "set" "alpha-app" "--data" "{\"key\":\"NEW\"}" "--catalog" "nautilus"
 exit: 3
 --- stdout
 --- stderr
@@ -109,7 +109,7 @@ default-branch = "main"
 depends-on = [{ id = "beta-lib", via = "npm" }, { id = "stripe", via = "API" }]
 
 ## refused key change (--json)
-$ charts "set" "alpha-app" "--data" "{\"key\":\"NEW\"}" "--json"
+$ charts "set" "alpha-app" "--data" "{\"key\":\"NEW\"}" "--catalog" "nautilus" "--json"
 exit: 3
 --- stdout
 {
@@ -137,14 +137,14 @@ default-branch = "main"
 depends-on = [{ id = "beta-lib", via = "npm" }, { id = "stripe", via = "API" }]
 
 ## input error
-$ charts "set" "alpha-app" "--data" "{"
+$ charts "set" "alpha-app" "--data" "{" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
 ERROR: --data is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2)
 
 ## input error (--json)
-$ charts "set" "alpha-app" "--data" "{" "--json"
+$ charts "set" "alpha-app" "--data" "{" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {

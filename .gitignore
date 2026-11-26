@@ -1,6 +1,2 @@
-/local/paths.toml
 /folio/
 /node_modules/
-/systems/*.toml
-/repositories/*.toml
-/externals/*.toml

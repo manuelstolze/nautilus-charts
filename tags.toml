@@ -1,3 +1,0 @@
-utility = "Shared tools, configuration, or helper code."
-library = "Code consumed by other repositories."
-service = "A deployable service."
