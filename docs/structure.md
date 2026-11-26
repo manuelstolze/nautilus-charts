@@ -165,7 +165,7 @@ Charts contacts only registered catalog repositories. It never contacts listed c
 
 `charts catalog create <name> --path <folder> --remote <url>` makes an empty local catalog. `charts catalog clone <name> --path <folder> --remote <url>` clones a catalog. Both register the selected folder and its one remote in this machine's registry. A `--catalog <name>` option selects a catalog for scoped commands. If no named catalogs are registered, commands without `--catalog` use the legacy root. When named catalogs are registered, `add`, `set`, `deps`, `rdeps`, `check`, and general text search need `--catalog`. Without it, `show <id>` and exact-ID `find <id>` search named catalogs only.
 
-The legacy root catalog remains available until its owner chooses migration. `charts migrate <id> --catalog <name>` copies one root entry, its needed tag definitions, and this machine's local path mapping into the selected catalog. It checks and commits the copy locally, but does not sync or change the root. The owner reviews the copy, then starts sync with `charts catalog sync <name>`.
+For this setup, `folio` is the planned destination for all Repository entries and their linked Systems. Other named catalogs remain supported. The legacy root catalog remains available until its owner chooses migration. `charts migrate <id> --catalog <name>` copies one root entry, its needed tag definitions, and this machine's local path mapping into the selected catalog. It checks and commits the copy locally, but does not sync or change the root. The owner reviews the copy, then starts sync with `charts catalog sync <name>`.
 
 ## The `charts` command
 
