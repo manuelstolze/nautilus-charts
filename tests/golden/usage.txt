@@ -12,6 +12,7 @@ Commands:
   check [--catalog <name>]
   add <system|repository|external> <id> --data '<JSON>' [--catalog <name>] [--local-path <path>] [--new-tag <name>=<description>]...
   set <id> [--catalog <name>] [--data '<JSON>'] [--local-path <path>] [--new-tag <name>=<description>]... [--replace-key]
+  migrate <id> --catalog <destination>
   catalog <create|clone|sync> <name> [--path <path> --remote <url>]
   describe
 --- stderr
@@ -30,6 +31,7 @@ Commands:
   check [--catalog <name>]
   add <system|repository|external> <id> --data '<JSON>' [--catalog <name>] [--local-path <path>] [--new-tag <name>=<description>]...
   set <id> [--catalog <name>] [--data '<JSON>'] [--local-path <path>] [--new-tag <name>=<description>]... [--replace-key]
+  migrate <id> --catalog <destination>
   catalog <create|clone|sync> <name> [--path <path> --remote <url>]
   describe
 --- stderr
@@ -39,7 +41,7 @@ $ charts "list"
 exit: 1
 --- stdout
 --- stderr
-ERROR: usage: charts <find|show|deps|rdeps|check|add|set|catalog|describe> [arguments] [--json]
+ERROR: usage: charts <find|show|deps|rdeps|check|add|set|migrate|catalog|describe> [arguments] [--json]
 
 ## unknown command (--json)
 $ charts "list" "--json"
@@ -48,7 +50,7 @@ exit: 1
 {
   "error": {
     "code": "usage",
-    "message": "usage: charts <find|show|deps|rdeps|check|add|set|catalog|describe> [arguments] [--json]",
+    "message": "usage: charts <find|show|deps|rdeps|check|add|set|migrate|catalog|describe> [arguments] [--json]",
     "details": {}
   }
 }

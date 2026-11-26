@@ -14,6 +14,7 @@ import {
   renderError,
   renderFind,
   renderHelp,
+  renderMigrate,
   renderShow,
   renderSet,
   renderUsageError,
@@ -29,6 +30,7 @@ import { GitCli } from "../src/adapters/git-cli.ts";
 import { TomlStore } from "../src/adapters/toml-store.ts";
 import { add } from "../src/commands/add.ts";
 import { check } from "../src/commands/check.ts";
+import { migrate } from "../src/commands/migrate.ts";
 import type { Ports } from "../src/commands/context.ts";
 import { deps, rdeps } from "../src/commands/deps.ts";
 import { find } from "../src/commands/find.ts";
@@ -142,7 +144,7 @@ function buildPorts(options: Options, root: string, registry: FileCatalogRegistr
 
   const related = includeRelated && registration
     ? registrations.filter((catalog) => catalog.name !== registration!.name)
-    : options.catalogName && registration && ["add", "set", "check", "deps", "rdeps"].includes(options.command)
+    : options.catalogName && registration && ["add", "set", "check", "deps", "rdeps", "migrate"].includes(options.command)
       ? registrations.filter((catalog) => catalog.name !== registration!.name)
       : [];
   const base = new TomlStore(registration?.path ?? root);
@@ -259,6 +261,12 @@ export function main(argv = process.argv.slice(2), root = ROOT, registryPath?: s
         }));
       case "check":
         return renderCheck(options.json, check(ports));
+      case "migrate":
+        return renderMigrate(options.json, migrate({
+          source: new TomlStore(resolvedRoot),
+          sourceGit: new GitCli(resolvedRoot),
+          destination: ports,
+        }, options.id!));
       case "find": {
         const result = find(ports, options);
         if (!ports.allCatalogs) return renderFind(options.json, result);
