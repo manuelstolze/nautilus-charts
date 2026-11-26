@@ -57,14 +57,14 @@ exit: 1
 --- stderr
 
 ## unknown option
-$ charts "show" "alpha" "--verbose"
+$ charts "show" "alpha" "--verbose" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
 ERROR: unknown option: --verbose
 
 ## unknown option (--json)
-$ charts "show" "alpha" "--verbose" "--json"
+$ charts "show" "alpha" "--verbose" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {
@@ -77,14 +77,14 @@ exit: 1
 --- stderr
 
 ## filter outside find
-$ charts "show" "alpha" "--system" "alpha"
+$ charts "show" "alpha" "--system" "alpha" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
 ERROR: unknown option: --system
 
 ## filter outside find (--json)
-$ charts "show" "alpha" "--system" "alpha" "--json"
+$ charts "show" "alpha" "--system" "alpha" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {
@@ -97,14 +97,14 @@ exit: 1
 --- stderr
 
 ## filter without value
-$ charts "find" "--system"
+$ charts "find" "--system" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
 ERROR: --system requires a value
 
 ## filter without value (--json)
-$ charts "find" "--system" "--json"
+$ charts "find" "--system" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {
@@ -117,14 +117,14 @@ exit: 1
 --- stderr
 
 ## filter followed by an option
-$ charts "find" "--tag" "--owner" "x"
+$ charts "find" "--tag" "--owner" "x" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
 ERROR: --tag requires a value
 
 ## filter followed by an option (--json)
-$ charts "find" "--tag" "--owner" "x" "--json"
+$ charts "find" "--tag" "--owner" "x" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {
@@ -137,14 +137,14 @@ exit: 1
 --- stderr
 
 ## invalid status filter
-$ charts "find" "--status" "paused"
+$ charts "find" "--status" "paused" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
 ERROR: invalid status filter: paused
 
 ## invalid status filter (--json)
-$ charts "find" "--status" "paused" "--json"
+$ charts "find" "--status" "paused" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {
@@ -157,14 +157,14 @@ exit: 1
 --- stderr
 
 ## find with two texts
-$ charts "find" "one" "two"
+$ charts "find" "one" "two" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
 ERROR: find accepts at most one text value
 
 ## find with two texts (--json)
-$ charts "find" "one" "two" "--json"
+$ charts "find" "one" "two" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {
@@ -177,14 +177,14 @@ exit: 1
 --- stderr
 
 ## show without ID
-$ charts "show"
+$ charts "show" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
 ERROR: show requires one entry ID
 
 ## show without ID (--json)
-$ charts "show" "--json"
+$ charts "show" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {
@@ -197,14 +197,14 @@ exit: 1
 --- stderr
 
 ## deps with two IDs
-$ charts "deps" "alpha" "beta"
+$ charts "deps" "alpha" "beta" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
 ERROR: deps requires one entry ID
 
 ## deps with two IDs (--json)
-$ charts "deps" "alpha" "beta" "--json"
+$ charts "deps" "alpha" "beta" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {
@@ -217,14 +217,14 @@ exit: 1
 --- stderr
 
 ## check with an argument
-$ charts "check" "alpha"
+$ charts "check" "alpha" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
 ERROR: check accepts no positional arguments
 
 ## check with an argument (--json)
-$ charts "check" "alpha" "--json"
+$ charts "check" "alpha" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {

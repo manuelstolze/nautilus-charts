@@ -1,12 +1,12 @@
 ## ok
-$ charts "check"
+$ charts "check" "--catalog" "nautilus"
 exit: 0
 --- stdout
 check: ok
 --- stderr
 
 ## ok (--json)
-$ charts "check" "--json"
+$ charts "check" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -17,7 +17,7 @@ exit: 0
 --- stderr
 
 ## with warnings
-$ charts "check"
+$ charts "check" "--catalog" "nautilus"
 exit: 0
 --- stdout
 WARNING: repository delta-app: depends-on[0] points to deprecated entry "gamma-app"
@@ -28,7 +28,7 @@ check: ok
 --- stderr
 
 ## with warnings (--json)
-$ charts "check" "--json"
+$ charts "check" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -44,7 +44,7 @@ exit: 0
 --- stderr
 
 ## with entry errors
-$ charts "check"
+$ charts "check" "--catalog" "nautilus"
 exit: 3
 --- stdout
 ERROR: system broken: invalid TOML: Invalid TOML document: invalid value
@@ -65,7 +65,10 @@ ERROR: repository messy: remote must not contain credentials
 ERROR: repository messy: system "missing-system" does not name a system
 ERROR: repository messy: tag "unknown" is not defined in the tag list
 ERROR: repository messy: depends-on[0] cannot point to the same repository
-ERROR: repository messy: depends-on[1] ID "missing-repo" does not exist
+ERROR: repository messy: depends-on[1] cannot resolve ID "missing-repo" because registered catalog(s) could not be read: "nautilus": system broken: invalid TOML: Invalid TOML document: invalid value
+
+1:  description = [
+
 ERROR: repository messy: depends-on[2] has unknown field(s): extra
 ERROR: repository messy: depends-on[2] ID "alpha" is not a repository or external
 ERROR: repository messy: depends-on[2] via must be a string
@@ -79,7 +82,7 @@ ERROR: the tag list: description for "library" must be a string
 --- stderr
 
 ## with entry errors (--json)
-$ charts "check" "--json"
+$ charts "check" "--catalog" "nautilus" "--json"
 exit: 3
 --- stdout
 {
@@ -100,7 +103,7 @@ exit: 3
     "repository messy: system \"missing-system\" does not name a system",
     "repository messy: tag \"unknown\" is not defined in the tag list",
     "repository messy: depends-on[0] cannot point to the same repository",
-    "repository messy: depends-on[1] ID \"missing-repo\" does not exist",
+    "repository messy: depends-on[1] cannot resolve ID \"missing-repo\" because registered catalog(s) could not be read: \"nautilus\": system broken: invalid TOML: Invalid TOML document: invalid value\n\n1:  description = [\n",
     "repository messy: depends-on[2] has unknown field(s): extra",
     "repository messy: depends-on[2] ID \"alpha\" is not a repository or external",
     "repository messy: depends-on[2] via must be a string",
@@ -117,7 +120,7 @@ exit: 3
 --- stderr
 
 ## with local path errors
-$ charts "check"
+$ charts "check" "--catalog" "nautilus"
 exit: 3
 --- stdout
 ERROR: the local paths: path does not exist: <TMP>/work/absent for "alpha-app"
@@ -129,7 +132,7 @@ ERROR: the local paths: "missing" does not name a repository
 --- stderr
 
 ## with local path errors (--json)
-$ charts "check" "--json"
+$ charts "check" "--catalog" "nautilus" "--json"
 exit: 3
 --- stdout
 {
@@ -147,7 +150,7 @@ exit: 3
 --- stderr
 
 ## with invalid local paths TOML
-$ charts "check"
+$ charts "check" "--catalog" "nautilus"
 exit: 3
 --- stdout
 ERROR: the local paths: invalid TOML: Invalid TOML document: invalid value
@@ -157,7 +160,7 @@ ERROR: the local paths: invalid TOML: Invalid TOML document: invalid value
 --- stderr
 
 ## with invalid local paths TOML (--json)
-$ charts "check" "--json"
+$ charts "check" "--catalog" "nautilus" "--json"
 exit: 3
 --- stdout
 {
@@ -170,7 +173,7 @@ exit: 3
 --- stderr
 
 ## with an unignored local paths file and no tags
-$ charts "check"
+$ charts "check" "--catalog" "nautilus"
 exit: 3
 --- stdout
 ERROR: repository alpha-app: tag "utility" is not defined in the tag list
@@ -180,7 +183,7 @@ ERROR: the local paths are not ignored by Git
 --- stderr
 
 ## with an unignored local paths file and no tags (--json)
-$ charts "check" "--json"
+$ charts "check" "--catalog" "nautilus" "--json"
 exit: 3
 --- stdout
 {
