@@ -5,6 +5,33 @@ import type { IgnoreCheck, LocalPathFact, NewTag } from "../domain/validation.ts
 /**
  * The catalog store: entry files, `tags.toml`, the templates, and `local/paths.toml`.
  */
+export interface CatalogRegistration {
+  name: string;
+  path: string;
+  remote: string;
+}
+
+/** Machine-local registry for named Charts catalogs. */
+export interface CatalogRegistry {
+  list(): CatalogRegistration[];
+  get(name: string): CatalogRegistration | null;
+  register(catalog: CatalogRegistration): void;
+}
+
+/** Git operations for named Charts catalogs only. */
+export interface CatalogGit {
+  initialize(path: string, remote: string): void;
+  clone(path: string, remote: string): void;
+  /** Refuses a write when its entry or tag files have uncommitted changes. */
+  assertWriteClean(path: string, files: readonly string[]): void;
+  /** Commits only the named catalog files. Never contacts a remote. */
+  commit(path: string, files: readonly string[], message: string): void;
+  /** Fast-forwards one named catalog from its configured remote. */
+  syncRead(path: string, remote: string): void;
+  /** Pushes the selected named catalog branch without force. */
+  syncWrite(path: string, remote: string): void;
+}
+
 export interface CatalogStore {
   /** Reads the whole catalog. Unreadable files become load errors. */
   load(): Snapshot;
@@ -47,7 +74,7 @@ export interface CatalogStore {
 /** Local Git data: repository roots, remotes, and ignore rules. Never remote access. */
 export interface GitInspector {
   /** Resolves a configured local path and checks that it is a Git root with the given remote. */
-  inspectLocalPath(rawPath: string, remote?: unknown): LocalPathFact;
+  inspectLocalPath(rawPath: string, remote?: unknown, catalogName?: string): LocalPathFact;
   /** Whether Git ignores a path relative to the catalog root. */
   isIgnored(relativePath: string): IgnoreCheck;
 }

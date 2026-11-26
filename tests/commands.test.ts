@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import { syncDueCatalogs } from "../src/adapters/catalog-sync.ts";
 import { add } from "../src/commands/add.ts";
 import { check } from "../src/commands/check.ts";
+import { migrate } from "../src/commands/migrate.ts";
 import { deps, rdeps } from "../src/commands/deps.ts";
 import { set } from "../src/commands/set.ts";
 import { show } from "../src/commands/show.ts";
+import type { Ports } from "../src/commands/context.ts";
+import { validateCatalog } from "../src/domain/validation.ts";
+import type { Snapshot } from "../src/domain/catalog.ts";
 import { FakeGit } from "./fakes/fake-git.ts";
 import { MemoryStore } from "./fakes/memory-store.ts";
 import type { ChartsError, ErrorCode } from "../src/domain/errors.ts";
@@ -20,6 +25,10 @@ function failed(result: { ok: true } | { ok: false; error: ChartsError }, code: 
 /** The validation errors and warnings in a failure's details. */
 function details(error: ChartsError): { errors: string[]; warnings: string[] } {
   return error.details as { errors: string[]; warnings: string[] };
+}
+
+function snapshot(entries: Snapshot["entries"], loadErrors: string[] = []): Snapshot {
+  return { entries, tags: {}, tagsExists: true, localPaths: null, localPathsExists: false, loadErrors };
 }
 
 // Use cases run against in-memory fakes: no temporary folders and no Git.
@@ -119,6 +128,148 @@ describe("deps use cases", () => {
   });
 });
 
+describe("root entry migration", () => {
+  test("copies an entry, needed tag, and local path, commits locally, and does not sync", () => {
+    const source = new MemoryStore({
+      entries: [{
+        kind: "repository",
+        id: "migrate-repo",
+        data: { description: "Migrated repository.", remote: "https://example.com/migrate.git", system: "target-system", tags: ["utility"] },
+      }],
+      tags: { utility: "Shared tools." },
+      localPaths: { "migrate-repo": "/work/migrate-repo" },
+    });
+    const sourceBefore = structuredClone(source.load());
+    const destinationMemory = new MemoryStore({
+      entries: [{ kind: "system", id: "target-system", data: { description: "Target system." } }],
+      tags: {},
+      localPaths: null,
+    });
+    const loadDestination = destinationMemory.load.bind(destinationMemory);
+    destinationMemory.load = () => ({ ...loadDestination(), catalogName: "work" });
+    const commits: Array<{ files: readonly string[]; message: string }> = [];
+    let syncWrites = 0;
+    const catalogGit = {
+      initialize() {},
+      clone() {},
+      assertWriteClean() {},
+      commit(_path: string, files: readonly string[], message: string) { commits.push({ files, message }); },
+      syncRead() {},
+      syncWrite() { syncWrites += 1; },
+    };
+    const destination: Ports = {
+      store: destinationMemory,
+      git: new FakeGit({ repositories: { "/work/migrate-repo": ["https://example.com/migrate.git"] } }),
+      catalogName: "work",
+      catalogPath: "/catalog/work",
+      catalogRemote: "https://example.com/work.git",
+      catalogGit,
+    };
+    const result = migrate({
+      source,
+      sourceGit: new FakeGit({ repositories: { "/work/migrate-repo": ["https://example.com/migrate.git"] } }),
+      destination,
+    }, "migrate-repo");
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(destinationMemory.entries.map((entry) => entry.id), ["target-system", "migrate-repo"]);
+    assert.deepEqual(destinationMemory.tags, { utility: "Shared tools." });
+    assert.deepEqual(destinationMemory.localPaths, { "migrate-repo": "/work/migrate-repo" });
+    assert.deepEqual(source.load(), sourceBefore);
+    assert.deepEqual(commits, [{ files: ["repositories/migrate-repo.toml", "tags.toml"], message: "Migrate repository migrate-repo" }]);
+    assert.equal(syncWrites, 0);
+  });
+});
+
+describe("catalog read sync", () => {
+  test("attempts every due catalog after a remote failure and waits for the interval", () => {
+    const attempts: string[] = [];
+    const saved = new Map<string, number>();
+    const git = {
+      initialize() {},
+      clone() {},
+      assertWriteClean() {},
+      commit() {},
+      syncRead(path: string) {
+        attempts.push(path);
+        if (path === "offline") throw new Error("remote unavailable");
+      },
+      syncWrite() {},
+    };
+    const state = {
+      lastAttemptedAt: (name: string) => saved.get(name) ?? null,
+      markAttemptedAt: (name: string, timestamp: number) => saved.set(name, timestamp),
+    };
+    const catalogs = [
+      { name: "offline", path: "offline", remote: "offline.git" },
+      { name: "online", path: "online", remote: "online.git" },
+    ];
+
+    const warnings = syncDueCatalogs(catalogs, git, state, 1_000, 10_000);
+    assert.deepEqual(attempts, ["offline", "online"]);
+    assert.deepEqual(warnings, ['catalog "offline" could not sync; local data was kept']);
+    assert.deepEqual([...saved], [["offline", 10_000], ["online", 10_000]]);
+
+    attempts.length = 0;
+    assert.deepEqual(syncDueCatalogs(catalogs, git, state, 1_000, 10_500), []);
+    assert.deepEqual(attempts, []);
+    assert.deepEqual(syncDueCatalogs(catalogs, git, state, 1_000, 11_000), warnings);
+    assert.deepEqual(attempts, ["offline", "online"]);
+  });
+});
+
+describe("relationships across named catalogs", () => {
+  const facts = { localPaths: new Map(), localPathsIgnored: { ignored: true } };
+
+  test("resolves dependency IDs in another registered catalog", () => {
+    const work = snapshot([{
+      kind: "repository",
+      id: "app",
+      data: { description: "Application.", "depends-on": [{ id: "shared-lib" }] },
+      file: "repositories/app.toml",
+    }]);
+    const shared = snapshot([{
+      kind: "repository",
+      id: "shared-lib",
+      data: { description: "Shared library." },
+      file: "repositories/shared-lib.toml",
+    }]);
+    const result = validateCatalog(work, facts, { catalogName: "work", catalogs: [{ name: "shared", snapshot: shared }] });
+    assert.deepEqual(result.errors, []);
+  });
+
+  test("rejects duplicate IDs across catalogs and cross-catalog system links", () => {
+    const work = snapshot([
+      { kind: "system", id: "shared-id", data: { description: "Local system." }, file: "systems/shared-id.toml" },
+      { kind: "repository", id: "app", data: { description: "Application.", system: "shared-system" }, file: "repositories/app.toml" },
+    ]);
+    const shared = snapshot([
+      { kind: "system", id: "shared-id", data: { description: "Other system." }, file: "systems/shared-id.toml" },
+      { kind: "system", id: "shared-system", data: { description: "Other system." }, file: "systems/shared-system.toml" },
+    ]);
+    const result = validateCatalog(work, facts, { catalogName: "work", catalogs: [{ name: "shared", snapshot: shared }] });
+    assert.ok(result.errors.some((error) => error.includes('duplicate ID "shared-id"') && error.includes('catalog "shared"')));
+    assert.ok(result.errors.some((error) => error.includes('system "shared-system" names a system in another catalog')));
+  });
+
+  test("reports missing or unreadable registered catalogs during dependency lookup", () => {
+    const work = snapshot([{
+      kind: "repository",
+      id: "app",
+      data: { description: "Application.", "depends-on": [{ id: "missing" }] },
+      file: "repositories/app.toml",
+    }]);
+    const missing = validateCatalog(work, facts, { catalogName: "work" });
+    assert.ok(missing.errors.some((error) => error.includes('ID "missing" does not exist in any registered catalog')));
+
+    const unreadable = validateCatalog(work, facts, {
+      catalogName: "work",
+      catalogs: [{ name: "shared", snapshot: snapshot([], ["repository files could not be read"]) }],
+    });
+    assert.ok(unreadable.errors.some((error) => error.includes('catalog(s) could not be read') && error.includes('"shared"')));
+  });
+});
+
 describe("add use case", () => {
   test("fake store appends new tags and restores them on rollback", () => {
     const store = new MemoryStore({ tags: { utility: "Shared tools." } });
@@ -156,6 +307,40 @@ describe("add use case", () => {
       "event-stream": "Processes events.",
     });
     assert.deepEqual(check(ports).finding.errors, []);
+  });
+
+  test("rolls back a named catalog write when the catalog commit fails", () => {
+    const memory = catalog();
+    const ports: Ports = memory;
+    ports.catalogName = "work";
+    ports.catalogPath = "/catalog/work";
+    ports.catalogRemote = "https://example.com/work.git";
+    const originalTags = structuredClone(memory.store.tags);
+    const commits: Array<{ files: readonly string[]; message: string }> = [];
+    ports.catalogGit = {
+      initialize() {},
+      clone() {},
+      assertWriteClean() {},
+      syncRead() {},
+      syncWrite() {},
+      commit(_path, files, message) {
+        commits.push({ files, message });
+        throw new Error("commit rejected");
+      },
+    };
+    const result = add(ports, {
+      kind: "repository",
+      id: "rollback-commit",
+      data: { description: "Rollback commit.", tags: ["new-tag"] },
+      newTags: [{ name: "new-tag", description: "A new tag." }],
+    });
+    const error = failed(result, "external");
+    assert.equal(error.message, "could not add repository rollback-commit: the catalog commit failed");
+    assert.deepEqual(error.details, { errors: ["could not commit the catalog write"], warnings: [] });
+    assert.deepEqual(commits, [{ files: ["repositories/rollback-commit.toml", "tags.toml"], message: "Add repository rollback-commit" }]);
+    assert.equal(memory.store.entries.some((entry) => entry.id === "rollback-commit"), false);
+    assert.deepEqual(memory.store.tags, originalTags);
+    assert.equal(memory.store.localPaths?.["rollback-commit"], undefined);
   });
 
   test("rejects invalid new tags without changing the store", () => {

@@ -1,4 +1,4 @@
-import { CatalogIndex, type Snapshot } from "./catalog.ts";
+import { CatalogIndex, type CatalogIndexOptions, type Snapshot } from "./catalog.ts";
 import {
   entryStatus,
   FIELDS,
@@ -22,7 +22,7 @@ export type IgnoreCheck = { ignored: boolean } | { error: string };
 /** Facts about the machine that catalog validation needs. */
 export type CatalogFacts = { localPaths: LocalPathFacts; localPathsIgnored: IgnoreCheck };
 /** A configured local path that needs a check, with the remote it must match. */
-export type LocalPathTarget = { id: string; rawPath: string; remote: unknown };
+export type LocalPathTarget = { id: string; rawPath: string; remote: unknown; catalogName?: string };
 
 export function remoteHasCredentials(remote: string): boolean {
   if (!remote.includes("://")) return false;
@@ -90,8 +90,14 @@ export function validateEntryData(
   const label = `${entry.kind} ${entry.id}`;
   if (!ID_PATTERN.test(entry.id)) errors.push(`${label}: ID ${JSON.stringify(entry.id)} is not lowercase kebab-case`);
   const prior = seen.get(entry.id);
-  if (prior) errors.push(`${label}: duplicate ID ${JSON.stringify(entry.id)}; also used by ${prior.kind} ${prior.id}`);
-  else seen.set(entry.id, entry);
+  if (prior) {
+    const priorCatalog = index.catalogOf(prior);
+    const currentCatalog = index.catalogOf(entry);
+    const catalogNote = priorCatalog !== undefined && currentCatalog !== undefined && priorCatalog !== currentCatalog
+      ? ` in catalog ${JSON.stringify(priorCatalog)}`
+      : "";
+    errors.push(`${label}: duplicate ID ${JSON.stringify(entry.id)}; also used by ${prior.kind} ${prior.id}${catalogNote}`);
+  } else seen.set(entry.id, entry);
 
   const unknown = Object.keys(entry.data).filter((field) => !FIELDS[entry.kind].has(field)).sort();
   if (unknown.length) errors.push(`${label}: unknown field(s): ${unknown.join(", ")}`);
@@ -134,6 +140,9 @@ export function validateEntryData(
   } else if (isString(systemId)) {
     const target = index.get(systemId);
     if (!target || target.kind !== "system") errors.push(`${label}: system ${JSON.stringify(systemId)} does not name a system`);
+    else if (index.catalogOf(target) !== index.catalogOf(entry)) {
+      errors.push(`${label}: system ${JSON.stringify(systemId)} names a system in another catalog`);
+    }
   }
 
   const tags = entry.data.tags ?? [];
@@ -141,7 +150,7 @@ export function validateEntryData(
     errors.push(`${label}: tags must be a list of strings`);
   } else {
     for (const tag of tags) {
-      if (!Object.hasOwn(index.snapshot.tags, tag)) errors.push(`${label}: tag ${JSON.stringify(tag)} is not defined in the tag list`);
+      if (!Object.hasOwn(index.snapshotFor(entry).tags, tag)) errors.push(`${label}: tag ${JSON.stringify(tag)} is not defined in the tag list`);
     }
   }
 
@@ -165,8 +174,16 @@ export function validateEntryData(
     }
     if (dependencyId === entry.id) errors.push(`${dependencyLabel} cannot point to the same repository`);
     const target = index.get(dependencyId);
-    if (!target) errors.push(`${dependencyLabel} ID ${JSON.stringify(dependencyId)} does not exist`);
-    else if (target.kind !== "repository" && target.kind !== "external") {
+    if (!target) {
+      const hasNamedCatalogs = index.catalogName !== undefined || index.entries.length !== index.snapshot.entries.length;
+      const unreadable = hasNamedCatalogs ? index.unreadableCatalogs() : [];
+      if (unreadable.length > 0) {
+        const details = unreadable.map(({ name, snapshot }) => `${JSON.stringify(name)}: ${snapshot.loadErrors.join("; ")}`).join(", ");
+        errors.push(`${dependencyLabel} cannot resolve ID ${JSON.stringify(dependencyId)} because registered catalog(s) could not be read: ${details}`);
+      } else if (hasNamedCatalogs) {
+        errors.push(`${dependencyLabel} ID ${JSON.stringify(dependencyId)} does not exist in any registered catalog`);
+      } else errors.push(`${dependencyLabel} ID ${JSON.stringify(dependencyId)} does not exist`);
+    } else if (target.kind !== "repository" && target.kind !== "external") {
       errors.push(`${dependencyLabel} ID ${JSON.stringify(dependencyId)} is not a repository or external`);
     }
     if ("via" in rawDependency && !isString(rawDependency.via)) errors.push(`${dependencyLabel} via must be a string`);
@@ -179,16 +196,20 @@ export function validateEntryData(
 }
 
 /** The IDs and keys already taken, for checking a new entry against the catalog. */
-export function validationMaps(index: CatalogIndex, excludeEntryId?: string): { seen: Map<string, Entry>; keys: Map<string, Entry> } {
+export function validationMaps(
+  index: CatalogIndex,
+  excludeEntryId?: string,
+): { seen: Map<string, Entry>; keys: Map<string, Entry> } {
   const seen = new Map<string, Entry>();
   const keys = new Map<string, Entry>();
   let excluded = false;
   for (const entry of index.entries) {
-    if (!excluded && entry.id === excludeEntryId) {
+    if (!excluded && entry.id === excludeEntryId && index.catalogOf(entry) === index.catalogName) {
       excluded = true;
       continue;
     }
     if (!seen.has(entry.id)) seen.set(entry.id, entry);
+    if (index.catalogOf(entry) !== index.catalogName) continue;
     const key = entry.kind === "repository" ? entry.data.key : undefined;
     if (isString(key) && KEY_PATTERN.test(key) && !keys.has(key)) keys.set(key, entry);
   }
@@ -198,19 +219,27 @@ export function validationMaps(index: CatalogIndex, excludeEntryId?: string): { 
 /** The configured local paths that name a repository and so need a check on this machine. */
 export function localPathTargets(index: CatalogIndex): LocalPathTarget[] {
   const targets: LocalPathTarget[] = [];
-  for (const [id, rawPath] of Object.entries(index.snapshot.localPaths ?? {})) {
-    const target = index.get(id);
-    if (isString(rawPath) && target?.kind === "repository") targets.push({ id, rawPath, remote: target.data.remote });
+  for (const entry of index.entries) {
+    if (entry.kind !== "repository") continue;
+    const snapshot = index.snapshotFor(entry);
+    const rawPath = snapshot.localPaths?.[entry.id];
+    if (isString(rawPath)) {
+      const catalogName = index.catalogOf(entry);
+      targets.push({ id: entry.id, rawPath, remote: entry.data.remote, ...(catalogName ? { catalogName } : {}) });
+    }
   }
   return targets;
 }
 
-export function validateCatalog(snapshot: Snapshot, facts: CatalogFacts): Finding {
-  const index = new CatalogIndex(snapshot);
+export function validateCatalog(snapshot: Snapshot, facts: CatalogFacts, options: CatalogIndexOptions = {}): Finding {
+  const index = new CatalogIndex(snapshot, options);
   const errors = [...snapshot.loadErrors];
   const warnings: string[] = [];
   const seen = new Map<string, Entry>();
   const keys = new Map<string, Entry>();
+  for (const entry of index.entries) {
+    if (index.catalogOf(entry) !== index.catalogName && !seen.has(entry.id)) seen.set(entry.id, entry);
+  }
 
   for (const entry of snapshot.entries) {
     const result = validateEntryData(index, entry, seen, keys);

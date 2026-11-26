@@ -29,7 +29,7 @@ describe("describe", () => {
     assert.equal(described.status, 0, described.stderr);
     const commands = (JSON.parse(described.stdout) as { commands: Array<{ name: string }> }).commands.map(({ name }) => name);
     assert.deepEqual(commands, helpCommands(help.stdout));
-    assert.deepEqual(commands, ["find", "show", "deps", "rdeps", "check", "add", "set", "describe"]);
+    assert.deepEqual(commands, ["find", "show", "deps", "rdeps", "check", "add", "set", "migrate", "catalog", "describe"]);
   });
 
   test("has the structure of the Logbook's describe output", () => {
@@ -126,8 +126,8 @@ describe("command table", () => {
 describe("version", () => {
   const manifest = JSON.parse(readFileSync(join(REPO_ROOT, "package.json"), "utf8")) as { version: string };
 
-  test("package.json starts Charts at version 2.0.0", () => {
-    assert.equal(manifest.version, "2.0.0");
+  test("package.json starts Charts at version 2.1.0", () => {
+    assert.equal(manifest.version, "2.1.0");
   });
 
   test("--version prints the module and the version from package.json, as text or JSON", () => {

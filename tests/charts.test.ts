@@ -9,6 +9,8 @@ import { parse as parseToml } from "smol-toml";
 import { main } from "../scripts/charts.ts";
 import { renderError } from "../src/adapters/cli.ts";
 import { GitCli } from "../src/adapters/git-cli.ts";
+import { CatalogGitCli } from "../src/adapters/catalog-git.ts";
+import { FileCatalogRegistry } from "../src/adapters/catalog-registry.ts";
 import { TomlStore } from "../src/adapters/toml-store.ts";
 import { checkCatalog as validateCatalog } from "../src/commands/check.ts";
 import { showEntry } from "../src/commands/show.ts";
@@ -79,6 +81,246 @@ function capture<T>(action: () => T): { result: T; output: string[]; errors: str
 
 beforeEach(makeFixture);
 afterEach(() => rmSync(temporary, { recursive: true, force: true }));
+
+describe("named catalog setup", () => {
+  test("initializes and clones independent catalogs with machine-local paths", () => {
+    const remote = join(temporary, "catalog.git");
+    execFileSync("git", ["init", "--bare", "--quiet", remote]);
+    const catalogGit = new CatalogGitCli(REPO_ROOT);
+    const firstPath = join(temporary, "machine-a", "catalog");
+    const secondPath = join(temporary, "machine-b", "catalog");
+
+    catalogGit.initialize(firstPath, remote);
+    const firstRegistry = new FileCatalogRegistry(join(temporary, "machine-a", "config", "catalogs.json"));
+    firstRegistry.register({ name: "work", path: firstPath, remote });
+    assert.deepEqual(firstRegistry.list(), [{ name: "work", path: firstPath, remote }]);
+    assert.equal(firstRegistry.get("work")?.path, firstPath);
+    assert.deepEqual(new TomlStore(firstPath).load().entries, []);
+    assert.equal(new TomlStore(firstPath).load().tagsExists, true);
+    assert.deepEqual(execFileSync("git", ["-C", firstPath, "remote"], { encoding: "utf8" }).trim(), "origin");
+    assert.equal(execFileSync("git", ["-C", firstPath, "remote", "get-url", "origin"], { encoding: "utf8" }).trim(), remote);
+    assert.equal(spawnSync("git", ["-C", firstPath, "check-ignore", "-q", "local/paths.toml"]).status, 0);
+    assert.equal(spawnSync("git", ["-C", firstPath, "check-ignore", "-q", "repositories/example.toml"]).status, 1);
+    writeFileSync(join(firstPath, "systems", "example.toml"), 'description = "Example system."\n', "utf8");
+    writeFileSync(join(firstPath, "tags.toml"), 'utility = "Shared tools."\n', "utf8");
+    assert.deepEqual(new TomlStore(firstPath).load().entries.map((entry) => entry.id), ["example"]);
+    assert.deepEqual(Object.keys(new TomlStore(firstPath).load().tags), ["utility"]);
+
+    catalogGit.clone(secondPath, remote);
+    const secondRegistry = new FileCatalogRegistry(join(temporary, "machine-b", "config", "catalogs.json"));
+    secondRegistry.register({ name: "work", path: secondPath, remote });
+    assert.deepEqual(secondRegistry.list(), [{ name: "work", path: secondPath, remote }]);
+    assert.notEqual(firstRegistry.get("work")?.path, secondRegistry.get("work")?.path);
+    assert.deepEqual(new TomlStore(secondPath).load().entries, []);
+    assert.equal(execFileSync("git", ["-C", secondPath, "remote", "get-url", "origin"], { encoding: "utf8" }).trim(), remote);
+    assert.notEqual(firstRegistry.path, secondRegistry.path);
+  });
+
+  test("rejects unsafe names, credential URLs, and duplicate registrations", () => {
+    const registry = new FileCatalogRegistry(join(temporary, "config", "catalogs.json"));
+    assert.throws(() => registry.register({ name: "Bad_Name", path: temporary, remote: "https://example.com/catalog.git" }), /lowercase kebab-case/);
+    assert.throws(() => registry.register({ name: "work", path: temporary, remote: "https://user:token@example.com/catalog.git" }), /credentials/);
+    registry.register({ name: "work", path: temporary, remote: "https://example.com/catalog.git" });
+    assert.throws(() => registry.register({ name: "work", path: temporary, remote: "https://example.com/catalog.git" }), /already registered/);
+    assert.throws(() => registry.register({ name: "other", path: join(temporary, "other"), remote: "https://example.com/catalog.git" }), /path or remote is already registered/);
+    assert.throws(() => registry.register({ name: "other", path: temporary, remote: "https://example.com/other.git" }), /path or remote is already registered/);
+  });
+
+  test("does not overwrite local history when catalog branches have diverged", () => {
+    const remote = join(temporary, "diverged.git");
+    const localPath = join(temporary, "local-catalog");
+    const peerPath = join(temporary, "peer-catalog");
+    execFileSync("git", ["init", "--bare", "--quiet", remote]);
+    const catalogGit = new CatalogGitCli(REPO_ROOT);
+    catalogGit.initialize(localPath, remote);
+    execFileSync("git", ["-C", localPath, "config", "user.name", "Charts Test"]);
+    execFileSync("git", ["-C", localPath, "config", "user.email", "charts@example.com"]);
+    writeFileSync(join(localPath, "systems", "base.toml"), 'description = "Base system."\n', "utf8");
+    execFileSync("git", ["-C", localPath, "add", "-A"]);
+    execFileSync("git", ["-C", localPath, "commit", "--quiet", "-m", "Base catalog"]);
+    execFileSync("git", ["-C", localPath, "push", "--quiet", "origin", "HEAD"]);
+    const branch = execFileSync("git", ["-C", localPath, "branch", "--show-current"], { encoding: "utf8" }).trim();
+    catalogGit.clone(peerPath, remote);
+    execFileSync("git", ["-C", peerPath, "config", "user.name", "Charts Test"]);
+    execFileSync("git", ["-C", peerPath, "config", "user.email", "charts@example.com"]);
+
+    writeFileSync(join(localPath, "systems", "local.toml"), 'description = "Local change."\n', "utf8");
+    execFileSync("git", ["-C", localPath, "add", "systems/local.toml"]);
+    execFileSync("git", ["-C", localPath, "commit", "--quiet", "-m", "Local change"]);
+    const localHead = execFileSync("git", ["-C", localPath, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+
+    writeFileSync(join(peerPath, "systems", "remote.toml"), 'description = "Remote change."\n', "utf8");
+    execFileSync("git", ["-C", peerPath, "add", "systems/remote.toml"]);
+    execFileSync("git", ["-C", peerPath, "commit", "--quiet", "-m", "Remote change"]);
+    execFileSync("git", ["-C", peerPath, "push", "--quiet", "origin", "HEAD"]);
+    const remoteHead = execFileSync("git", ["-C", peerPath, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+
+    assert.throws(() => catalogGit.syncRead(localPath, remote));
+    assert.throws(() => catalogGit.syncWrite(localPath, remote));
+    assert.equal(execFileSync("git", ["-C", localPath, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(), localHead);
+    assert.equal(execFileSync("git", ["-C", remote, "rev-parse", `refs/heads/${branch}`], { encoding: "utf8" }).trim(), remoteHead);
+    assert.equal(readFileSync(join(localPath, "systems", "local.toml"), "utf8"), 'description = "Local change."\n');
+  });
+
+  test("warns and keeps local data when a catalog write cannot reach its remote", () => {
+    const path = join(temporary, "offline-catalog");
+    const remote = join(temporary, "offline.git");
+    const created = capture(() => main([
+      "catalog", "create", "offline", "--path", path, "--remote", remote, "--json",
+    ], root));
+    assert.equal(created.result, 0);
+    execFileSync("git", ["-C", path, "config", "user.name", "Charts Test"]);
+    execFileSync("git", ["-C", path, "config", "user.email", "charts@example.com"]);
+    const read = capture(() => main(["find", "missing", "--catalog", "offline", "--json"], root, undefined, 0));
+    assert.equal(read.result, 0);
+    assert.match(read.errors.join("\\n"), /catalog "offline" could not sync; local data was kept/);
+
+    const result = capture(() => main([
+      "add", "system", "kept", "--catalog", "offline", "--data", '{"description":"Kept locally."}', "--json",
+    ], root));
+    const payload = JSON.parse(result.output.join("\\n"));
+    assert.equal(result.result, 0);
+    assert.equal(existsSync(join(path, "systems", "kept.toml")), true);
+    assert.ok(payload.validation.warnings.some((warning: string) => warning.includes('catalog "offline" could not sync')));
+    assert.equal(execFileSync("git", ["-C", path, "status", "--porcelain"], { encoding: "utf8" }).trim(), "");
+    assert.equal(existsSync(remote), false);
+    const manualSync = capture(() => main(["catalog", "sync", "offline", "--json"], root));
+    assert.equal(manualSync.result, 0);
+    assert.ok(JSON.parse(manualSync.output.join("\\n")).warnings.some((warning: string) => warning.includes("local data was kept")));
+  });
+
+  test("creates and clones catalogs, routes scoped commands, and serves Bridge ID lookups", () => {
+    const sharedRemote = join(temporary, "shared.git");
+    const seedPath = join(temporary, "seed");
+    execFileSync("git", ["init", "--bare", "--quiet", sharedRemote]);
+    new CatalogGitCli(REPO_ROOT).initialize(seedPath, sharedRemote);
+    writeFileSync(join(seedPath, "repositories", "shared-lib.toml"),
+      'description = "Shared library."\nremote = "https://example.com/shared-lib.git"\n', "utf8");
+    execFileSync("git", ["-C", seedPath, "add", "-A"]);
+    execFileSync("git", ["-C", seedPath, "-c", "user.name=Charts Test", "-c", "user.email=charts@example.com", "commit", "--quiet", "-m", "Seed catalog"]);
+    execFileSync("git", ["-C", seedPath, "push", "--quiet", "origin", "HEAD"]);
+
+    const workRemote = join(temporary, "work.git");
+    execFileSync("git", ["init", "--bare", "--quiet", workRemote]);
+    const workPath = join(temporary, "machine-a", "work");
+    const sharedPath = join(temporary, "machine-a", "shared");
+    const workCreated = capture(() => main([
+      "catalog", "create", "work", "--path", workPath, "--remote", workRemote, "--json",
+    ], root));
+    assert.equal(workCreated.result, 0);
+    assert.equal(JSON.parse(workCreated.output.join("\\n")).name, "work");
+    assert.equal(JSON.parse(workCreated.output.join("\\n")).path, undefined);
+    execFileSync("git", ["-C", workPath, "config", "user.name", "Charts Test"]);
+    execFileSync("git", ["-C", workPath, "config", "user.email", "charts@example.com"]);
+
+    const sharedCloned = capture(() => main([
+      "catalog", "clone", "shared", "--path", sharedPath, "--remote", sharedRemote, "--json",
+    ], root));
+    assert.equal(sharedCloned.result, 0);
+    assert.equal(JSON.parse(sharedCloned.output.join("\\n")).action, "clone");
+    execFileSync("git", ["-C", sharedPath, "config", "user.name", "Charts Test"]);
+    execFileSync("git", ["-C", sharedPath, "config", "user.email", "charts@example.com"]);
+
+    const codePath = join(temporary, "shared-code");
+    mkdirSync(codePath);
+    execFileSync("git", ["init", "--quiet", codePath]);
+    execFileSync("git", ["-C", codePath, "remote", "add", "origin", "https://example.com/shared-lib.git"]);
+    mkdirSync(join(sharedPath, "local"), { recursive: true });
+    writeFileSync(join(sharedPath, "local", "paths.toml"), `shared-lib = ${JSON.stringify(codePath)}\n`, "utf8");
+
+    const added = capture(() => main([
+      "add", "repository", "app", "--catalog", "work", "--data",
+      JSON.stringify({
+        description: "Application.",
+        remote: "https://example.com/shared-lib.git",
+        tags: ["utility"],
+        "depends-on": [{ id: "shared-lib" }],
+      }),
+      "--local-path", codePath,
+      "--new-tag", "utility=Shared tools.",
+      "--json",
+    ], root));
+    assert.equal(added.result, 0, added.output.join("\\n"));
+    assert.equal(existsSync(join(workPath, "repositories", "app.toml")), true);
+    assert.equal(existsSync(join(root, "repositories", "app.toml")), false);
+    const firstCommitFiles = execFileSync("git", ["-C", workPath, "show", "--pretty=format:", "--name-only", "HEAD"], { encoding: "utf8" }).trim().split("\n");
+    assert.ok(firstCommitFiles.includes("repositories/app.toml"));
+    assert.ok(firstCommitFiles.includes("tags.toml"));
+    assert.ok(firstCommitFiles.includes("templates/repository.toml"));
+    assert.ok(!firstCommitFiles.includes("local/paths.toml"));
+    assert.equal(spawnSync("git", ["-C", workPath, "check-ignore", "-q", "local/paths.toml"]).status, 0);
+
+    const duplicate = capture(() => main([
+      "add", "system", "shared-lib", "--catalog", "work", "--data", '{"description":"Duplicate."}', "--json",
+    ], root));
+    assert.equal(duplicate.result, 3);
+    assert.equal(existsSync(join(workPath, "systems", "shared-lib.toml")), false);
+
+    const updated = capture(() => main([
+      "set", "app", "--catalog", "work", "--data", '{"description":"Updated application."}', "--json",
+    ], root));
+    assert.equal(updated.result, 0);
+    assert.equal(parseToml(readFileSync(join(workPath, "repositories", "app.toml"), "utf8")).description, "Updated application.");
+    const updateCommitFiles = execFileSync("git", ["-C", workPath, "show", "--pretty=format:", "--name-only", "HEAD"], { encoding: "utf8" }).trim().split("\n");
+    assert.deepEqual(updateCommitFiles, ["repositories/app.toml"]);
+
+    const scopedFind = capture(() => main(["find", "Updated application", "--catalog", "work", "--json"], root));
+    assert.deepEqual(JSON.parse(scopedFind.output.join("\\n")).entries.map((entry: { id: string }) => entry.id), ["app"]);
+    const bridgeFind = capture(() => main(["find", "shared-lib", "--json"], root));
+    const bridgeEntry = JSON.parse(bridgeFind.output.join("\\n")).entries[0];
+    assert.equal(bridgeEntry.id, "shared-lib");
+    assert.equal(bridgeEntry.local_path, codePath);
+    assert.equal(bridgeEntry.local_path_status, "ok");
+    const bridgeShow = capture(() => main(["show", "shared-lib", "--json"], root));
+    assert.equal(JSON.parse(bridgeShow.output.join("\\n")).local_path, codePath);
+    const manualSync = capture(() => main(["catalog", "sync", "work", "--json"], root));
+    assert.equal(manualSync.result, 0);
+    assert.equal(JSON.parse(manualSync.output.join("\\n")).action, "sync");
+
+    const missingCatalog = capture(() => main(["add", "system", "no-catalog", "--data", '{"description":"No catalog."}', "--json"], root));
+    assert.equal(missingCatalog.result, 1);
+    assert.match(JSON.parse(missingCatalog.output.join("\\n")).error.message, /--catalog is required/);
+  });
+
+  test("copies a root entry and its tags and local path without changing or syncing the root", () => {
+    const codePath = join(root, "migration-code");
+    mkdirSync(codePath);
+    execFileSync("git", ["init", "--quiet", codePath]);
+    execFileSync("git", ["-C", codePath, "remote", "add", "origin", "https://example.com/migrated.git"]);
+    write("repositories/migrate-me.toml",
+      'description = "Migration target."\nremote = "https://example.com/migrated.git"\ntags = ["utility"]\n');
+    write("local/paths.toml", 'migrate-me = "migration-code"\n');
+    const sourceEntry = readFileSync(join(root, "repositories/migrate-me.toml"), "utf8");
+    const sourceTags = readFileSync(join(root, "tags.toml"), "utf8");
+    const sourcePaths = readFileSync(join(root, "local/paths.toml"), "utf8");
+
+    const remote = join(temporary, "migration.git");
+    const destinationPath = join(temporary, "migration-destination");
+    execFileSync("git", ["init", "--bare", "--quiet", remote]);
+    const created = capture(() => main([
+      "catalog", "create", "migration-target", "--path", destinationPath, "--remote", remote, "--json",
+    ], root));
+    assert.equal(created.result, 0);
+    execFileSync("git", ["-C", destinationPath, "config", "user.name", "Charts Test"]);
+    execFileSync("git", ["-C", destinationPath, "config", "user.email", "charts@example.com"]);
+
+    const result = capture(() => main(["migrate", "migrate-me", "--catalog", "migration-target", "--json"], root));
+    const payload = JSON.parse(result.output.join("\\n"));
+    assert.equal(result.result, 0, result.errors.join("\\n"));
+    assert.equal(payload.catalog, "migration-target");
+    assert.equal(payload.sync_started, false);
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(parseToml(readFileSync(join(destinationPath, "repositories/migrate-me.toml"), "utf8")))),
+      JSON.parse(JSON.stringify(parseToml(sourceEntry))),
+    );
+    assert.equal(parseToml(readFileSync(join(destinationPath, "tags.toml"), "utf8")).utility, "Shared tools.");
+    assert.equal(parseToml(readFileSync(join(destinationPath, "local/paths.toml"), "utf8"))["migrate-me"], codePath);
+    assert.equal(readFileSync(join(root, "repositories/migrate-me.toml"), "utf8"), sourceEntry);
+    assert.equal(readFileSync(join(root, "tags.toml"), "utf8"), sourceTags);
+    assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), sourcePaths);
+    assert.equal(execFileSync("git", ["--git-dir", remote, "for-each-ref", "--format=%(refname)"], { encoding: "utf8" }).trim(), "");
+  });
+});
 
 describe("catalog validation", () => {
   test("accepts a missing local paths file", () => {
@@ -824,7 +1066,7 @@ describe("charts add", () => {
     );
     assert.equal(existsSync(join(root, "repositories/demo.toml")), true);
     assert.equal(capture(() => main(["check"], root)).result, 0);
-    assert.ok(result.output.some((line) => line.includes("New tags: data-pipeline. The shared tag list has uncommitted changes.")));
+    assert.ok(result.output.some((line) => line.includes("New tags: data-pipeline.")));
   });
 
   test("adds a separator when tags.toml has no final newline", () => {
