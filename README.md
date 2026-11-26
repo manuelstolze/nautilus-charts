@@ -44,7 +44,7 @@ Entry paths below are relative to the selected named catalog.
 - Repository tags come from the selected catalog's `tags.toml`.
 - Each named catalog stores its entries and tags in a separate Git repository. The Charts source repository stores no catalog entries.
 - Each named catalog has one configured `origin` remote (`origin` is Git's local name for the remote address). Each machine maps catalog names to local folders. A code Repository belongs to one Named catalog, and entry IDs are unique across all catalogs.
-- For this setup, `./folio/` is a local parent directory for named catalog repositories. Each child folder, such as `work/` or `private/`, is its own named catalog and Git repository. The source repository ignores `./folio/` so it does not track those nested repositories.
+- Keep named catalog repositories in the [Folio](GLOSSARY.md#machine), `./folio/<name>` in the Charts root. This is the recommended location; any other folder works too. Each child folder, such as `work/` or `private/`, is its own named catalog and Git repository. The Folio itself is not a catalog. The source repository ignores `./folio/` so it does not track those nested repositories.
 - `depends-on` links can cross catalogs. A Repository's `system` link must name a System in the same catalog.
 - Catalog locations and code-repository paths stay on each machine. Each catalog keeps its own ignored path map.
 - `charts catalog list` prints each registered catalog's name, local path, and remote. It works when the registry is empty.
@@ -135,7 +135,7 @@ npm run check
 
 The link puts the `charts` command on `PATH` when `~/.local/bin` is on it, whichever Node version nvm has active; do not use `npm link`. Link it once per machine. The command runs with plain Node and works from any folder.
 
-Use `charts catalog list` to see registered catalogs. Use `charts catalog create` to start a named catalog, or `charts catalog clone` to copy one from its configured remote. If no catalog is registered, commands that read or change catalog data return a usage error that names both setup commands. From the Charts root, keep each catalog repository under `./folio/`, for example `./folio/work/` and `./folio/private/`. Each child folder has its own Git history and remote. The parent folder is ignored by the Charts source repository. Charts stores the name-to-folder registry at `${XDG_CONFIG_HOME:-~/.config}/nautilus-charts/catalogs.json`; each machine keeps its own copy. Due reads sync all registered catalogs every 15 minutes by default. Set `CHARTS_READ_SYNC_INTERVAL_MS` to change the interval. Use `0` to sync on every read.
+Next, follow [docs/getting-started.md](docs/getting-started.md) to create your first named catalog with `charts catalog create`, or to clone an existing one with `charts catalog clone`, in the recommended `./folio/<name>` folder. Charts stores the name-to-folder registry at `${XDG_CONFIG_HOME:-~/.config}/nautilus-charts/catalogs.json`; each machine keeps its own copy. Due reads sync all registered catalogs every 15 minutes by default. Set `CHARTS_READ_SYNC_INTERVAL_MS` to change the interval. Use `0` to sync on every read.
 
 Skills live in `.agents/skills/`. The links in `.claude/skills/` are tracked. When you add a skill, create its link with this command. Use the skill's path under `.agents/skills/` as `<path>`:
 
