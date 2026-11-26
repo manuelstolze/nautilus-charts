@@ -47,7 +47,7 @@ function makeFixture(): Fixture {
     copyFileSync(join(REPO_ROOT, `templates/${kind}.toml`), join(projectRoot, `templates/${kind}.toml`));
   }
   execFileSync("git", ["init", "--bare", "--quiet", remote]);
-  new CatalogGitCli(REPO_ROOT).initialize(root, remote);
+  new CatalogGitCli().initialize(root, remote);
   new FileCatalogRegistry(registryPath).register({ name: "nautilus", path: root, remote });
   write(root, "tags.toml", 'utility = "Shared tools."\nlibrary = "Reusable code."\n');
   write(root, "systems/alpha.toml", 'name = "Alpha"\ndescription = "Alpha system."\nowner = "Team Alpha"\n');

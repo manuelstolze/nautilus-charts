@@ -67,7 +67,7 @@ class IndexedCatalogStore implements CatalogStore {
       snapshot.catalogName = this.registration.name;
       snapshot.catalogs = this.related.map((catalog) => ({
         name: catalog.name,
-        snapshot: new TomlStore(catalog.path).load(),
+        snapshot: new TomlStore(catalog.path, this.base.templatesRoot).load(),
       }));
     }
     return snapshot;
@@ -150,14 +150,14 @@ function buildPorts(options: Options, root: string, registry: FileCatalogRegistr
     : options.catalogName && registration && ["add", "set", "check", "deps", "rdeps"].includes(options.command)
       ? registrations.filter((catalog) => catalog.name !== registration!.name)
       : [];
-  const base = new TomlStore(registration!.path);
+  const base = new TomlStore(registration!.path, root);
   const store = new IndexedCatalogStore(base, registration, related);
   const git = new CatalogPathInspector(registration!, registrations);
   return {
     store,
     git,
     ...(registration ? {
-      catalogGit: new CatalogGitCli(root),
+      catalogGit: new CatalogGitCli(),
       catalogPath: registration.path,
       catalogRemote: registration.remote,
     } : {}),
@@ -185,7 +185,7 @@ function runCatalogCommand(options: Options, root: string, registry: FileCatalog
     if (!catalog) throw new ChartsError("usage", `unknown catalog: ${name}`);
     const warnings: string[] = [];
     try {
-      new CatalogGitCli(root).syncWrite(catalog.path, catalog.remote);
+      new CatalogGitCli().syncWrite(catalog.path, catalog.remote);
     } catch {
       warnings.push(`catalog ${JSON.stringify(name)} could not sync; local data was kept`);
     }
@@ -200,7 +200,7 @@ function runCatalogCommand(options: Options, root: string, registry: FileCatalog
   const path = resolve(options.path!);
   const existing = registry.list().find((catalog) => catalog.name === name || catalog.path === path || catalog.remote === remote);
   if (existing) throw new ChartsError("usage", `catalog name, path, or remote is already registered as ${JSON.stringify(existing.name)}`);
-  const catalogGit = new CatalogGitCli(root);
+  const catalogGit = new CatalogGitCli();
   if (options.catalogAction === "create") catalogGit.initialize(path, remote);
   else catalogGit.clone(path, remote);
   registry.register({ name, path, remote });
@@ -237,7 +237,7 @@ export function main(argv = process.argv.slice(2), root = ROOT, registryPath?: s
     if (["find", "show", "deps", "rdeps", "check"].includes(options.command)) {
       const syncWarnings = syncDueCatalogs(
         registry.list(),
-        new CatalogGitCli(resolvedRoot),
+        new CatalogGitCli(),
         new FileCatalogSyncState(`${registry.path}.sync-state.json`),
         readSyncInterval(readSyncIntervalMs),
       );

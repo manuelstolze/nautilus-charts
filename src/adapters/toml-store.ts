@@ -69,9 +69,11 @@ type PreparedSidecars =
 /** The catalog store on disk: TOML files under the catalog root. */
 export class TomlStore implements CatalogStore {
   readonly root: string;
+  readonly templatesRoot: string;
 
-  constructor(root: string) {
+  constructor(root: string, templatesRoot: string) {
     this.root = resolve(root);
+    this.templatesRoot = resolve(templatesRoot);
   }
 
   private prepareSidecars(id: string, localPath?: string, newTags: readonly NewTag[] = []): PreparedSidecars {
@@ -170,7 +172,7 @@ export class TomlStore implements CatalogStore {
   private templateOrder(kind: Kind): string[] {
     let text: string;
     try {
-      text = readFileSync(join(this.root, "templates", `${kind}.toml`), "utf8");
+      text = readFileSync(join(this.templatesRoot, "templates", `${kind}.toml`), "utf8");
     } catch (error) {
       throw new Error(ioErrorReason(error));
     }
