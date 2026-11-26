@@ -5,6 +5,7 @@ import { check } from "../src/commands/check.ts";
 import { deps, rdeps } from "../src/commands/deps.ts";
 import { set } from "../src/commands/set.ts";
 import { show } from "../src/commands/show.ts";
+import type { Ports } from "../src/commands/context.ts";
 import { validateCatalog } from "../src/domain/validation.ts";
 import type { Snapshot } from "../src/domain/catalog.ts";
 import { FakeGit } from "./fakes/fake-git.ts";
@@ -214,6 +215,37 @@ describe("add use case", () => {
       "event-stream": "Processes events.",
     });
     assert.deepEqual(check(ports).finding.errors, []);
+  });
+
+  test("rolls back a named catalog write when the catalog commit fails", () => {
+    const memory = catalog();
+    const ports: Ports = memory;
+    ports.catalogName = "work";
+    ports.catalogPath = "/catalog/work";
+    const originalTags = structuredClone(memory.store.tags);
+    const commits: Array<{ files: readonly string[]; message: string }> = [];
+    ports.catalogGit = {
+      initialize() {},
+      clone() {},
+      assertWriteClean() {},
+      commit(_path, files, message) {
+        commits.push({ files, message });
+        throw new Error("commit rejected");
+      },
+    };
+    const result = add(ports, {
+      kind: "repository",
+      id: "rollback-commit",
+      data: { description: "Rollback commit.", tags: ["new-tag"] },
+      newTags: [{ name: "new-tag", description: "A new tag." }],
+    });
+    const error = failed(result, "external");
+    assert.equal(error.message, "could not add repository rollback-commit: the catalog commit failed");
+    assert.deepEqual(error.details, { errors: ["could not commit the catalog write"], warnings: [] });
+    assert.deepEqual(commits, [{ files: ["repositories/rollback-commit.toml", "tags.toml"], message: "Add repository rollback-commit" }]);
+    assert.equal(memory.store.entries.some((entry) => entry.id === "rollback-commit"), false);
+    assert.deepEqual(memory.store.tags, originalTags);
+    assert.equal(memory.store.localPaths?.["rollback-commit"], undefined);
   });
 
   test("rejects invalid new tags without changing the store", () => {

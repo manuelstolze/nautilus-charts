@@ -1,6 +1,6 @@
 import { CatalogIndex, type NamedCatalogSnapshot, type Snapshot } from "../domain/catalog.ts";
 import { localPathTargets, type LocalPathFact } from "../domain/validation.ts";
-import type { CatalogStore, GitInspector } from "./ports.ts";
+import type { CatalogGit, CatalogStore, GitInspector } from "./ports.ts";
 
 export type RelatedCatalog = NamedCatalogSnapshot & { git: GitInspector };
 
@@ -8,6 +8,8 @@ export type RelatedCatalog = NamedCatalogSnapshot & { git: GitInspector };
 export type Ports = {
   store: CatalogStore;
   git: GitInspector;
+  catalogGit?: CatalogGit;
+  catalogPath?: string;
   catalogName?: string;
   catalogs?: readonly RelatedCatalog[];
   allCatalogs?: boolean;

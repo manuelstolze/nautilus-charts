@@ -45,6 +45,19 @@ function assertSingleRemote(path: string, remote: string): void {
   if (configured !== remote) throw new Error("catalog origin does not match the requested remote");
 }
 
+const INITIAL_FILES = [
+  ".gitignore",
+  "tags.toml",
+  "templates/system.toml",
+  "templates/repository.toml",
+  "templates/external.toml",
+];
+
+function hasCommit(path: string): boolean {
+  const result = spawnSync("git", ["rev-parse", "--verify", "HEAD"], { cwd: path, encoding: "utf8" });
+  return result.status === 0;
+}
+
 /** Git setup for named catalog repositories. Never used for listed code repositories. */
 export class CatalogGitCli implements CatalogGitPort {
   readonly templatesRoot: string;
@@ -78,5 +91,35 @@ export class CatalogGitCli implements CatalogGitPort {
     mkdirSync(join(path, ".."), { recursive: true });
     runGit(["clone", "--quiet", "--", remote, path]);
     assertSingleRemote(path, remote);
+  }
+
+  assertWriteClean(rawPath: string, files: readonly string[]): void {
+    const path = resolve(rawPath);
+    const initial = !hasCommit(path);
+    for (const file of new Set(files)) {
+      if (initial && INITIAL_FILES.includes(file)) continue;
+      if (runGit(["status", "--porcelain", "--untracked-files=all", "--", file], path)) {
+        throw new Error("catalog has uncommitted changes to an entry or tag file");
+      }
+    }
+  }
+
+  commit(rawPath: string, files: readonly string[], message: string): void {
+    const path = resolve(rawPath);
+    const initial = !hasCommit(path);
+    const paths = [...new Set([...files, ...(initial ? INITIAL_FILES : [])])]
+      .filter((file) => existsSync(join(path, file)));
+    if (paths.length === 0) throw new Error("catalog commit has no files");
+    try {
+      runGit(["add", "--", ...paths], path);
+      runGit(["commit", "--only", "-m", message, "--", ...paths], path);
+    } catch (error) {
+      try {
+        runGit(["reset", "--quiet", "--", ...paths], path);
+      } catch {
+        // Keep the commit failure as the useful error. The caller rolls back its files.
+      }
+      throw error;
+    }
   }
 }

@@ -147,12 +147,16 @@ describe("named catalog setup", () => {
     assert.equal(workCreated.result, 0);
     assert.equal(JSON.parse(workCreated.output.join("\\n")).name, "work");
     assert.equal(JSON.parse(workCreated.output.join("\\n")).path, undefined);
+    execFileSync("git", ["-C", workPath, "config", "user.name", "Charts Test"]);
+    execFileSync("git", ["-C", workPath, "config", "user.email", "charts@example.com"]);
 
     const sharedCloned = capture(() => main([
       "catalog", "clone", "shared", "--path", sharedPath, "--remote", sharedRemote, "--json",
     ], root));
     assert.equal(sharedCloned.result, 0);
     assert.equal(JSON.parse(sharedCloned.output.join("\\n")).action, "clone");
+    execFileSync("git", ["-C", sharedPath, "config", "user.name", "Charts Test"]);
+    execFileSync("git", ["-C", sharedPath, "config", "user.email", "charts@example.com"]);
 
     const codePath = join(temporary, "shared-code");
     mkdirSync(codePath);
@@ -163,11 +167,25 @@ describe("named catalog setup", () => {
 
     const added = capture(() => main([
       "add", "repository", "app", "--catalog", "work", "--data",
-      JSON.stringify({ description: "Application.", "depends-on": [{ id: "shared-lib" }] }), "--json",
+      JSON.stringify({
+        description: "Application.",
+        remote: "https://example.com/shared-lib.git",
+        tags: ["utility"],
+        "depends-on": [{ id: "shared-lib" }],
+      }),
+      "--local-path", codePath,
+      "--new-tag", "utility=Shared tools.",
+      "--json",
     ], root));
     assert.equal(added.result, 0, added.output.join("\\n"));
     assert.equal(existsSync(join(workPath, "repositories", "app.toml")), true);
     assert.equal(existsSync(join(root, "repositories", "app.toml")), false);
+    const firstCommitFiles = execFileSync("git", ["-C", workPath, "show", "--pretty=format:", "--name-only", "HEAD"], { encoding: "utf8" }).trim().split("\n");
+    assert.ok(firstCommitFiles.includes("repositories/app.toml"));
+    assert.ok(firstCommitFiles.includes("tags.toml"));
+    assert.ok(firstCommitFiles.includes("templates/repository.toml"));
+    assert.ok(!firstCommitFiles.includes("local/paths.toml"));
+    assert.equal(spawnSync("git", ["-C", workPath, "check-ignore", "-q", "local/paths.toml"]).status, 0);
 
     const duplicate = capture(() => main([
       "add", "system", "shared-lib", "--catalog", "work", "--data", '{"description":"Duplicate."}', "--json",
@@ -180,6 +198,8 @@ describe("named catalog setup", () => {
     ], root));
     assert.equal(updated.result, 0);
     assert.equal(parseToml(readFileSync(join(workPath, "repositories", "app.toml"), "utf8")).description, "Updated application.");
+    const updateCommitFiles = execFileSync("git", ["-C", workPath, "show", "--pretty=format:", "--name-only", "HEAD"], { encoding: "utf8" }).trim().split("\n");
+    assert.deepEqual(updateCommitFiles, ["repositories/app.toml"]);
 
     const scopedFind = capture(() => main(["find", "Updated application", "--catalog", "work", "--json"], root));
     assert.deepEqual(JSON.parse(scopedFind.output.join("\\n")).entries.map((entry: { id: string }) => entry.id), ["app"]);
