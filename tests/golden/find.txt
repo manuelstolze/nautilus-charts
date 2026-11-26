@@ -1,5 +1,5 @@
 ## all entries
-$ charts "find"
+$ charts "find" "--catalog" "nautilus"
 exit: 0
 --- stdout
 external old-api — old-api — Retired API.
@@ -14,7 +14,7 @@ system gamma — gamma — Gamma system.
 --- stderr
 
 ## all entries (--json)
-$ charts "find" "--json"
+$ charts "find" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -116,7 +116,7 @@ exit: 0
 --- stderr
 
 ## text
-$ charts "find" "alpha"
+$ charts "find" "alpha" "--catalog" "nautilus"
 exit: 0
 --- stdout
 repository alpha-app — Alpha App — Alpha application.
@@ -125,7 +125,7 @@ system alpha — Alpha — Alpha system.
 --- stderr
 
 ## text (--json)
-$ charts "find" "alpha" "--json"
+$ charts "find" "alpha" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -174,13 +174,13 @@ exit: 0
 --- stderr
 
 ## text without match
-$ charts "find" "nothing-matches"
+$ charts "find" "nothing-matches" "--catalog" "nautilus"
 exit: 0
 --- stdout
 --- stderr
 
 ## text without match (--json)
-$ charts "find" "nothing-matches" "--json"
+$ charts "find" "nothing-matches" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -189,7 +189,7 @@ exit: 0
 --- stderr
 
 ## key text
-$ charts "find" "ALP"
+$ charts "find" "ALP" "--catalog" "nautilus"
 exit: 0
 --- stdout
 repository alpha-app — Alpha App — Alpha application.
@@ -198,7 +198,7 @@ system alpha — Alpha — Alpha system.
 --- stderr
 
 ## key text (--json)
-$ charts "find" "ALP" "--json"
+$ charts "find" "ALP" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -247,7 +247,7 @@ exit: 0
 --- stderr
 
 ## system filter
-$ charts "find" "--system" "alpha"
+$ charts "find" "--system" "alpha" "--catalog" "nautilus"
 exit: 0
 --- stdout
 repository alpha-app — Alpha App — Alpha application.
@@ -256,7 +256,7 @@ system alpha — Alpha — Alpha system.
 --- stderr
 
 ## system filter (--json)
-$ charts "find" "--system" "alpha" "--json"
+$ charts "find" "--system" "alpha" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -305,14 +305,14 @@ exit: 0
 --- stderr
 
 ## tag filter
-$ charts "find" "--tag" "library"
+$ charts "find" "--tag" "library" "--catalog" "nautilus"
 exit: 0
 --- stdout
 repository beta-lib — beta-lib — Beta library.
 --- stderr
 
 ## tag filter (--json)
-$ charts "find" "--tag" "library" "--json"
+$ charts "find" "--tag" "library" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -333,7 +333,7 @@ exit: 0
 --- stderr
 
 ## status filter
-$ charts "find" "--status" "deprecated"
+$ charts "find" "--status" "deprecated" "--catalog" "nautilus"
 exit: 0
 --- stdout
 repository gamma-app — gamma-app — Gamma application.
@@ -341,7 +341,7 @@ system gamma — gamma — Gamma system.
 --- stderr
 
 ## status filter (--json)
-$ charts "find" "--status" "deprecated" "--json"
+$ charts "find" "--status" "deprecated" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -371,7 +371,7 @@ exit: 0
 --- stderr
 
 ## archived status filter
-$ charts "find" "--status" "archived"
+$ charts "find" "--status" "archived" "--catalog" "nautilus"
 exit: 0
 --- stdout
 external old-api — old-api — Retired API.
@@ -379,7 +379,7 @@ repository old-tool — old-tool — Old tool.
 --- stderr
 
 ## archived status filter (--json)
-$ charts "find" "--status" "archived" "--json"
+$ charts "find" "--status" "archived" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -404,7 +404,7 @@ exit: 0
 --- stderr
 
 ## owner filter
-$ charts "find" "--owner" "team alpha"
+$ charts "find" "--owner" "team alpha" "--catalog" "nautilus"
 exit: 0
 --- stdout
 repository alpha-app — Alpha App — Alpha application.
@@ -412,7 +412,7 @@ system alpha — Alpha — Alpha system.
 --- stderr
 
 ## owner filter (--json)
-$ charts "find" "--owner" "team alpha" "--json"
+$ charts "find" "--owner" "team alpha" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -453,14 +453,14 @@ exit: 0
 --- stderr
 
 ## combined filters
-$ charts "find" "app" "--system" "alpha" "--status" "active"
+$ charts "find" "app" "--system" "alpha" "--status" "active" "--catalog" "nautilus"
 exit: 0
 --- stdout
 repository alpha-app — Alpha App — Alpha application.
 --- stderr
 
 ## combined filters (--json)
-$ charts "find" "app" "--system" "alpha" "--status" "active" "--json"
+$ charts "find" "app" "--system" "alpha" "--status" "active" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {

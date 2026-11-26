@@ -6,7 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import { parse as parseToml } from "smol-toml";
-import { main } from "../scripts/charts.ts";
+import { main as runCharts } from "../scripts/charts.ts";
 import { renderError } from "../src/adapters/cli.ts";
 import { GitCli } from "../src/adapters/git-cli.ts";
 import { CatalogGitCli } from "../src/adapters/catalog-git.ts";
@@ -21,29 +21,48 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 let temporary: string;
 let root: string;
+let chartsRoot: string;
+let registryPath: string;
+
+function main(argv: string[], _root?: string, _registryPath?: string, readSyncIntervalMs?: number): number {
+  const arguments_ = [...argv];
+  if (["find", "add", "set", "check", "deps", "rdeps"].includes(arguments_[0]) && !arguments_.includes("--catalog")) {
+    arguments_.push("--catalog", "nautilus");
+  }
+  return runCharts(arguments_, chartsRoot, registryPath, readSyncIntervalMs);
+}
+
+function writeAt(base: string, relativePath: string, content: string): string {
+  const path = join(base, relativePath);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, content, "utf8");
+  return path;
+}
 
 function write(relativePath: string, content: string): string {
-  const path = join(root, relativePath);
-  mkdirSync(join(path, ".."), { recursive: true });
-  writeFileSync(path, content, "utf8");
+  const path = writeAt(root, relativePath, content);
+  if (!relativePath.startsWith("local/")) {
+    execFileSync("git", ["-C", root, "add", "--", relativePath]);
+    execFileSync("git", ["-C", root, "-c", "user.name=Charts Test", "-c", "user.email=charts@example.com", "commit", "--quiet", "-m", "Fixture update", "--", relativePath]);
+  }
   return path;
 }
 
 function makeFixture(): void {
   temporary = mkdtempSync(join(tmpdir(), "charts-test-"));
-  root = join(temporary, "charts");
-  for (const directory of ["systems", "repositories", "externals", "local", "templates"]) {
-    mkdirSync(join(root, directory), { recursive: true });
-  }
+  chartsRoot = join(temporary, "charts");
+  root = join(temporary, "folio", "nautilus");
+  registryPath = join(temporary, "config", "catalogs.json");
+  mkdirSync(join(chartsRoot, "templates"), { recursive: true });
   for (const kind of ["system", "repository", "external"]) {
-    copyFileSync(join(REPO_ROOT, `templates/${kind}.toml`), join(root, `templates/${kind}.toml`));
+    copyFileSync(join(REPO_ROOT, `templates/${kind}.toml`), join(chartsRoot, `templates/${kind}.toml`));
   }
-  writeFileSync(
-    join(root, ".gitignore"),
-    "/systems/*.toml\n/repositories/*.toml\n/externals/*.toml\n/local/paths.toml\n",
-    "utf8",
-  );
-  execFileSync("git", ["init", "-q", root]);
+  const remote = join(temporary, "nautilus.git");
+  execFileSync("git", ["init", "--bare", "--quiet", remote]);
+  new CatalogGitCli(REPO_ROOT).initialize(root, remote);
+  execFileSync("git", ["-C", root, "config", "user.name", "Charts Test"]);
+  execFileSync("git", ["-C", root, "config", "user.email", "charts@example.com"]);
+  new FileCatalogRegistry(registryPath).register({ name: "nautilus", path: root, remote });
   write("tags.toml", 'utility = "Shared tools."\nlibrary = "Reusable code."\n');
   write("systems/alpha.toml", 'description = "Alpha system."\n');
   write("systems/beta.toml", 'description = "Beta system."\n');
@@ -266,7 +285,7 @@ describe("named catalog setup", () => {
 
     const scopedFind = capture(() => main(["find", "Updated application", "--catalog", "work", "--json"], root));
     assert.deepEqual(JSON.parse(scopedFind.output.join("\\n")).entries.map((entry: { id: string }) => entry.id), ["app"]);
-    const bridgeFind = capture(() => main(["find", "shared-lib", "--json"], root));
+    const bridgeFind = capture(() => runCharts(["find", "shared-lib", "--json"], chartsRoot, registryPath));
     const bridgeEntry = JSON.parse(bridgeFind.output.join("\\n")).entries[0];
     assert.equal(bridgeEntry.id, "shared-lib");
     assert.equal(bridgeEntry.local_path, codePath);
@@ -281,52 +300,62 @@ describe("named catalog setup", () => {
     assert.equal(manualSync.result, 0);
     assert.equal(JSON.parse(manualSync.output.join("\\n")).action, "sync");
 
-    const missingCatalog = capture(() => main(["add", "system", "no-catalog", "--data", '{"description":"No catalog."}', "--json"], root));
+    const listed = capture(() => main(["catalog", "list", "--json"], root));
+    assert.equal(listed.result, 0);
+    assert.deepEqual(JSON.parse(listed.output.join("\\n")).catalogs, [
+      { name: "nautilus", path: root, remote: execFileSync("git", ["-C", root, "remote", "get-url", "origin"], { encoding: "utf8" }).trim() },
+      { name: "shared", path: sharedPath, remote: sharedRemote },
+      { name: "work", path: workPath, remote: workRemote },
+    ]);
+    const listedText = capture(() => main(["catalog", "list"], root));
+    assert.equal(listedText.result, 0);
+    assert.deepEqual(listedText.output, [
+      "NAME\tPATH\tREMOTE",
+      `nautilus\t${root}\t${execFileSync("git", ["-C", root, "remote", "get-url", "origin"], { encoding: "utf8" }).trim()}`,
+      `shared\t${sharedPath}\t${sharedRemote}`,
+      `work\t${workPath}\t${workRemote}`,
+    ]);
+
+    const missingCatalog = capture(() => runCharts(["add", "system", "no-catalog", "--data", '{"description":"No catalog."}', "--json"], chartsRoot, registryPath));
     assert.equal(missingCatalog.result, 1);
     assert.match(JSON.parse(missingCatalog.output.join("\\n")).error.message, /--catalog is required/);
   });
 
-  test("copies a root entry and its tags and local path without changing or syncing the root", () => {
-    const codePath = join(root, "migration-code");
-    mkdirSync(codePath);
-    execFileSync("git", ["init", "--quiet", codePath]);
-    execFileSync("git", ["-C", codePath, "remote", "add", "origin", "https://example.com/migrated.git"]);
-    write("repositories/migrate-me.toml",
-      'description = "Migration target."\nremote = "https://example.com/migrated.git"\ntags = ["utility"]\n');
-    write("local/paths.toml", 'migrate-me = "migration-code"\n');
-    const sourceEntry = readFileSync(join(root, "repositories/migrate-me.toml"), "utf8");
-    const sourceTags = readFileSync(join(root, "tags.toml"), "utf8");
-    const sourcePaths = readFileSync(join(root, "local/paths.toml"), "utf8");
-
-    const remote = join(temporary, "migration.git");
-    const destinationPath = join(temporary, "migration-destination");
-    execFileSync("git", ["init", "--bare", "--quiet", remote]);
-    const created = capture(() => main([
-      "catalog", "create", "migration-target", "--path", destinationPath, "--remote", remote, "--json",
-    ], root));
-    assert.equal(created.result, 0);
-    execFileSync("git", ["-C", destinationPath, "config", "user.name", "Charts Test"]);
-    execFileSync("git", ["-C", destinationPath, "config", "user.email", "charts@example.com"]);
-
-    const result = capture(() => main(["migrate", "migrate-me", "--catalog", "migration-target", "--json"], root));
-    const payload = JSON.parse(result.output.join("\\n"));
-    assert.equal(result.result, 0, result.errors.join("\\n"));
-    assert.equal(payload.catalog, "migration-target");
-    assert.equal(payload.sync_started, false);
-    assert.deepEqual(
-      JSON.parse(JSON.stringify(parseToml(readFileSync(join(destinationPath, "repositories/migrate-me.toml"), "utf8")))),
-      JSON.parse(JSON.stringify(parseToml(sourceEntry))),
-    );
-    assert.equal(parseToml(readFileSync(join(destinationPath, "tags.toml"), "utf8")).utility, "Shared tools.");
-    assert.equal(parseToml(readFileSync(join(destinationPath, "local/paths.toml"), "utf8"))["migrate-me"], codePath);
-    assert.equal(readFileSync(join(root, "repositories/migrate-me.toml"), "utf8"), sourceEntry);
-    assert.equal(readFileSync(join(root, "tags.toml"), "utf8"), sourceTags);
-    assert.equal(readFileSync(join(root, "local/paths.toml"), "utf8"), sourcePaths);
-    assert.equal(execFileSync("git", ["--git-dir", remote, "for-each-ref", "--format=%(refname)"], { encoding: "utf8" }).trim(), "");
-  });
 });
 
 describe("catalog validation", () => {
+  test("reports migrate as an unknown command", () => {
+    const result = capture(() => runCharts(["migrate", "x", "--catalog", "y", "--json"], chartsRoot, registryPath));
+    assert.equal(result.result, 1);
+    const error = JSON.parse(result.output.join("\\n")).error;
+    assert.equal(error.code, "usage");
+    assert.match(error.message, /^usage: charts </);
+    assert.doesNotMatch(error.message, /migrate/);
+  });
+
+  test("requires a named catalog before commands read catalog data", () => {
+    const emptyRegistry = join(temporary, "empty-config", "catalogs.json");
+    const cases = [
+      ["find", "--catalog", "x", "--json"],
+      ["add", "system", "new-system", "--data", '{"description":"New."}', "--json"],
+      ["check", "--json"],
+    ];
+    for (const arguments_ of cases) {
+      const result = capture(() => runCharts(arguments_, chartsRoot, emptyRegistry));
+      assert.equal(result.result, 1, arguments_.join(" "));
+      const error = JSON.parse(result.output.join("\\n")).error;
+      assert.equal(error.code, "usage");
+      assert.match(error.message, /charts catalog create/);
+      assert.match(error.message, /charts catalog clone/);
+    }
+    const listed = capture(() => runCharts(["catalog", "list", "--json"], chartsRoot, emptyRegistry));
+    assert.equal(listed.result, 0);
+    assert.deepEqual(JSON.parse(listed.output.join("\\n")), { catalogs: [] });
+    const listedText = capture(() => runCharts(["catalog", "list"], chartsRoot, emptyRegistry));
+    assert.equal(listedText.result, 0);
+    assert.deepEqual(listedText.output, ["No catalogs registered."]);
+  });
+
   test("accepts a missing local paths file", () => {
     const result = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
     assert.deepEqual(result.errors, []);
@@ -334,8 +363,12 @@ describe("catalog validation", () => {
   });
 
   test("keeps store paths out of add, set, and check output", () => {
-    writeFileSync(join(root, ".gitignore"), "/repositories/*.toml\n/externals/*.toml\n/local/paths.toml\n", "utf8");
+    writeFileSync(join(root, ".gitignore"), "/local/paths.toml\n", "utf8");
     write("systems/broken.toml", "description = [\n");
+    assert.ok(validateCatalog({ store: new TomlStore(root), git: new GitCli(root) }).errors.some((error) => error.includes("system broken: invalid TOML")));
+    const checked = capture(() => main(["check", "--json"], root));
+    assert.equal(checked.result, 3, checked.output.join("\\n"));
+    assert.match(checked.output.join("\\n"), /system broken: invalid TOML/);
 
     const addArguments = ["add", "repository", "new-repo", "--data", '{"description":"New repository."}'];
     const setArguments = ["set", "alpha-app", "--data", '{"description":"Updated application."}'];
@@ -343,22 +376,24 @@ describe("catalog validation", () => {
       const format = json ? "--json" : undefined;
       for (const arguments_ of [addArguments, setArguments, ["check"]]) {
         const result = capture(() => main(format ? [...arguments_, format] : arguments_, root));
-        assert.equal(result.result, 3);
+        assert.equal(result.result, 3, `${arguments_.join(" ")}: ${[...result.output, ...result.errors].join("\n")}`);
         const output = [...result.output, ...result.errors].join("\n");
         assert.match(output, /system broken: invalid TOML/);
         assert.match(output, /the local paths are missing/);
         assert.doesNotMatch(output, /\.toml|(?:repositories|systems|externals|local)\//);
       }
 
-      const unignored = capture(() => main(
+    }
+    rmSync(join(root, "systems/broken.toml"), { force: true });
+    for (const [id, format] of [["new-system-text", undefined], ["new-system-json", "--json"]] as const) {
+      const added = capture(() => main(
         format
-          ? ["add", "system", "new-system", "--data", '{"description":"New system."}', format]
-          : ["add", "system", "new-system", "--data", '{"description":"New system."}'],
+          ? ["add", "system", id, "--data", '{"description":"New system."}', format]
+          : ["add", "system", id, "--data", '{"description":"New system."}'],
         root,
       ));
-      assert.equal(unignored.result, 3);
-      assert.match([...unignored.output, ...unignored.errors].join("\n"), /system new-system is not ignored by Git/);
-      assert.doesNotMatch([...unignored.output, ...unignored.errors].join("\n"), /\.toml|(?:repositories|systems|externals|local)\//);
+      assert.equal(added.result, 0);
+      assert.doesNotMatch([...added.output, ...added.errors].join("\n"), /\.toml|(?:repositories|systems|externals|local)\//);
     }
   });
 
@@ -400,7 +435,7 @@ describe("catalog validation", () => {
     const { errors } = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
     assert.ok(errors.some((error) => error.includes("system \"missing-system\" does not name a system")));
     assert.ok(errors.some((error) => error.includes("cannot point to the same repository")));
-    assert.ok(errors.some((error) => error.includes("ID \"missing-repo\" does not exist")));
+    assert.ok(errors.some((error) => error.includes("ID \"missing-repo\" does not exist in any registered catalog")));
     assert.ok(errors.some((error) => error.includes("unknown field(s): extra")));
     assert.ok(errors.some((error) => error.includes("via must be a string")));
   });
@@ -721,8 +756,9 @@ describe("charts add", () => {
     assert.deepEqual(JSON.parse(JSON.stringify(parseToml(readFileSync(join(root, "local/paths.toml"), "utf8")))),  {
       "path-repository": localRepository,
     });
+    assert.equal(spawnSync("git", ["-C", root, "check-ignore", "repositories/path-repository.toml"]).status, 1);
     assert.equal(
-      execFileSync("git", ["-C", root, "check-ignore", "repositories/path-repository.toml"], { encoding: "utf8" }).trim(),
+      execFileSync("git", ["-C", root, "log", "-1", "--pretty=format:", "--name-only"], { encoding: "utf8" }).trim(),
       "repositories/path-repository.toml",
     );
     assert.equal(
@@ -1372,9 +1408,9 @@ describe("charts set", () => {
       [{ name: "data-pipeline", description: "Moves data." }],
     );
     assert.equal(updated.status, "updated");
-    write("repositories/alpha-app.toml", "external entry change\n");
-    write("local/paths.toml", "external path change\n");
-    write("tags.toml", "external tag change\n");
+    writeAt(root, "repositories/alpha-app.toml", "external entry change\n");
+    writeAt(root, "local/paths.toml", "external path change\n");
+    writeAt(root, "tags.toml", "external tag change\n");
     const errors = updated.rollback();
     assert.ok(errors.includes("repository alpha-app changed during rollback and was not restored"));
     assert.ok(errors.includes("the local paths changed during rollback and could not be restored"));
@@ -1484,7 +1520,7 @@ describe("catalog commands", () => {
     return { ...process.env, XDG_CONFIG_HOME: join(temporary, "isolated-config") };
   }
 
-  /** Copies the command and its code into the fixture, whose catalog Git ignores. */
+  /** Copies the Charts command and code into the named catalog fixture. */
   function installCommand(): void {
     for (const folder of ["bin", "scripts", "src"]) cpSync(join(REPO_ROOT, folder), join(root, folder), { recursive: true });
     copyFileSync(join(REPO_ROOT, "package.json"), join(root, "package.json"));
@@ -1492,7 +1528,18 @@ describe("catalog commands", () => {
   }
 
   /** Runs the `charts` command through a symbolic link, from a folder outside Charts. */
-  function runLinked(args: string[]) {
+  function registeredEnv(): NodeJS.ProcessEnv {
+    const configHome = join(temporary, "registered-config");
+    const remote = execFileSync("git", ["-C", root, "remote", "get-url", "origin"], { encoding: "utf8" }).trim();
+    new FileCatalogRegistry(join(configHome, "nautilus-charts", "catalogs.json")).register({
+      name: "nautilus",
+      path: root,
+      remote,
+    });
+    return { ...process.env, XDG_CONFIG_HOME: configHome };
+  }
+
+  function runLinked(args: string[], env = isolatedEnv()) {
     const binFolder = join(temporary, "local-bin");
     mkdirSync(binFolder, { recursive: true });
     const link = join(binFolder, "charts");
@@ -1500,21 +1547,22 @@ describe("catalog commands", () => {
     symlinkSync(join(root, "bin/charts.js"), link);
     const cwd = join(temporary, "elsewhere");
     mkdirSync(cwd, { recursive: true });
-    return spawnSync(link, args, { cwd, encoding: "utf8", env: isolatedEnv() });
+    return spawnSync(link, args, { cwd, encoding: "utf8", env });
   }
 
   test("the charts command runs through a symbolic link from another folder like the script", () => {
     installCommand();
-    const linked = runLinked(["find", "--json"]);
-    const script = spawnSync(process.execPath, [realpathSync(join(root, "scripts/charts.ts")), "find", "--json"], { cwd: root, encoding: "utf8", env: isolatedEnv() });
-    assert.equal(script.status, 0, script.stderr);
+    const env = registeredEnv();
+    const linked = runLinked(["find", "--catalog", "nautilus", "--json"], env);
+    const script = spawnSync(process.execPath, [realpathSync(join(root, "scripts/charts.ts")), "find", "--catalog", "nautilus", "--json"], { cwd: root, encoding: "utf8", env });
+    assert.equal(script.status, 0, script.stdout + script.stderr);
     assert.equal(linked.status, 0, linked.stdout + linked.stderr);
     assert.equal(linked.stderr, "");
     assert.equal(linked.stdout, script.stdout);
     // main runs exactly once: one JSON document.
     assert.equal(JSON.parse(linked.stdout).entries.length, 7);
 
-    const failed = runLinked(["show", "missing", "--json"]);
+    const failed = runLinked(["show", "missing", "--json"], env);
     assert.equal(failed.status, 2, failed.stdout + failed.stderr);
     assert.equal(JSON.parse(failed.stdout).error.code, "entry-not-found");
   });
@@ -1552,7 +1600,7 @@ describe("catalog commands", () => {
       const output = execFileSync(
         process.execPath,
         [realpathSync(join(root, "scripts/charts.ts")), "find", "alpha-app", "--json"],
-        { cwd: otherDirectory, encoding: "utf8", env: isolatedEnv() },
+        { cwd: otherDirectory, encoding: "utf8", env: registeredEnv() },
       );
       const payload = JSON.parse(output);
       assert.ok(payload.entries.some((entry: { id: string }) => entry.id === "alpha-app"));
@@ -1591,16 +1639,16 @@ describe("typed errors", () => {
     assertError(["show", "missing"], "entry-not-found", 2, "unknown entry ID: missing");
   });
 
-  test("a refusal exits with 3", () => {
-    writeFileSync(join(root, ".gitignore"), "/repositories/*.toml\n/externals/*.toml\n/local/paths.toml\n", "utf8");
-    const error = assertError(
-      ["add", "system", "unignored", "--data", '{"description":"Unignored."}'],
-      "refused",
-      3,
-      "could not add system unignored: Git does not ignore the entry",
+  test("tracks new entries in the named catalog", () => {
+    const result = capture(() => main([
+      "add", "system", "unignored", "--data", '{"description":"Example."}', "--json",
+    ], root));
+    assert.equal(result.result, 0, result.output.join("\\n"));
+    assert.equal(existsSync(join(root, "systems/unignored.toml")), true);
+    assert.equal(
+      execFileSync("git", ["-C", root, "ls-files", "systems/unignored.toml"], { encoding: "utf8" }).trim(),
+      "systems/unignored.toml",
     );
-    assert.deepEqual(error.details.errors, ["system unignored is not ignored by Git"]);
-    assert.equal(existsSync(join(root, "systems/unignored.toml")), false);
   });
 
   test("a failed catalog write exits with 4", (context) => {

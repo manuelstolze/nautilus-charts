@@ -32,12 +32,12 @@ function containsNull(value: unknown): boolean {
 /**
  * Updates fields on an existing catalog entry and validates the whole catalog.
  * A failure is `entry-not-found` for an unknown ID, `usage` for options that do
- * not fit the entry, `invalid-entry` for validation errors, `refused` when Git
- * does not ignore the entry file, and `external` when Git, a write, or the rollback fails;
- * except for the first two, its details hold the errors and warnings.
+ * not fit the entry, `invalid-entry` for validation errors, and `external` when
+ * Git, a write, or the rollback fails. Except for usage errors, its details hold
+ * the errors and warnings.
  */
 export function set(ports: Ports, options: SetOptions): SetResult {
-  const { store, git } = ports;
+  const { store } = ports;
   const snapshot = store.load();
   const index = new CatalogIndex(snapshot);
   const current = index.getInCatalog(options.id);
@@ -68,11 +68,6 @@ export function set(ports: Ports, options: SetOptions): SetResult {
   if (localPath !== undefined && current.kind !== "repository") return usage("--local-path is valid only for a repository");
   if (newTags.length > 0 && current.kind !== "repository") return usage("--new-tag is valid only for a repository");
 
-  if (ports.catalogName === undefined) {
-    const ignored = git.isIgnored(path);
-    if ("error" in ignored) return failure([`could not check Git ignore rule: ${ignored.error}`], "external", [], "the Git ignore rule could not be checked");
-    if (!ignored.ignored) return failure([`${current.kind} ${options.id} is not ignored by Git`], "refused", [], "Git does not ignore the entry");
-  }
 
   const merged = mergeEntryData(current.data, data ?? {});
   if (
@@ -106,7 +101,8 @@ export function set(ports: Ports, options: SetOptions): SetResult {
     };
   }
 
-  if (ports.catalogName !== undefined) {
+  const changesCatalog = merged.changed.length > 0 || newTags.length > 0;
+  if (ports.catalogName !== undefined && changesCatalog) {
     if (!ports.catalogGit || !ports.catalogPath || !ports.catalogRemote) return failure(["catalog Git support is not configured"], "external", [], "the catalog could not be committed");
     try {
       ports.catalogGit.assertWriteClean(ports.catalogPath, [path, "tags.toml"]);
@@ -147,7 +143,7 @@ export function set(ports: Ports, options: SetOptions): SetResult {
     );
   }
   validation = { ...validation, warnings: [...validation.warnings, ...updated.warnings] };
-  if (ports.catalogName !== undefined) {
+  if (ports.catalogName !== undefined && changesCatalog) {
     try {
       ports.catalogGit!.commit(ports.catalogPath!, [path, "tags.toml"], `Update ${current.kind} ${options.id}`);
     } catch (error) {

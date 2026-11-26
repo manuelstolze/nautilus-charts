@@ -1,7 +1,7 @@
 export type Kind = "system" | "repository" | "external";
 export type Data = Record<string, unknown>;
 export type Dependency = { id: string; via?: unknown; [key: string]: unknown };
-/** A catalog entry. `file` is its label relative to the catalog root, such as `systems/shop.toml`. */
+/** A catalog entry. `file` is its label relative to the catalog, such as `systems/shop.toml`. */
 export type Entry = { kind: Kind; id: string; data: Data; file: string };
 export type Finding = { errors: string[]; warnings: string[] };
 
@@ -13,7 +13,7 @@ export const ENTRY_DIRS: Array<[Kind, string]> = [
   ["repository", "repositories"],
   ["external", "externals"],
 ];
-/** The root-relative file that maps repository IDs to local paths. */
+/** The catalog-relative file that maps repository IDs to local paths. */
 export const LOCAL_PATHS_FILE = "local/paths.toml";
 
 export function localPathReplacementWarning(id: string): string {
@@ -60,7 +60,7 @@ export function entryDirectory(kind: Kind): string {
   return ENTRY_DIRS.find(([entryKind]) => entryKind === kind)![1];
 }
 
-/** The root-relative label of an entry file. */
+/** The catalog-relative label of an entry file. */
 export function entryFile(kind: Kind, id: string): string {
   return `${entryDirectory(kind)}/${id}.toml`;
 }

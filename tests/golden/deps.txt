@@ -1,5 +1,5 @@
 ## repository
-$ charts "deps" "alpha-app"
+$ charts "deps" "alpha-app" "--catalog" "nautilus"
 exit: 0
 --- stdout
 alpha-app -> repository beta-lib via npm
@@ -7,7 +7,7 @@ alpha-app -> external stripe via API
 --- stderr
 
 ## repository (--json)
-$ charts "deps" "alpha-app" "--json"
+$ charts "deps" "alpha-app" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -31,14 +31,14 @@ exit: 0
 --- stderr
 
 ## repository without dependencies
-$ charts "deps" "beta-lib"
+$ charts "deps" "beta-lib" "--catalog" "nautilus"
 exit: 0
 --- stdout
 beta-lib: no dependencies
 --- stderr
 
 ## repository without dependencies (--json)
-$ charts "deps" "beta-lib" "--json"
+$ charts "deps" "beta-lib" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -49,7 +49,7 @@ exit: 0
 --- stderr
 
 ## system
-$ charts "deps" "alpha"
+$ charts "deps" "alpha" "--catalog" "nautilus"
 exit: 0
 --- stdout
 alpha -> repository beta-lib via npm from alpha-app
@@ -58,7 +58,7 @@ alpha -> system beta via repositories alpha-app
 --- stderr
 
 ## system (--json)
-$ charts "deps" "alpha" "--json"
+$ charts "deps" "alpha" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -93,14 +93,14 @@ exit: 0
 --- stderr
 
 ## system without dependencies
-$ charts "deps" "beta"
+$ charts "deps" "beta" "--catalog" "nautilus"
 exit: 0
 --- stdout
 beta: no dependencies
 --- stderr
 
 ## system without dependencies (--json)
-$ charts "deps" "beta" "--json"
+$ charts "deps" "beta" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -112,14 +112,14 @@ exit: 0
 --- stderr
 
 ## external
-$ charts "deps" "stripe"
+$ charts "deps" "stripe" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
 ERROR: deps supports repositories and systems, not external entries: stripe
 
 ## external (--json)
-$ charts "deps" "stripe" "--json"
+$ charts "deps" "stripe" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {
@@ -134,14 +134,14 @@ exit: 1
 --- stderr
 
 ## unknown ID
-$ charts "deps" "missing"
+$ charts "deps" "missing" "--catalog" "nautilus"
 exit: 2
 --- stdout
 --- stderr
 ERROR: unknown entry ID: missing
 
 ## unknown ID (--json)
-$ charts "deps" "missing" "--json"
+$ charts "deps" "missing" "--catalog" "nautilus" "--json"
 exit: 2
 --- stdout
 {

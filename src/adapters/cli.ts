@@ -1,7 +1,6 @@
 import type { AddResult } from "../commands/add.ts";
 import type { CheckResult } from "../commands/check.ts";
 import type { FindResult } from "../commands/find.ts";
-import type { MigrateResult } from "../commands/migrate.ts";
 import type { SetResult } from "../commands/set.ts";
 import type { EntryResult } from "../commands/show.ts";
 import type { NewTag } from "../domain/validation.ts";
@@ -21,7 +20,7 @@ import { ChartsError, ERROR_CATEGORIES, ERROR_CODES, exitCodeOf, type ErrorCode 
 
 // The terminal adapter: argument parsing and text or JSON output.
 
-export type CommandName = "find" | "show" | "deps" | "rdeps" | "check" | "add" | "set" | "migrate" | "catalog" | "describe";
+export type CommandName = "find" | "show" | "deps" | "rdeps" | "check" | "add" | "set" | "catalog" | "describe";
 
 export type Options = {
   command: CommandName;
@@ -38,7 +37,7 @@ export type Options = {
   status?: string;
   owner?: string;
   catalogName?: string;
-  catalogAction?: "create" | "clone" | "sync";
+  catalogAction?: "list" | "create" | "clone" | "sync";
   path?: string;
   remote?: string;
 };
@@ -235,36 +234,13 @@ function parseQuery(command: "find" | "show" | "deps" | "rdeps" | "check", rest:
   return options;
 }
 
-function parseMigrate(rest: string[]): Options {
-  const options: Options = { command: "migrate", json: false };
-  const positional: string[] = [];
-  for (let index = 0; index < rest.length; index += 1) {
-    const argument = rest[index];
-    if (argument === "--json") {
-      options.json = true;
-      continue;
-    }
-    if (argument === "--catalog") {
-      const value = rest[index + 1];
-      if (!value || value.startsWith("--")) throw new Error("--catalog requires a value");
-      if (options.catalogName !== undefined) throw new Error("--catalog can be used only once");
-      options.catalogName = parseCatalogName(value);
-      index += 1;
-      continue;
-    }
-    if (argument.startsWith("--")) throw new Error(`unknown option: ${argument}`);
-    positional.push(argument);
-  }
-  if (positional.length !== 1) throw new Error("migrate requires one root entry ID");
-  options.id = positional[0];
-  if (!ID_PATTERN.test(options.id)) throw new Error(`invalid ID ${JSON.stringify(options.id)}; use lowercase kebab-case`);
-  if (options.catalogName === undefined) throw new Error("migrate requires --catalog <destination>");
-  return options;
-}
-
 function parseCatalog(rest: string[]): Options {
   const action = rest[0];
-  if (action !== "create" && action !== "clone" && action !== "sync") throw new Error("catalog requires create, clone, or sync");
+  if (action === "list") {
+    if (rest.slice(1).some((argument) => argument !== "--json")) throw new Error("catalog list takes no arguments");
+    return { command: "catalog", catalogAction: "list", json: rest.includes("--json") };
+  }
+  if (action !== "create" && action !== "clone" && action !== "sync") throw new Error("catalog requires list, create, clone, or sync");
   const options: Options = { command: "catalog", catalogAction: action, json: false };
   const positional: string[] = [];
   for (let index = 1; index < rest.length; index += 1) {
@@ -474,22 +450,25 @@ export const COMMANDS: CommandSpec[] = [
     parse: parseSet,
   },
   {
-    name: "migrate",
-    usage: "<id> --catalog <destination>",
-    summary: "Copies one root entry to a named catalog, checks it, and does not sync it.",
-    arguments: positionalSchema([ID_SCHEMA]),
-    options: optionsSchema({ catalog: text("the destination catalog name") }, ["catalog"]),
-    output: { type: "object", fields: { ok: "true", type: "the entry type", id: "the copied entry ID", catalog: "the destination catalog name", validation: "destination validation result", sync_started: "false; the owner starts sync after review" } },
-    errors: ["usage", "entry-not-found", "invalid-entry", "refused", "external"],
-    parse: parseMigrate,
-  },
-  {
     name: "catalog",
-    usage: "<create|clone|sync> <name> [--path <path> --remote <url>]",
-    summary: "Creates, clones, or syncs a named catalog.",
-    arguments: positionalSchema([{ type: "string", enum: ["create", "clone", "sync"] }, { ...text("the catalog's lowercase kebab-case name"), title: "name" }]),
+    usage: "<list|create|clone|sync> [name] [--path <path> --remote <url>]",
+    summary: "Lists registered catalogs, or creates, clones, or syncs one.",
+    arguments: {
+      type: "array",
+      prefixItems: [
+        { type: "string", enum: ["list", "create", "clone", "sync"] },
+        { ...text("the catalog's lowercase kebab-case name"), title: "name" },
+      ],
+      items: false,
+      minItems: 1,
+      maxItems: 2,
+      oneOf: [
+        { prefixItems: [{ type: "string", const: "list" }], minItems: 1, maxItems: 1 },
+        { prefixItems: [{ type: "string", enum: ["create", "clone", "sync"] }, { type: "string" }], minItems: 2, maxItems: 2 },
+      ],
+    },
     options: optionsSchema({ path: text("the local catalog folder; create or clone only"), remote: text("the catalog Git remote URL; create or clone only") }),
-    output: { type: "object", fields: { ok: "true", action: "create, clone, or sync", name: "the catalog name", remote: "the catalog's Git remote", warnings: "sync warnings, only when needed" } },
+    output: { type: "object", fields: { catalogs: "registered catalogs, each with name, path, and remote; list only", ok: "true", action: "create, clone, or sync", name: "the catalog name", remote: "the catalog's Git remote", warnings: "sync warnings, only when needed" } },
     errors: ["usage", "external"],
     parse: parseCatalog,
   },
@@ -750,6 +729,23 @@ export function describeModule(info: ModuleInfo): Description {
   };
 }
 
+export function renderCatalogList(
+  json: boolean,
+  catalogs: Array<{ name: string; path: string; remote: string }>,
+): number {
+  if (json) {
+    printJson({ catalogs });
+    return 0;
+  }
+  if (catalogs.length === 0) {
+    console.log("No catalogs registered.");
+    return 0;
+  }
+  console.log("NAME\tPATH\tREMOTE");
+  for (const catalog of catalogs) console.log(`${catalog.name}\t${catalog.path}\t${catalog.remote}`);
+  return 0;
+}
+
 export function renderCatalog(
   json: boolean,
   action: "create" | "clone" | "sync",
@@ -763,24 +759,6 @@ export function renderCatalog(
     const result = action === "create" ? "Created" : action === "clone" ? "Cloned" : warnings.length ? "Tried to sync" : "Synced";
     console.log(`${result} catalog ${name}`);
   }
-  return 0;
-}
-
-export function renderMigrate(json: boolean, result: MigrateResult): number {
-  if (!result.ok) return renderFailure(json, result.error);
-  if (json) {
-    printJson({
-      ok: true,
-      type: result.type,
-      id: result.id,
-      catalog: result.catalog,
-      validation: { ok: result.validation.errors.length === 0, ...result.validation },
-      sync_started: false,
-    });
-    return 0;
-  }
-  for (const warning of result.validation.warnings) console.log(`WARNING: ${warning}`);
-  console.log(`Copied ${result.type} ${result.id} to catalog ${result.catalog}; validation ok; no remote sync started`);
   return 0;
 }
 
