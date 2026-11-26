@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileS
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { CatalogRegistration, CatalogRegistry as CatalogRegistryPort } from "../commands/ports.ts";
+import { remoteHasCredentials } from "../domain/validation.ts";
 
 interface RegistryFile {
   version: 1;
@@ -21,12 +22,11 @@ function validateName(name: string): void {
 
 function validateRemote(remote: string): void {
   if (!remote.trim()) throw new Error("catalog remote must not be empty");
+  if (remoteHasCredentials(remote)) throw new Error("catalog remote must not contain credentials");
   if (/^https?:\/\//i.test(remote)) {
     try {
-      const address = new URL(remote);
-      if (address.username || address.password) throw new Error("catalog remote must not contain credentials");
-    } catch (error) {
-      if (error instanceof Error && error.message === "catalog remote must not contain credentials") throw error;
+      new URL(remote);
+    } catch {
       throw new Error("catalog remote must be a valid Git address");
     }
   }

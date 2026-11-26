@@ -5,13 +5,14 @@ exit: 0
 Usage: charts <command> [arguments] [--json]
        charts --version [--json]
 Commands:
-  find [<text>] [--system <id>] [--tag <tag>] [--status <status>] [--owner <text>]
-  show <id>
-  deps <id>
-  rdeps <id>
-  check
-  add <system|repository|external> <id> --data '<JSON>' [--local-path <path>] [--new-tag <name>=<description>]...
-  set <id> [--data '<JSON>'] [--local-path <path>] [--new-tag <name>=<description>]... [--replace-key]
+  find [<text>] [--catalog <name>] [--system <id>] [--tag <tag>] [--status <status>] [--owner <text>]
+  show <id> [--catalog <name>]
+  deps <id> [--catalog <name>]
+  rdeps <id> [--catalog <name>]
+  check [--catalog <name>]
+  add <system|repository|external> <id> --data '<JSON>' [--catalog <name>] [--local-path <path>] [--new-tag <name>=<description>]...
+  set <id> [--catalog <name>] [--data '<JSON>'] [--local-path <path>] [--new-tag <name>=<description>]... [--replace-key]
+  catalog <create|clone> <name> --path <path> --remote <url>
   describe
 --- stderr
 
@@ -22,13 +23,14 @@ exit: 0
 Usage: charts <command> [arguments] [--json]
        charts --version [--json]
 Commands:
-  find [<text>] [--system <id>] [--tag <tag>] [--status <status>] [--owner <text>]
-  show <id>
-  deps <id>
-  rdeps <id>
-  check
-  add <system|repository|external> <id> --data '<JSON>' [--local-path <path>] [--new-tag <name>=<description>]...
-  set <id> [--data '<JSON>'] [--local-path <path>] [--new-tag <name>=<description>]... [--replace-key]
+  find [<text>] [--catalog <name>] [--system <id>] [--tag <tag>] [--status <status>] [--owner <text>]
+  show <id> [--catalog <name>]
+  deps <id> [--catalog <name>]
+  rdeps <id> [--catalog <name>]
+  check [--catalog <name>]
+  add <system|repository|external> <id> --data '<JSON>' [--catalog <name>] [--local-path <path>] [--new-tag <name>=<description>]...
+  set <id> [--catalog <name>] [--data '<JSON>'] [--local-path <path>] [--new-tag <name>=<description>]... [--replace-key]
+  catalog <create|clone> <name> --path <path> --remote <url>
   describe
 --- stderr
 
@@ -37,7 +39,7 @@ $ charts "list"
 exit: 1
 --- stdout
 --- stderr
-ERROR: usage: charts <find|show|deps|rdeps|check|add|set|describe> [arguments] [--json]
+ERROR: usage: charts <find|show|deps|rdeps|check|add|set|catalog|describe> [arguments] [--json]
 
 ## unknown command (--json)
 $ charts "list" "--json"
@@ -46,7 +48,7 @@ exit: 1
 {
   "error": {
     "code": "usage",
-    "message": "usage: charts <find|show|deps|rdeps|check|add|set|describe> [arguments] [--json]",
+    "message": "usage: charts <find|show|deps|rdeps|check|add|set|catalog|describe> [arguments] [--json]",
     "details": {}
   }
 }

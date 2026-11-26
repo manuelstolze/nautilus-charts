@@ -1,12 +1,15 @@
+import { CatalogIndex } from "../domain/catalog.ts";
 import { compact, entryJson, entryStatus, isString, type Entry } from "../domain/entry.ts";
 import type { Ports } from "./context.ts";
 
 export type FindOptions = { text?: string; system?: string; tag?: string; status?: string; owner?: string };
 export type FindResult = { entries: Entry[] };
 
-export function find({ store }: Ports, options: FindOptions): FindResult {
+export function find(ports: Ports, options: FindOptions): FindResult {
+  const index = new CatalogIndex(ports.store.load());
+  const source = ports.allCatalogs ? index.entries : index.primaryEntries;
   const text = (options.text ?? "").toLowerCase();
-  const entries = store.load().entries
+  const entries = source
     .filter((entry) => !text || compact(entryJson(entry)).toLowerCase().includes(text))
     .filter((entry) => {
       if (!options.system) return true;

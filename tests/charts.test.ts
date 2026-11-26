@@ -125,6 +125,76 @@ describe("named catalog setup", () => {
     assert.throws(() => registry.register({ name: "other", path: join(temporary, "other"), remote: "https://example.com/catalog.git" }), /path or remote is already registered/);
     assert.throws(() => registry.register({ name: "other", path: temporary, remote: "https://example.com/other.git" }), /path or remote is already registered/);
   });
+
+  test("creates and clones catalogs, routes scoped commands, and serves Bridge ID lookups", () => {
+    const sharedRemote = join(temporary, "shared.git");
+    const seedPath = join(temporary, "seed");
+    execFileSync("git", ["init", "--bare", "--quiet", sharedRemote]);
+    new CatalogGitCli(REPO_ROOT).initialize(seedPath, sharedRemote);
+    writeFileSync(join(seedPath, "repositories", "shared-lib.toml"),
+      'description = "Shared library."\nremote = "https://example.com/shared-lib.git"\n', "utf8");
+    execFileSync("git", ["-C", seedPath, "add", "-A"]);
+    execFileSync("git", ["-C", seedPath, "-c", "user.name=Charts Test", "-c", "user.email=charts@example.com", "commit", "--quiet", "-m", "Seed catalog"]);
+    execFileSync("git", ["-C", seedPath, "push", "--quiet", "origin", "HEAD"]);
+
+    const workRemote = join(temporary, "work.git");
+    execFileSync("git", ["init", "--bare", "--quiet", workRemote]);
+    const workPath = join(temporary, "machine-a", "work");
+    const sharedPath = join(temporary, "machine-a", "shared");
+    const workCreated = capture(() => main([
+      "catalog", "create", "work", "--path", workPath, "--remote", workRemote, "--json",
+    ], root));
+    assert.equal(workCreated.result, 0);
+    assert.equal(JSON.parse(workCreated.output.join("\\n")).name, "work");
+    assert.equal(JSON.parse(workCreated.output.join("\\n")).path, undefined);
+
+    const sharedCloned = capture(() => main([
+      "catalog", "clone", "shared", "--path", sharedPath, "--remote", sharedRemote, "--json",
+    ], root));
+    assert.equal(sharedCloned.result, 0);
+    assert.equal(JSON.parse(sharedCloned.output.join("\\n")).action, "clone");
+
+    const codePath = join(temporary, "shared-code");
+    mkdirSync(codePath);
+    execFileSync("git", ["init", "--quiet", codePath]);
+    execFileSync("git", ["-C", codePath, "remote", "add", "origin", "https://example.com/shared-lib.git"]);
+    mkdirSync(join(sharedPath, "local"), { recursive: true });
+    writeFileSync(join(sharedPath, "local", "paths.toml"), `shared-lib = ${JSON.stringify(codePath)}\n`, "utf8");
+
+    const added = capture(() => main([
+      "add", "repository", "app", "--catalog", "work", "--data",
+      JSON.stringify({ description: "Application.", "depends-on": [{ id: "shared-lib" }] }), "--json",
+    ], root));
+    assert.equal(added.result, 0, added.output.join("\\n"));
+    assert.equal(existsSync(join(workPath, "repositories", "app.toml")), true);
+    assert.equal(existsSync(join(root, "repositories", "app.toml")), false);
+
+    const duplicate = capture(() => main([
+      "add", "system", "shared-lib", "--catalog", "work", "--data", '{"description":"Duplicate."}', "--json",
+    ], root));
+    assert.equal(duplicate.result, 3);
+    assert.equal(existsSync(join(workPath, "systems", "shared-lib.toml")), false);
+
+    const updated = capture(() => main([
+      "set", "app", "--catalog", "work", "--data", '{"description":"Updated application."}', "--json",
+    ], root));
+    assert.equal(updated.result, 0);
+    assert.equal(parseToml(readFileSync(join(workPath, "repositories", "app.toml"), "utf8")).description, "Updated application.");
+
+    const scopedFind = capture(() => main(["find", "Updated application", "--catalog", "work", "--json"], root));
+    assert.deepEqual(JSON.parse(scopedFind.output.join("\\n")).entries.map((entry: { id: string }) => entry.id), ["app"]);
+    const bridgeFind = capture(() => main(["find", "shared-lib", "--json"], root));
+    const bridgeEntry = JSON.parse(bridgeFind.output.join("\\n")).entries[0];
+    assert.equal(bridgeEntry.id, "shared-lib");
+    assert.equal(bridgeEntry.local_path, codePath);
+    assert.equal(bridgeEntry.local_path_status, "ok");
+    const bridgeShow = capture(() => main(["show", "shared-lib", "--json"], root));
+    assert.equal(JSON.parse(bridgeShow.output.join("\\n")).local_path, codePath);
+
+    const missingCatalog = capture(() => main(["add", "system", "no-catalog", "--data", '{"description":"No catalog."}', "--json"], root));
+    assert.equal(missingCatalog.result, 1);
+    assert.match(JSON.parse(missingCatalog.output.join("\\n")).error.message, /--catalog is required/);
+  });
 });
 
 describe("catalog validation", () => {

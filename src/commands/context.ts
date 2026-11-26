@@ -10,6 +10,7 @@ export type Ports = {
   git: GitInspector;
   catalogName?: string;
   catalogs?: readonly RelatedCatalog[];
+  allCatalogs?: boolean;
 };
 
 /** Builds an index for the selected catalog and all other registered catalogs. */
@@ -29,13 +30,8 @@ export function localPathFacts(
     if (onlyId !== undefined && target.id !== onlyId) continue;
     const pathGit = target.catalogName === undefined || target.catalogName === index.catalogName
       ? git
-      : catalogs.find(({ name }) => name === target.catalogName)?.git;
-    if (!pathGit) {
-      facts.set(target.id, {
-        resolved: target.rawPath,
-        error: `catalog ${JSON.stringify(target.catalogName)} is not available for local path checks`,
-      });
-    } else facts.set(target.id, pathGit.inspectLocalPath(target.rawPath, target.remote));
+      : catalogs.find(({ name }) => name === target.catalogName)?.git ?? git;
+    facts.set(target.id, pathGit.inspectLocalPath(target.rawPath, target.remote, target.catalogName));
   }
   return facts;
 }

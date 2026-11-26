@@ -66,7 +66,7 @@ export interface CatalogStore {
 /** Local Git data: repository roots, remotes, and ignore rules. Never remote access. */
 export interface GitInspector {
   /** Resolves a configured local path and checks that it is a Git root with the given remote. */
-  inspectLocalPath(rawPath: string, remote?: unknown): LocalPathFact;
+  inspectLocalPath(rawPath: string, remote?: unknown, catalogName?: string): LocalPathFact;
   /** Whether Git ignores a path relative to the catalog root. */
   isIgnored(relativePath: string): IgnoreCheck;
 }
