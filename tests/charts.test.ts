@@ -644,6 +644,45 @@ describe("charts add", () => {
     assert.ok(!existsSync(join(root, "systems/new-external.toml")));
   });
 
+  test("ignores existing catalog templates when adding an entry", () => {
+    const legacyTemplate = 'description = "Catalog template."\nname = "Old order"\n';
+    const legacyNote = "Owner file.\n";
+    write("templates/repository.toml", legacyTemplate);
+    write("templates/owner-note.txt", legacyNote);
+
+    const result = capture(() => main([
+      "add", "repository", "template-source-check", "--catalog", "nautilus",
+      "--data", JSON.stringify({
+        name: "Charts template",
+        description: "Written from Charts.",
+        key: "NCH",
+        system: "alpha",
+      }),
+      "--json",
+    ], root));
+    assert.equal(result.result, 0, result.output.join("\\n"));
+
+    const entry = readFileSync(join(root, "repositories/template-source-check.toml"), "utf8");
+    assert.ok(entry.indexOf('name = "Charts template"') < entry.indexOf('description = "Written from Charts."'));
+    assert.equal(readFileSync(join(root, "templates/repository.toml"), "utf8"), legacyTemplate);
+    assert.equal(readFileSync(join(root, "templates/owner-note.txt"), "utf8"), legacyNote);
+    const committedFiles = execFileSync("git", ["-C", root, "show", "--pretty=format:", "--name-only", "HEAD"], { encoding: "utf8" }).trim().split("\n");
+    assert.equal(committedFiles.some((file) => file.startsWith("templates/")), false);
+  });
+
+  test("checks catalogs with and without unused templates", () => {
+    const without = capture(() => main(["check", "--catalog", "nautilus", "--json"], root));
+    assert.equal(without.result, 0, without.output.join("\\n"));
+    assert.doesNotMatch([...without.output, ...without.errors].join("\\n"), /templates/i);
+
+    const legacyTemplate = "not = [ valid TOML\n";
+    writeAt(root, "templates/repository.toml", legacyTemplate);
+    const withTemplates = capture(() => main(["check", "--catalog", "nautilus", "--json"], root));
+    assert.equal(withTemplates.result, 0, withTemplates.output.join("\\n"));
+    assert.doesNotMatch([...withTemplates.output, ...withTemplates.errors].join("\\n"), /templates/i);
+    assert.equal(readFileSync(join(root, "templates/repository.toml"), "utf8"), legacyTemplate);
+  });
+
   test("reports a missing Charts template when updating an entry", () => {
     rmSync(join(chartsRoot, "templates/repository.toml"));
     const result = new TomlStore(root, chartsRoot).updateEntry(
