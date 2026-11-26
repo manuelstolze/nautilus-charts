@@ -67,7 +67,7 @@ class IndexedCatalogStore implements CatalogStore {
       snapshot.catalogName = this.registration.name;
       snapshot.catalogs = this.related.map((catalog) => ({
         name: catalog.name,
-        snapshot: new TomlStore(catalog.path).load(),
+        snapshot: new TomlStore(catalog.path, this.base.templatesRoot).load(),
       }));
     }
     return snapshot;
@@ -150,7 +150,7 @@ function buildPorts(options: Options, root: string, registry: FileCatalogRegistr
     : options.catalogName && registration && ["add", "set", "check", "deps", "rdeps"].includes(options.command)
       ? registrations.filter((catalog) => catalog.name !== registration!.name)
       : [];
-  const base = new TomlStore(registration!.path);
+  const base = new TomlStore(registration!.path, root);
   const store = new IndexedCatalogStore(base, registration, related);
   const git = new CatalogPathInspector(registration!, registrations);
   return {

@@ -115,23 +115,23 @@ describe("named catalog setup", () => {
     assert.deepEqual(firstRegistry.list(), [{ name: "work", path: firstPath, remote }]);
     assert.equal(firstRegistry.get("work")?.path, firstPath);
     assert.equal(existsSync(join(firstPath, "templates")), false);
-    assert.deepEqual(new TomlStore(firstPath).load().entries, []);
-    assert.equal(new TomlStore(firstPath).load().tagsExists, true);
+    assert.deepEqual(new TomlStore(firstPath, chartsRoot).load().entries, []);
+    assert.equal(new TomlStore(firstPath, chartsRoot).load().tagsExists, true);
     assert.deepEqual(execFileSync("git", ["-C", firstPath, "remote"], { encoding: "utf8" }).trim(), "origin");
     assert.equal(execFileSync("git", ["-C", firstPath, "remote", "get-url", "origin"], { encoding: "utf8" }).trim(), remote);
     assert.equal(spawnSync("git", ["-C", firstPath, "check-ignore", "-q", "local/paths.toml"]).status, 0);
     assert.equal(spawnSync("git", ["-C", firstPath, "check-ignore", "-q", "repositories/example.toml"]).status, 1);
     writeFileSync(join(firstPath, "systems", "example.toml"), 'description = "Example system."\n', "utf8");
     writeFileSync(join(firstPath, "tags.toml"), 'utility = "Shared tools."\n', "utf8");
-    assert.deepEqual(new TomlStore(firstPath).load().entries.map((entry) => entry.id), ["example"]);
-    assert.deepEqual(Object.keys(new TomlStore(firstPath).load().tags), ["utility"]);
+    assert.deepEqual(new TomlStore(firstPath, chartsRoot).load().entries.map((entry) => entry.id), ["example"]);
+    assert.deepEqual(Object.keys(new TomlStore(firstPath, chartsRoot).load().tags), ["utility"]);
 
     catalogGit.clone(secondPath, remote);
     const secondRegistry = new FileCatalogRegistry(join(temporary, "machine-b", "config", "catalogs.json"));
     secondRegistry.register({ name: "work", path: secondPath, remote });
     assert.deepEqual(secondRegistry.list(), [{ name: "work", path: secondPath, remote }]);
     assert.notEqual(firstRegistry.get("work")?.path, secondRegistry.get("work")?.path);
-    assert.deepEqual(new TomlStore(secondPath).load().entries, []);
+    assert.deepEqual(new TomlStore(secondPath, chartsRoot).load().entries, []);
     assert.equal(execFileSync("git", ["-C", secondPath, "remote", "get-url", "origin"], { encoding: "utf8" }).trim(), remote);
     assert.notEqual(firstRegistry.path, secondRegistry.path);
   });
@@ -361,7 +361,7 @@ describe("catalog validation", () => {
   });
 
   test("accepts a missing local paths file", () => {
-    const result = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
+    const result = validateCatalog({ store: new TomlStore(root, chartsRoot), git: new GitCli(root) });
     assert.deepEqual(result.errors, []);
     assert.ok(result.warnings.some((warning) => warning.includes("the local paths are missing")));
   });
@@ -369,7 +369,7 @@ describe("catalog validation", () => {
   test("keeps store paths out of add, set, and check output", () => {
     writeFileSync(join(root, ".gitignore"), "/local/paths.toml\n", "utf8");
     write("systems/broken.toml", "description = [\n");
-    assert.ok(validateCatalog({ store: new TomlStore(root), git: new GitCli(root) }).errors.some((error) => error.includes("system broken: invalid TOML")));
+    assert.ok(validateCatalog({ store: new TomlStore(root, chartsRoot), git: new GitCli(root) }).errors.some((error) => error.includes("system broken: invalid TOML")));
     const checked = capture(() => main(["check", "--json"], root));
     assert.equal(checked.result, 3, checked.output.join("\\n"));
     assert.match(checked.output.join("\\n"), /system broken: invalid TOML/);
@@ -405,7 +405,7 @@ describe("catalog validation", () => {
     write("systems/broken.toml", "description = [\n");
     write("systems/unknown.toml", 'description = "Extra field."\nextra = true\n');
     write("externals/no-description.toml", 'provider = "vendor"\n');
-    const { errors } = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
+    const { errors } = validateCatalog({ store: new TomlStore(root, chartsRoot), git: new GitCli(root) });
     assert.ok(errors.some((error) => error.includes("system broken: invalid TOML")));
     assert.ok(errors.some((error) => error.includes("unknown field(s): extra")));
     assert.ok(errors.some((error) => error.includes("missing required field: description")));
@@ -415,7 +415,7 @@ describe("catalog validation", () => {
     write("repositories/Bad_ID.toml", 'description = "Bad ID."\n');
     write("repositories/shared-id.toml", 'description = "A repository."\n');
     write("externals/shared-id.toml", 'description = "An external."\n');
-    const { errors } = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
+    const { errors } = validateCatalog({ store: new TomlStore(root, chartsRoot), git: new GitCli(root) });
     assert.ok(errors.some((error) => error.includes("ID \"Bad_ID\" is not lowercase kebab-case")));
     assert.ok(errors.some((error) => error.includes("duplicate ID \"shared-id\"")));
   });
@@ -425,7 +425,7 @@ describe("catalog validation", () => {
       "repositories/alpha-app.toml",
       'description = "Alpha application."\nsystem = "alpha"\nstatus = "paused"\ntags = ["unknown"]\n',
     );
-    const { errors } = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
+    const { errors } = validateCatalog({ store: new TomlStore(root, chartsRoot), git: new GitCli(root) });
     assert.ok(errors.some((error) => error.includes("invalid status \"paused\"")));
     assert.ok(errors.some((error) => error.includes("tag \"unknown\" is not defined")));
   });
@@ -436,7 +436,7 @@ describe("catalog validation", () => {
       'description = "Alpha application."\nsystem = "missing-system"\n' +
         'depends-on = [{ id = "alpha-app" }, { id = "missing-repo" }, { id = "beta-lib", extra = true, via = 4 }]\n',
     );
-    const { errors } = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
+    const { errors } = validateCatalog({ store: new TomlStore(root, chartsRoot), git: new GitCli(root) });
     assert.ok(errors.some((error) => error.includes("system \"missing-system\" does not name a system")));
     assert.ok(errors.some((error) => error.includes("cannot point to the same repository")));
     assert.ok(errors.some((error) => error.includes("ID \"missing-repo\" does not exist in any registered catalog")));
@@ -453,7 +453,7 @@ describe("catalog validation", () => {
       'description = "Alpha application."\nsystem = "alpha"\n' +
         'depends-on = [{ id = "beta-lib" }, { id = "old-lib" }, { id = "old-api" }]\n',
     );
-    const result = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
+    const result = validateCatalog({ store: new TomlStore(root, chartsRoot), git: new GitCli(root) });
     assert.deepEqual(result.errors, []);
     assert.ok(result.warnings.some((warning) => warning.includes("deprecated entry \"beta-lib\"")));
     assert.ok(result.warnings.some((warning) => warning.includes("archived entry \"old-lib\"")));
@@ -472,7 +472,7 @@ describe("catalog validation", () => {
       "local/paths.toml",
       `alpha-app = "${nonRepo}"\nbeta-lib = "${join(root, "absent")}"\ngamma-app = "${work}"\n`,
     );
-    const { errors } = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
+    const { errors } = validateCatalog({ store: new TomlStore(root, chartsRoot), git: new GitCli(root) });
     assert.ok(errors.some((error) => error.includes("not a Git repository root")));
     assert.ok(errors.some((error) => error.includes("path does not exist")));
     assert.ok(errors.some((error) => error.includes("remote does not match") && error.includes("gamma-app")));
@@ -482,13 +482,13 @@ describe("catalog validation", () => {
   test("requires Git to ignore local/paths.toml", () => {
     writeFileSync(join(root, ".gitignore"), "", "utf8");
     write("local/paths.toml", 'alpha-app = "/missing"\n');
-    const { errors } = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
+    const { errors } = validateCatalog({ store: new TomlStore(root, chartsRoot), git: new GitCli(root) });
     assert.ok(errors.some((error) => error.includes("the local paths are not ignored")));
   });
 
   test("accepts a repository key and returns it from show and find", () => {
     write("repositories/alpha-app.toml", 'description = "Alpha application."\nkey = "NBR"\nsystem = "alpha"\n');
-    assert.deepEqual(validateCatalog({ store: new TomlStore(root), git: new GitCli(root) }).errors, []);
+    assert.deepEqual(validateCatalog({ store: new TomlStore(root, chartsRoot), git: new GitCli(root) }).errors, []);
 
     const shown = capture(() => main(["show", "alpha-app", "--json"], root));
     assert.equal(shown.result, 0);
@@ -542,7 +542,7 @@ describe("catalog validation", () => {
     write("repositories/first-key.toml", 'description = "First key."\nkey = "NBR"\n');
     write("repositories/second-key.toml", 'description = "Second key."\nkey = "NBR"\n');
     write("systems/system-key.toml", 'description = "System key."\nkey = "SYS"\n');
-    const { errors } = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
+    const { errors } = validateCatalog({ store: new TomlStore(root, chartsRoot), git: new GitCli(root) });
 
     for (const id of ["lower-key", "short-key", "long-key", "digit-key", "number-key"]) {
       assert.deepEqual(errors.filter((error) => error.startsWith(`repository ${id}:`)), [`repository ${id}: ${form}`]);
@@ -616,7 +616,7 @@ describe("charts add", () => {
     assert.deepEqual(JSON.parse(JSON.stringify(parseToml(systemContent))), systemData);
     assert.ok(!systemContent.includes("Display name"));
     assert.ok(systemContent.indexOf('owner = "Team Example"') < systemContent.indexOf('ticket-key = "ABC"'));
-    assert.ok(readFileSync(join(root, "templates/system.toml"), "utf8").includes('# ticket-key = "ABC"'));
+    assert.ok(readFileSync(join(chartsRoot, "templates/system.toml"), "utf8").includes('# ticket-key = "ABC"'));
 
     const repoData = {
       description: 'Uses a "quoted" name.\nSecond line.',
@@ -633,7 +633,7 @@ describe("charts add", () => {
     const repositoryParsed = JSON.parse(JSON.stringify(parseToml(repositoryContent))) as Record<string, unknown>;
     assert.deepEqual(repositoryParsed, repoData);
     assert.ok(repositoryContent.indexOf('key = "NEW"') < repositoryContent.indexOf('ticket-key = "ABC"'));
-    assert.ok(readFileSync(join(root, "templates/repository.toml"), "utf8").includes('# ticket-key = "ABC"'));
+    assert.ok(readFileSync(join(chartsRoot, "templates/repository.toml"), "utf8").includes('# ticket-key = "ABC"'));
     assert.ok(!("id" in repositoryParsed));
     assert.ok(!repositoryContent.includes("Short purpose of this repository"));
 
@@ -642,6 +642,20 @@ describe("charts add", () => {
     assert.equal(external.result, 0);
     assert.deepEqual(JSON.parse(JSON.stringify(parseToml(readFileSync(join(root, "externals/new-external.toml"), "utf8")))), externalData);
     assert.ok(!existsSync(join(root, "systems/new-external.toml")));
+  });
+
+  test("reports a missing Charts template when updating an entry", () => {
+    rmSync(join(chartsRoot, "templates/repository.toml"));
+    const result = new TomlStore(root, chartsRoot).updateEntry(
+      "repository",
+      "alpha-app",
+      { key: "NEW" },
+      ["key"],
+    );
+    assert.equal(result.status, "invalid");
+    if (result.status === "invalid") {
+      assert.match(result.errors.join(" "), /cannot read template for repository/);
+    }
   });
 
   test("omits optional template values when they are not supplied", () => {
@@ -937,7 +951,7 @@ describe("charts add", () => {
     const original = '[other]\nsection-path = "/old"\n';
     write("local/paths.toml", original);
 
-    const result = new TomlStore(root).createEntry(
+    const result = new TomlStore(root, chartsRoot).createEntry(
       "repository",
       "section-path",
       { description: "Does not replace a nested path." },
@@ -952,7 +966,7 @@ describe("charts add", () => {
     const original = 'b = """\nhidden-path = "/old"\n"""\n';
     write("local/paths.toml", original);
 
-    const result = new TomlStore(root).createEntry(
+    const result = new TomlStore(root, chartsRoot).createEntry(
       "repository",
       "hidden-path",
       { description: "Ignores text inside a string." },
@@ -968,7 +982,7 @@ describe("charts add", () => {
     const original = 'b = "/x"\n[meta]\nv = 1';
     write("local/paths.toml", original);
 
-    const result = new TomlStore(root).createEntry(
+    const result = new TomlStore(root, chartsRoot).createEntry(
       "repository",
       "new-after-section",
       { description: "Does not append inside a table." },
@@ -1333,7 +1347,7 @@ describe("charts set", () => {
       const path = `repositories/${id}.toml`;
       write(path, item.text);
       const original = readFileSync(join(root, path), "utf8");
-      const store = new TomlStore(root);
+      const store = new TomlStore(root, chartsRoot);
       const result = store.updateEntry("repository", id, { description: "Updated." }, ["description"]);
       assert.equal(result.status, "invalid", id);
       if (result.status === "invalid") assert.ok(result.errors.join(" ").includes(item.reason), result.errors.join(" "));
@@ -1402,7 +1416,7 @@ describe("charts set", () => {
   });
 
   test("does not overwrite files changed before rollback", () => {
-    const store = new TomlStore(root);
+    const store = new TomlStore(root, chartsRoot);
     const updated = store.updateEntry(
       "repository",
       "alpha-app",
@@ -1452,7 +1466,7 @@ describe("charts set", () => {
 
 describe("catalog commands", () => {
   test("derives system dependencies from repository dependencies", () => {
-    const catalog = new CatalogIndex(new TomlStore(root).load());
+    const catalog = new CatalogIndex(new TomlStore(root, chartsRoot).load());
     const result = dependenciesFor(catalog, catalog.get("alpha")!);
     assert.deepEqual(result.system_dependencies, [
       { id: "beta", type: "system", via_repositories: ["alpha-app"] },
@@ -1461,7 +1475,7 @@ describe("catalog commands", () => {
   });
 
   test("finds reverse dependencies for repositories, externals, and systems", () => {
-    const catalog = new CatalogIndex(new TomlStore(root).load());
+    const catalog = new CatalogIndex(new TomlStore(root, chartsRoot).load());
     const repository = reverseDependencies(catalog, catalog.get("beta-lib")!);
     const external = reverseDependencies(catalog, catalog.get("stripe")!);
     const system = reverseDependencies(catalog, catalog.get("beta")!);
@@ -1479,7 +1493,7 @@ describe("catalog commands", () => {
     mkdirSync(work);
     execFileSync("git", ["init", "-q", work]);
     write("local/paths.toml", `alpha-app = "${work}"\n`);
-    const result = showEntry({ index: new CatalogIndex(new TomlStore(root).load()), git: new GitCli(root) }, new CatalogIndex(new TomlStore(root).load()).get("alpha-app")!);
+    const result = showEntry({ index: new CatalogIndex(new TomlStore(root, chartsRoot).load()), git: new GitCli(root) }, new CatalogIndex(new TomlStore(root, chartsRoot).load()).get("alpha-app")!);
     assert.equal(result.local_path, work);
     assert.equal(result.local_path_status, "ok");
   });
