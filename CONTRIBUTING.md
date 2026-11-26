@@ -8,7 +8,7 @@ nautilus-charts is the system catalog of Nautilus. Read [the README](./README.md
 - Read the relevant instructions, skills, templates, and documents before changing them.
 - Update documentation when a change affects how the module is used.
 - Check changes with commands or examples suited to the files changed.
-- Do not commit credentials, secrets, personal settings, machine-specific paths, or catalog entries.
+- Do not commit credentials, secrets, personal settings, or machine-specific paths to the Charts source repository. Put named catalog entries in their own catalog repository.
 
 ## Branches and merge requests
 
@@ -69,11 +69,11 @@ Include exactly one matching emoji and type. Use `charts` as the scope, or a nar
 
 ## Catalog entries
 
-Entries in `systems/`, `repositories/`, and `externals/` are the catalog owner's own catalog and stay private, as [rule I of the constitution](./CONSTITUTION.md#i-the-catalog-stays-private) sets out.
+Entries in `systems/`, `repositories/`, and `externals/` in the Charts source repository remain private. Named catalogs store entries in separate Git repositories and may sync only to remotes their owner configured. Keep the catalog-name registry and local code-repository paths on the machine, as [rule I of the constitution](./CONSTITUTION.md#i-catalog-data-stays-owner-controlled) sets out.
 
 Read [docs/structure.md](./docs/structure.md) for entry types, fields, and ID rules. Follow the [charts skill](./.agents/skills/charts/SKILL.md) when finding or changing entries or resolving a local repository path.
 
-Use the templates in `templates/` when adding entries. Keep one entry per file. The file name is the ID. Use only tags listed in `tags.toml`. Store machine-specific paths only in `local/paths.toml`, which Git ignores.
+Use the templates in `templates/` when adding entries. Keep one entry per file. The file name is the ID. Use only tags listed in `tags.toml`. Keep catalog-name and code-repository paths in machine-local files. Do not sync these paths.
 
 ## Skills
 
@@ -140,6 +140,6 @@ Before requesting review, confirm that:
 - [ ] The change is limited to the required files.
 - [ ] Relevant instructions, templates, and documentation are up to date.
 - [ ] Checks suited to the change have been run, or missing checks are explained.
-- [ ] `npm run check` passes, and no catalog entries or `local/paths.toml` are committed.
+- [ ] `npm run check` passes. No user catalog entries or machine-local path files are committed to the Charts source repository.
 - [ ] No credentials, personal settings, machine-specific paths, or real company, host, or repository names are included.
 - [ ] The merge request lists checks, results, and known limitations.

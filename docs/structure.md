@@ -157,6 +157,10 @@ nautilus-bridge = "~/code/nautilus/nautilus-bridge"
 shop-common-lib = "~/code/shop/shop-common-lib"
 ```
 
+### Named catalogs
+
+Charts will support named catalogs such as `work` and `personal`. Each named catalog is a separate Git repository, and each code-repository entry belongs to one catalog. Each machine maps catalog names to local folders. A catalog may have one or more owner-configured Git remotes. Charts may sync only its own catalog repositories; it must not contact or change the code repositories listed in them. The current command does not yet support named catalogs or catalog sync. A follow-up feature change will define the registry and command details.
+
 ## The `charts` command
 
 The `charts` command, `bin/charts.js`, is the entry point. It is plain JavaScript: it checks the running Node version against `engines` in `package.json` and fails with the error code `unsupported-runtime` below it, before it loads `scripts/charts.ts`, which runs the code in `src/`. Charts needs Node.js 26 or newer, which runs the TypeScript files directly by stripping their types. The `smol-toml` package reads TOML files. Run `npm ci` from the Charts root to install the locked packages, and link the command into `~/.local/bin` once ([README](../README.md#setup)). Then run `charts <command>` from any folder. Commands print compact text with one line per entry by default. `--json` prints JSON for other modules.
@@ -191,7 +195,7 @@ For repository `show --json`, Charts adds `resolved_ticket_key` and `ticket_key_
 
 `check` with errors exits with code 3. Its report stays its output: text lines or `{"ok": false, "errors", "warnings"}`, not an error object.
 
-The command uses local Git data only. It never contacts remote servers, clones, or fetches.
+The current command uses local Git data only. The named-catalog feature will allow remote Git operations only for Charts' own catalog repositories. It will not contact or change code repositories listed in a catalog.
 
 ### Errors and exit codes
 
@@ -232,7 +236,7 @@ charts add repository shop-api \
   --data '{"description":"The shop API.","system":"shop"}'
 ```
 
-Charts reads the matching file in `templates/` to set the field order. It writes only supplied values, so optional template examples do not appear in the new entry. A repository can omit `--local-path`; when supplied, the path is added to ignored `local/paths.toml`. Charts checks that it is a Git repository root and that its local remote matches the entry's `remote`, if set. It uses local Git data only and does not connect to remote servers. When adding a local path, Charts appends new mappings without changing the rest of `local/paths.toml`, replaces one stale mapping written on a single line for the same ID with a warning, and fails without writing when it cannot replace that mapping safely. Charts refuses to append a path when `local/paths.toml` contains a TOML table section, because a new line at the end would belong to that section.
+Charts reads the matching file in `templates/` to set the field order. It writes only supplied values, so optional template examples do not appear in the new entry. A repository can omit `--local-path`; when supplied, the path is added to ignored `local/paths.toml`. Charts checks that it is a Git repository root and that its local remote matches the entry's `remote`, if set. It reads local Git settings only; it does not contact the code-repository remote. When adding a local path, Charts appends new mappings without changing the rest of `local/paths.toml`, replaces one stale mapping written on a single line for the same ID with a warning, and fails without writing when it cannot replace that mapping safely. Charts refuses to append a path when `local/paths.toml` contains a TOML table section, because a new line at the end would belong to that section.
 
 For a missing repository tag, propose a lowercase kebab-case name and a description. Ask the catalog owner to confirm both before passing `--new-tag`. The entry must use each new tag. Charts appends new tags to `tags.toml` and keeps all prior text unchanged.
 
