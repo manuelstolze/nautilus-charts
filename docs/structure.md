@@ -10,7 +10,7 @@ Charts is the system catalog of Nautilus. It lists repositories, the systems the
 
 ```
 nautilus-charts/
-├── folio/                    # ignored, local named catalog repositories
+├── folio/                    # the Folio: ignored, local named catalog repositories
 ├── templates/                # entry templates
 ├── bin/charts.js             # the charts command: Node check, then scripts/charts.ts
 ├── scripts/charts.ts         # composition root
@@ -27,7 +27,7 @@ nautilus-charts/
 └── .agents/skills/charts/SKILL.md
 ```
 
-One file per entry keeps lookups small. An agent reads only the entries it needs, and edits touch one file each. Named catalog repositories live in owner-selected folders. For this setup, store them under `./folio/` from the Charts root. The source repository ignores that folder. The registry is at `~/.config/nautilus-charts/catalogs.json`, or `$XDG_CONFIG_HOME/nautilus-charts/catalogs.json` when set.
+One file per entry keeps lookups small. An agent reads only the entries it needs, and edits touch one file each. Named catalog repositories live in owner-selected folders. The recommended location is the [Folio](../GLOSSARY.md#machine), `./folio/<name>` in the Charts root; other folders work too. The source repository ignores the Folio. The registry is at `~/.config/nautilus-charts/catalogs.json`, or `$XDG_CONFIG_HOME/nautilus-charts/catalogs.json` when set.
 
 ## Code structure
 
@@ -161,7 +161,7 @@ Charts contacts only registered catalog repositories. It never contacts listed c
 
 `charts catalog list` prints each registered catalog's name, local path, and remote; `--json` returns `{ catalogs: [{ name, path, remote }] }`. It succeeds with an empty registry. `charts catalog create <name> --path <folder> --remote <url>` makes an empty local catalog. `charts catalog clone <name> --path <folder> --remote <url>` clones a catalog. Both register the selected folder and its one remote in this machine's registry. If no catalog is registered, commands that read or change catalog data return a usage error that names `charts catalog create` and `charts catalog clone`. A `--catalog <name>` option selects a catalog for scoped commands. With catalogs registered, `add`, `set`, `deps`, `rdeps`, `check`, and text search use `--catalog`. `show <id>` and exact-ID `find <id>` can search registered catalogs without it.
 
-For this setup, the owner groups catalog repositories under `./folio/`, such as `./folio/work/.git` and `./folio/private/.git`. Each child directory is a separate named catalog; `./folio/` itself is not a catalog. Other catalog names remain supported.
+The recommended `--path` is `./folio/<name>` in the Folio, such as `./folio/work/.git` and `./folio/private/.git`. Each child directory is a separate named catalog; `./folio/` itself is not a catalog. Other folders and catalog names remain supported. [docs/getting-started.md](getting-started.md) walks through creating the first catalog and cloning it on a further machine.
 
 ## The `charts` command
 
