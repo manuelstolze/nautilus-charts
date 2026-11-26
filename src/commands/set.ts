@@ -40,7 +40,7 @@ export function set(ports: Ports, options: SetOptions): SetResult {
   const { store, git } = ports;
   const snapshot = store.load();
   const index = new CatalogIndex(snapshot);
-  const current = index.get(options.id);
+  const current = index.getInCatalog(options.id);
   const failure = (errors: string[], code: ErrorCode = "invalid-entry", warnings: string[] = [], reason = "validation failed"): SetResult => {
     const name = current ? `${current.kind} ${options.id}` : `entry ${options.id}`;
     return { ok: false, error: new ChartsError(code, `could not set ${name}: ${reason}`, { errors, warnings }) };
@@ -68,9 +68,11 @@ export function set(ports: Ports, options: SetOptions): SetResult {
   if (localPath !== undefined && current.kind !== "repository") return usage("--local-path is valid only for a repository");
   if (newTags.length > 0 && current.kind !== "repository") return usage("--new-tag is valid only for a repository");
 
-  const ignored = git.isIgnored(path);
-  if ("error" in ignored) return failure([`could not check Git ignore rule: ${ignored.error}`], "external", [], "the Git ignore rule could not be checked");
-  if (!ignored.ignored) return failure([`${current.kind} ${options.id} is not ignored by Git`], "refused", [], "Git does not ignore the entry");
+  if (ports.catalogName === undefined) {
+    const ignored = git.isIgnored(path);
+    if ("error" in ignored) return failure([`could not check Git ignore rule: ${ignored.error}`], "external", [], "the Git ignore rule could not be checked");
+    if (!ignored.ignored) return failure([`${current.kind} ${options.id} is not ignored by Git`], "refused", [], "Git does not ignore the entry");
+  }
 
   const merged = mergeEntryData(current.data, data ?? {});
   if (
@@ -104,6 +106,22 @@ export function set(ports: Ports, options: SetOptions): SetResult {
     };
   }
 
+  if (ports.catalogName !== undefined) {
+    if (!ports.catalogGit || !ports.catalogPath || !ports.catalogRemote) return failure(["catalog Git support is not configured"], "external", [], "the catalog could not be committed");
+    try {
+      ports.catalogGit.assertWriteClean(ports.catalogPath, [path, "tags.toml"]);
+    } catch (error) {
+      const message = errorMessage(error);
+      const dirty = message === "catalog has uncommitted changes to an entry or tag file";
+      return failure(
+        [dirty ? message : "could not check catalog files before the write"],
+        dirty ? "refused" : "external",
+        [],
+        dirty ? "catalog files have uncommitted changes" : "the catalog could not be checked",
+      );
+    }
+  }
+
   const updated = store.updateEntry(current.kind, options.id, merged.data, merged.changed, localPath, newTags);
   if (updated.status === "invalid") return failure(updated.errors, "invalid-entry", finding.warnings);
   if (updated.status === "failed") return failure(updated.errors, "external", finding.warnings, "a write failed");
@@ -129,6 +147,27 @@ export function set(ports: Ports, options: SetOptions): SetResult {
     );
   }
   validation = { ...validation, warnings: [...validation.warnings, ...updated.warnings] };
+  if (ports.catalogName !== undefined) {
+    try {
+      ports.catalogGit!.commit(ports.catalogPath!, [path, "tags.toml"], `Update ${current.kind} ${options.id}`);
+    } catch (error) {
+      const rollbackErrors = updated.rollback();
+      return failure(
+        ["could not commit the catalog write", ...rollbackErrors],
+        "external",
+        validation.warnings,
+        rollbackErrors.length ? "the catalog commit and rollback failed" : "the catalog commit failed",
+      );
+    }
+    try {
+      ports.catalogGit!.syncWrite(ports.catalogPath!, ports.catalogRemote!);
+    } catch {
+      validation = {
+        ...validation,
+        warnings: [...validation.warnings, `catalog ${JSON.stringify(ports.catalogName)} could not sync; local changes were kept`],
+      };
+    }
+  }
   return {
     ok: true,
     type,

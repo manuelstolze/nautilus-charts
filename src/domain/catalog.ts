@@ -1,6 +1,6 @@
 import { isString, validDependencies, type Data, type Entry, type Kind } from "./entry.ts";
 
-/** Everything read from the catalog store, in store order. */
+/** Everything read from one catalog store, in store order. */
 export type Snapshot = {
   /** Readable entries, sorted by file name within each type, in type order. */
   entries: Entry[];
@@ -10,26 +10,72 @@ export type Snapshot = {
   localPaths: Data | null;
   localPathsExists: boolean;
   loadErrors: string[];
+  /** Runtime context supplied by the CLI; it is never stored in catalog files. */
+  catalogName?: string;
+  catalogs?: readonly NamedCatalogSnapshot[];
+};
+
+export type NamedCatalogSnapshot = { name: string; snapshot: Snapshot };
+export type CatalogIndexOptions = {
+  /** The catalog that owns the primary snapshot. */
+  catalogName?: string;
+  /** Other registered catalogs that are available for global ID lookups. */
+  catalogs?: readonly NamedCatalogSnapshot[];
 };
 
 export class CatalogIndex {
   readonly snapshot: Snapshot;
+  readonly catalogName: string | undefined;
+  private readonly allEntries: Entry[] = [];
   private readonly byId = new Map<string, Entry>();
+  private readonly catalogByEntry = new Map<Entry, string | undefined>();
+  private readonly snapshotByEntry = new Map<Entry, Snapshot>();
+  private readonly loadedCatalogs: NamedCatalogSnapshot[];
 
-  constructor(snapshot: Snapshot) {
+  constructor(snapshot: Snapshot, options: CatalogIndexOptions = {}) {
     this.snapshot = snapshot;
-    // The first entry per ID wins.
-    for (const entry of snapshot.entries) {
-      if (!this.byId.has(entry.id)) this.byId.set(entry.id, entry);
+    this.catalogName = options.catalogName ?? snapshot.catalogName;
+    this.loadedCatalogs = [
+      { name: this.catalogName ?? "current", snapshot },
+      ...(options.catalogs ?? snapshot.catalogs ?? []),
+    ];
+    for (const [position, catalog] of this.loadedCatalogs.entries()) {
+      for (const entry of catalog.snapshot.entries) {
+        this.allEntries.push(entry);
+        this.catalogByEntry.set(entry, position === 0 ? this.catalogName : catalog.name);
+        this.snapshotByEntry.set(entry, catalog.snapshot);
+        // The first entry per ID wins.
+        if (!this.byId.has(entry.id)) this.byId.set(entry.id, entry);
+      }
     }
   }
 
   get entries(): Entry[] {
-    return this.snapshot.entries;
+    return this.allEntries;
   }
 
   get(id: string): Entry | undefined {
     return this.byId.get(id);
+  }
+
+  getInCatalog(id: string, catalogName = this.catalogName): Entry | undefined {
+    return this.entries.find((entry) => entry.id === id && this.catalogOf(entry) === catalogName);
+  }
+
+  get primaryEntries(): Entry[] {
+    return this.snapshot.entries;
+  }
+
+  catalogOf(entry: Entry): string | undefined {
+    return this.catalogByEntry.has(entry) ? this.catalogByEntry.get(entry) : this.catalogName;
+  }
+
+  snapshotFor(entry: Entry): Snapshot {
+    return this.snapshotByEntry.get(entry) ?? this.snapshot;
+  }
+
+  unreadableCatalogs(): NamedCatalogSnapshot[] {
+    return this.loadedCatalogs.filter(({ snapshot }) => snapshot.loadErrors.length > 0);
   }
 
   entriesFor(kind: Kind): Entry[] {
