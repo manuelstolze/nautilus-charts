@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import { syncDueCatalogs } from "../src/adapters/catalog-sync.ts";
 import { add } from "../src/commands/add.ts";
 import { check } from "../src/commands/check.ts";
 import { deps, rdeps } from "../src/commands/deps.ts";
@@ -126,6 +127,43 @@ describe("deps use cases", () => {
   });
 });
 
+describe("catalog read sync", () => {
+  test("attempts every due catalog after a remote failure and waits for the interval", () => {
+    const attempts: string[] = [];
+    const saved = new Map<string, number>();
+    const git = {
+      initialize() {},
+      clone() {},
+      assertWriteClean() {},
+      commit() {},
+      syncRead(path: string) {
+        attempts.push(path);
+        if (path === "offline") throw new Error("remote unavailable");
+      },
+      syncWrite() {},
+    };
+    const state = {
+      lastAttemptedAt: (name: string) => saved.get(name) ?? null,
+      markAttemptedAt: (name: string, timestamp: number) => saved.set(name, timestamp),
+    };
+    const catalogs = [
+      { name: "offline", path: "offline", remote: "offline.git" },
+      { name: "online", path: "online", remote: "online.git" },
+    ];
+
+    const warnings = syncDueCatalogs(catalogs, git, state, 1_000, 10_000);
+    assert.deepEqual(attempts, ["offline", "online"]);
+    assert.deepEqual(warnings, ['catalog "offline" could not sync; local data was kept']);
+    assert.deepEqual([...saved], [["offline", 10_000], ["online", 10_000]]);
+
+    attempts.length = 0;
+    assert.deepEqual(syncDueCatalogs(catalogs, git, state, 1_000, 10_500), []);
+    assert.deepEqual(attempts, []);
+    assert.deepEqual(syncDueCatalogs(catalogs, git, state, 1_000, 11_000), warnings);
+    assert.deepEqual(attempts, ["offline", "online"]);
+  });
+});
+
 describe("relationships across named catalogs", () => {
   const facts = { localPaths: new Map(), localPathsIgnored: { ignored: true } };
 
@@ -222,12 +260,15 @@ describe("add use case", () => {
     const ports: Ports = memory;
     ports.catalogName = "work";
     ports.catalogPath = "/catalog/work";
+    ports.catalogRemote = "https://example.com/work.git";
     const originalTags = structuredClone(memory.store.tags);
     const commits: Array<{ files: readonly string[]; message: string }> = [];
     ports.catalogGit = {
       initialize() {},
       clone() {},
       assertWriteClean() {},
+      syncRead() {},
+      syncWrite() {},
       commit(_path, files, message) {
         commits.push({ files, message });
         throw new Error("commit rejected");

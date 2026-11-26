@@ -23,6 +23,8 @@ import {
 } from "../src/adapters/cli.ts";
 import { CatalogGitCli } from "../src/adapters/catalog-git.ts";
 import { FileCatalogRegistry, defaultCatalogRegistryPath } from "../src/adapters/catalog-registry.ts";
+import { syncDueCatalogs } from "../src/adapters/catalog-sync.ts";
+import { FileCatalogSyncState } from "../src/adapters/catalog-sync-state.ts";
 import { GitCli } from "../src/adapters/git-cli.ts";
 import { TomlStore } from "../src/adapters/toml-store.ts";
 import { add } from "../src/commands/add.ts";
@@ -149,15 +151,45 @@ function buildPorts(options: Options, root: string, registry: FileCatalogRegistr
   return {
     store,
     git,
-    ...(registration ? { catalogGit: new CatalogGitCli(root), catalogPath: registration.path } : {}),
+    ...(registration ? {
+      catalogGit: new CatalogGitCli(root),
+      catalogPath: registration.path,
+      catalogRemote: registration.remote,
+    } : {}),
     catalogName: registration?.name,
     catalogs: [],
     allCatalogs,
   };
 }
 
+function readSyncInterval(override?: number): number {
+  const raw = override === undefined ? process.env.CHARTS_READ_SYNC_INTERVAL_MS : String(override);
+  if (raw === undefined) return 15 * 60 * 1000;
+  const interval = Number(raw);
+  if (!Number.isSafeInteger(interval) || interval < 0) {
+    throw new Error("CHARTS_READ_SYNC_INTERVAL_MS must be a non-negative integer");
+  }
+  return interval;
+}
+
 function createOrCloneCatalog(options: Options, root: string, registry: FileCatalogRegistry): number {
   const name = options.catalogName!;
+  if (options.catalogAction === "sync") {
+    const catalog = registry.get(name);
+    if (!catalog) throw new ChartsError("usage", `unknown catalog: ${name}`);
+    const warnings: string[] = [];
+    try {
+      new CatalogGitCli(root).syncWrite(catalog.path, catalog.remote);
+    } catch {
+      warnings.push(`catalog ${JSON.stringify(name)} could not sync; local data was kept`);
+    }
+    try {
+      new FileCatalogSyncState(`${registry.path}.sync-state.json`).markAttemptedAt(name, Date.now());
+    } catch {
+      warnings.push(`catalog ${JSON.stringify(name)} sync time could not be saved`);
+    }
+    return renderCatalog(options.json, "sync", name, catalog.remote, warnings);
+  }
   const remote = options.remote!;
   const path = resolve(options.path!);
   const existing = registry.list().find((catalog) => catalog.name === name || catalog.path === path || catalog.remote === remote);
@@ -170,7 +202,7 @@ function createOrCloneCatalog(options: Options, root: string, registry: FileCata
 }
 
 /** The command entry point. The optional paths support isolated local tests. */
-export function main(argv = process.argv.slice(2), root = ROOT, registryPath?: string): number {
+export function main(argv = process.argv.slice(2), root = ROOT, registryPath?: string, readSyncIntervalMs?: number): number {
   const invocation = readInvocation(argv);
   if (invocation.help) return renderHelp();
   if (invocation.version) {
@@ -195,6 +227,15 @@ export function main(argv = process.argv.slice(2), root = ROOT, registryPath?: s
     if (options.command === "catalog") return createOrCloneCatalog(options, resolvedRoot, registry);
 
     const ports = buildPorts(options, resolvedRoot, registry);
+    if (["find", "show", "deps", "rdeps", "check"].includes(options.command)) {
+      const syncWarnings = syncDueCatalogs(
+        registry.list(),
+        new CatalogGitCli(resolvedRoot),
+        new FileCatalogSyncState(`${registry.path}.sync-state.json`),
+        readSyncInterval(readSyncIntervalMs),
+      );
+      for (const warning of syncWarnings) console.error(`WARNING: ${warning}`);
+    }
     if (ports.allCatalogs) {
       const error = bridgeLookupError(new CatalogIndex(ports.store.load()));
       if (error) throw error;

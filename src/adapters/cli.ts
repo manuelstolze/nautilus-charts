@@ -37,7 +37,7 @@ export type Options = {
   status?: string;
   owner?: string;
   catalogName?: string;
-  catalogAction?: "create" | "clone";
+  catalogAction?: "create" | "clone" | "sync";
   path?: string;
   remote?: string;
 };
@@ -236,7 +236,7 @@ function parseQuery(command: "find" | "show" | "deps" | "rdeps" | "check", rest:
 
 function parseCatalog(rest: string[]): Options {
   const action = rest[0];
-  if (action !== "create" && action !== "clone") throw new Error("catalog requires create or clone");
+  if (action !== "create" && action !== "clone" && action !== "sync") throw new Error("catalog requires create, clone, or sync");
   const options: Options = { command: "catalog", catalogAction: action, json: false };
   const positional: string[] = [];
   for (let index = 1; index < rest.length; index += 1) {
@@ -246,6 +246,7 @@ function parseCatalog(rest: string[]): Options {
       continue;
     }
     if (argument === "--path" || argument === "--remote") {
+      if (action === "sync") throw new Error("catalog sync takes only a catalog name");
       const value = rest[index + 1];
       if (!value || value.startsWith("--")) throw new Error(`${argument} requires a value`);
       index += 1;
@@ -263,6 +264,7 @@ function parseCatalog(rest: string[]): Options {
   }
   if (positional.length !== 1) throw new Error("catalog requires one name");
   options.catalogName = parseCatalogName(positional[0]);
+  if (action === "sync") return options;
   if (options.path === undefined) throw new Error("catalog requires --path <path>");
   if (options.remote === undefined) throw new Error("catalog requires --remote <url>");
   return options;
@@ -445,11 +447,11 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     name: "catalog",
-    usage: "<create|clone> <name> --path <path> --remote <url>",
-    summary: "Creates or clones a named catalog and registers its local folder.",
-    arguments: positionalSchema([{ type: "string", enum: ["create", "clone"] }, { ...text("the catalog's lowercase kebab-case name"), title: "name" }]),
-    options: optionsSchema({ path: text("the local catalog folder"), remote: text("the catalog Git remote URL") }, ["path", "remote"]),
-    output: { type: "object", fields: { ok: "true", action: "create or clone", name: "the catalog name", remote: "the catalog's Git remote" } },
+    usage: "<create|clone|sync> <name> [--path <path> --remote <url>]",
+    summary: "Creates, clones, or syncs a named catalog.",
+    arguments: positionalSchema([{ type: "string", enum: ["create", "clone", "sync"] }, { ...text("the catalog's lowercase kebab-case name"), title: "name" }]),
+    options: optionsSchema({ path: text("the local catalog folder; create or clone only"), remote: text("the catalog Git remote URL; create or clone only") }),
+    output: { type: "object", fields: { ok: "true", action: "create, clone, or sync", name: "the catalog name", remote: "the catalog's Git remote", warnings: "sync warnings, only when needed" } },
     errors: ["usage", "external"],
     parse: parseCatalog,
   },
@@ -714,9 +716,19 @@ export function describeModule(info: ModuleInfo): Description {
   };
 }
 
-export function renderCatalog(json: boolean, action: "create" | "clone", name: string, remote: string): number {
-  if (json) printJson({ ok: true, action, name, remote });
-  else console.log(`${action === "create" ? "Created" : "Cloned"} catalog ${name}`);
+export function renderCatalog(
+  json: boolean,
+  action: "create" | "clone" | "sync",
+  name: string,
+  remote: string,
+  warnings: string[] = [],
+): number {
+  if (json) printJson({ ok: true, action, name, remote, ...(warnings.length ? { warnings } : {}) });
+  else {
+    for (const warning of warnings) console.error(`WARNING: ${warning}`);
+    const result = action === "create" ? "Created" : action === "clone" ? "Cloned" : warnings.length ? "Tried to sync" : "Synced";
+    console.log(`${result} catalog ${name}`);
+  }
   return 0;
 }
 

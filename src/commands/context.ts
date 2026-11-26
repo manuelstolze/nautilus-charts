@@ -10,6 +10,7 @@ export type Ports = {
   git: GitInspector;
   catalogGit?: CatalogGit;
   catalogPath?: string;
+  catalogRemote?: string;
   catalogName?: string;
   catalogs?: readonly RelatedCatalog[];
   allCatalogs?: boolean;

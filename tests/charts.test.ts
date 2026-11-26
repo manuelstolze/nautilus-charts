@@ -126,6 +126,69 @@ describe("named catalog setup", () => {
     assert.throws(() => registry.register({ name: "other", path: temporary, remote: "https://example.com/other.git" }), /path or remote is already registered/);
   });
 
+  test("does not overwrite local history when catalog branches have diverged", () => {
+    const remote = join(temporary, "diverged.git");
+    const localPath = join(temporary, "local-catalog");
+    const peerPath = join(temporary, "peer-catalog");
+    execFileSync("git", ["init", "--bare", "--quiet", remote]);
+    const catalogGit = new CatalogGitCli(REPO_ROOT);
+    catalogGit.initialize(localPath, remote);
+    execFileSync("git", ["-C", localPath, "config", "user.name", "Charts Test"]);
+    execFileSync("git", ["-C", localPath, "config", "user.email", "charts@example.com"]);
+    writeFileSync(join(localPath, "systems", "base.toml"), 'description = "Base system."\n', "utf8");
+    execFileSync("git", ["-C", localPath, "add", "-A"]);
+    execFileSync("git", ["-C", localPath, "commit", "--quiet", "-m", "Base catalog"]);
+    execFileSync("git", ["-C", localPath, "push", "--quiet", "origin", "HEAD"]);
+    const branch = execFileSync("git", ["-C", localPath, "branch", "--show-current"], { encoding: "utf8" }).trim();
+    catalogGit.clone(peerPath, remote);
+    execFileSync("git", ["-C", peerPath, "config", "user.name", "Charts Test"]);
+    execFileSync("git", ["-C", peerPath, "config", "user.email", "charts@example.com"]);
+
+    writeFileSync(join(localPath, "systems", "local.toml"), 'description = "Local change."\n', "utf8");
+    execFileSync("git", ["-C", localPath, "add", "systems/local.toml"]);
+    execFileSync("git", ["-C", localPath, "commit", "--quiet", "-m", "Local change"]);
+    const localHead = execFileSync("git", ["-C", localPath, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+
+    writeFileSync(join(peerPath, "systems", "remote.toml"), 'description = "Remote change."\n', "utf8");
+    execFileSync("git", ["-C", peerPath, "add", "systems/remote.toml"]);
+    execFileSync("git", ["-C", peerPath, "commit", "--quiet", "-m", "Remote change"]);
+    execFileSync("git", ["-C", peerPath, "push", "--quiet", "origin", "HEAD"]);
+    const remoteHead = execFileSync("git", ["-C", peerPath, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+
+    assert.throws(() => catalogGit.syncRead(localPath, remote));
+    assert.throws(() => catalogGit.syncWrite(localPath, remote));
+    assert.equal(execFileSync("git", ["-C", localPath, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(), localHead);
+    assert.equal(execFileSync("git", ["-C", remote, "rev-parse", `refs/heads/${branch}`], { encoding: "utf8" }).trim(), remoteHead);
+    assert.equal(readFileSync(join(localPath, "systems", "local.toml"), "utf8"), 'description = "Local change."\n');
+  });
+
+  test("warns and keeps local data when a catalog write cannot reach its remote", () => {
+    const path = join(temporary, "offline-catalog");
+    const remote = join(temporary, "offline.git");
+    const created = capture(() => main([
+      "catalog", "create", "offline", "--path", path, "--remote", remote, "--json",
+    ], root));
+    assert.equal(created.result, 0);
+    execFileSync("git", ["-C", path, "config", "user.name", "Charts Test"]);
+    execFileSync("git", ["-C", path, "config", "user.email", "charts@example.com"]);
+    const read = capture(() => main(["find", "missing", "--catalog", "offline", "--json"], root, undefined, 0));
+    assert.equal(read.result, 0);
+    assert.match(read.errors.join("\\n"), /catalog "offline" could not sync; local data was kept/);
+
+    const result = capture(() => main([
+      "add", "system", "kept", "--catalog", "offline", "--data", '{"description":"Kept locally."}', "--json",
+    ], root));
+    const payload = JSON.parse(result.output.join("\\n"));
+    assert.equal(result.result, 0);
+    assert.equal(existsSync(join(path, "systems", "kept.toml")), true);
+    assert.ok(payload.validation.warnings.some((warning: string) => warning.includes('catalog "offline" could not sync')));
+    assert.equal(execFileSync("git", ["-C", path, "status", "--porcelain"], { encoding: "utf8" }).trim(), "");
+    assert.equal(existsSync(remote), false);
+    const manualSync = capture(() => main(["catalog", "sync", "offline", "--json"], root));
+    assert.equal(manualSync.result, 0);
+    assert.ok(JSON.parse(manualSync.output.join("\\n")).warnings.some((warning: string) => warning.includes("local data was kept")));
+  });
+
   test("creates and clones catalogs, routes scoped commands, and serves Bridge ID lookups", () => {
     const sharedRemote = join(temporary, "shared.git");
     const seedPath = join(temporary, "seed");
@@ -210,6 +273,9 @@ describe("named catalog setup", () => {
     assert.equal(bridgeEntry.local_path_status, "ok");
     const bridgeShow = capture(() => main(["show", "shared-lib", "--json"], root));
     assert.equal(JSON.parse(bridgeShow.output.join("\\n")).local_path, codePath);
+    const manualSync = capture(() => main(["catalog", "sync", "work", "--json"], root));
+    assert.equal(manualSync.result, 0);
+    assert.equal(JSON.parse(manualSync.output.join("\\n")).action, "sync");
 
     const missingCatalog = capture(() => main(["add", "system", "no-catalog", "--data", '{"description":"No catalog."}', "--json"], root));
     assert.equal(missingCatalog.result, 1);

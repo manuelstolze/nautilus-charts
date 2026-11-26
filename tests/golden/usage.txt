@@ -12,7 +12,7 @@ Commands:
   check [--catalog <name>]
   add <system|repository|external> <id> --data '<JSON>' [--catalog <name>] [--local-path <path>] [--new-tag <name>=<description>]...
   set <id> [--catalog <name>] [--data '<JSON>'] [--local-path <path>] [--new-tag <name>=<description>]... [--replace-key]
-  catalog <create|clone> <name> --path <path> --remote <url>
+  catalog <create|clone|sync> <name> [--path <path> --remote <url>]
   describe
 --- stderr
 
@@ -30,7 +30,7 @@ Commands:
   check [--catalog <name>]
   add <system|repository|external> <id> --data '<JSON>' [--catalog <name>] [--local-path <path>] [--new-tag <name>=<description>]...
   set <id> [--catalog <name>] [--data '<JSON>'] [--local-path <path>] [--new-tag <name>=<description>]... [--replace-key]
-  catalog <create|clone> <name> --path <path> --remote <url>
+  catalog <create|clone|sync> <name> [--path <path> --remote <url>]
   describe
 --- stderr
 

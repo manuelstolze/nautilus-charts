@@ -4,11 +4,11 @@ import { resolve, join } from "node:path";
 import type { CatalogGit as CatalogGitPort } from "../commands/ports.ts";
 import { remoteHasCredentials } from "../domain/validation.ts";
 
-function runGit(args: string[], cwd?: string): string {
+function runGit(args: string[], cwd?: string, timeout = 120_000): string {
   const result = spawnSync("git", args, {
     ...(cwd ? { cwd } : {}),
     encoding: "utf8",
-    timeout: 120_000,
+    timeout,
   });
   if (result.error) throw new Error(`Git could not run: ${result.error.message}`);
   if (result.status !== 0) {
@@ -121,5 +121,35 @@ export class CatalogGitCli implements CatalogGitPort {
       }
       throw error;
     }
+  }
+
+  syncRead(rawPath: string, remote: string): void {
+    validateRemote(remote);
+    const path = resolve(rawPath);
+    assertSingleRemote(path, remote);
+    const branch = hasCommit(path) ? runGit(["branch", "--show-current"], path) : "";
+    const remoteHead = runGit(["ls-remote", "--symref", "origin", "HEAD"], path, 30_000);
+    if (!branch) {
+      if (remoteHead) throw new Error("catalog has no local commit for its remote history");
+      return;
+    }
+    if (!remoteHead) return;
+    const remoteBranch = remoteHead.match(/^ref: refs\/heads\/(\S+)\s+HEAD$/m)?.[1];
+    if (remoteBranch && remoteBranch !== branch) throw new Error("catalog branch does not match the remote default branch");
+    const remoteRef = `refs/heads/${branch}`;
+    if (!runGit(["ls-remote", "--heads", "origin", remoteRef], path, 30_000)) return;
+    runGit(["fetch", "--quiet", "origin", remoteRef], path, 30_000);
+    runGit(["merge", "--ff-only", "--no-edit", "FETCH_HEAD"], path);
+  }
+
+  syncWrite(rawPath: string, remote: string): void {
+    validateRemote(remote);
+    const path = resolve(rawPath);
+    this.syncRead(path, remote);
+    assertSingleRemote(path, remote);
+    if (!hasCommit(path)) throw new Error("catalog has no local commit to sync");
+    const branch = runGit(["branch", "--show-current"], path);
+    if (!branch) throw new Error("catalog is not on a branch");
+    runGit(["push", "--porcelain", "origin", `HEAD:refs/heads/${branch}`], path, 30_000);
   }
 }
