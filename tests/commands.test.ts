@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { syncDueCatalogs } from "../src/adapters/catalog-sync.ts";
 import { add } from "../src/commands/add.ts";
+import { catalogList } from "../src/commands/catalog-list.ts";
 import { check } from "../src/commands/check.ts";
 import { deps, rdeps } from "../src/commands/deps.ts";
 import { set } from "../src/commands/set.ts";
@@ -50,6 +51,20 @@ function catalog(localPaths: Record<string, string> | null = { "alpha-app": "/wo
   });
   return { store, git };
 }
+
+describe("catalog list use case", () => {
+  test("returns each registered catalog through the registry port", () => {
+    const catalogs = [
+      { name: "work", path: "/catalog/work", remote: "https://example.com/work.git" },
+      { name: "shared", path: "/catalog/shared", remote: "https://example.com/shared.git" },
+    ];
+    assert.deepEqual(catalogList({ list: () => catalogs }), catalogs);
+  });
+
+  test("returns an empty list when no catalog is registered", () => {
+    assert.deepEqual(catalogList({ list: () => [] }), []);
+  });
+});
 
 describe("show use case", () => {
   test("reports resolved ticket keys for repositories only", () => {

@@ -13,6 +13,7 @@ export interface CatalogRegistration {
 
 /** Machine-local registry for named Charts catalogs. */
 export interface CatalogRegistry {
+  /** Returns registered names, local paths, and remotes without contacting them. */
   list(): CatalogRegistration[];
   get(name: string): CatalogRegistration | null;
   register(catalog: CatalogRegistration): void;

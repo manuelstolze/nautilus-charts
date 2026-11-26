@@ -300,6 +300,22 @@ describe("named catalog setup", () => {
     assert.equal(manualSync.result, 0);
     assert.equal(JSON.parse(manualSync.output.join("\\n")).action, "sync");
 
+    const listed = capture(() => main(["catalog", "list", "--json"], root));
+    assert.equal(listed.result, 0);
+    assert.deepEqual(JSON.parse(listed.output.join("\\n")).catalogs, [
+      { name: "nautilus", path: root, remote: execFileSync("git", ["-C", root, "remote", "get-url", "origin"], { encoding: "utf8" }).trim() },
+      { name: "shared", path: sharedPath, remote: sharedRemote },
+      { name: "work", path: workPath, remote: workRemote },
+    ]);
+    const listedText = capture(() => main(["catalog", "list"], root));
+    assert.equal(listedText.result, 0);
+    assert.deepEqual(listedText.output, [
+      "NAME\tPATH\tREMOTE",
+      `nautilus\t${root}\t${execFileSync("git", ["-C", root, "remote", "get-url", "origin"], { encoding: "utf8" }).trim()}`,
+      `shared\t${sharedPath}\t${sharedRemote}`,
+      `work\t${workPath}\t${workRemote}`,
+    ]);
+
     const missingCatalog = capture(() => runCharts(["add", "system", "no-catalog", "--data", '{"description":"No catalog."}', "--json"], chartsRoot, registryPath));
     assert.equal(missingCatalog.result, 1);
     assert.match(JSON.parse(missingCatalog.output.join("\\n")).error.message, /--catalog is required/);
@@ -332,6 +348,12 @@ describe("catalog validation", () => {
       assert.match(error.message, /charts catalog create/);
       assert.match(error.message, /charts catalog clone/);
     }
+    const listed = capture(() => runCharts(["catalog", "list", "--json"], chartsRoot, emptyRegistry));
+    assert.equal(listed.result, 0);
+    assert.deepEqual(JSON.parse(listed.output.join("\\n")), { catalogs: [] });
+    const listedText = capture(() => runCharts(["catalog", "list"], chartsRoot, emptyRegistry));
+    assert.equal(listedText.result, 0);
+    assert.deepEqual(listedText.output, ["No catalogs registered."]);
   });
 
   test("accepts a missing local paths file", () => {
