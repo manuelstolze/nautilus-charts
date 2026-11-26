@@ -515,7 +515,8 @@ describe("add use case", () => {
 
 describe("set use case", () => {
   function namedCatalogPorts() {
-    const ports: Ports = catalog();
+    const memory = catalog();
+    const ports: Ports = memory;
     ports.catalogName = "work";
     ports.catalogPath = "/catalog/work";
     ports.catalogRemote = "https://example.com/work.git";
@@ -529,17 +530,17 @@ describe("set use case", () => {
       syncWrite() { syncWrites++; },
       commit(_path, files, message) { commits.push({ files, message }); },
     };
-    return { ports, commits, syncWrites: () => syncWrites };
+    return { ports, store: memory.store, commits, syncWrites: () => syncWrites };
   }
 
   test("records a path-only change without committing or syncing", () => {
-    const { ports, commits, syncWrites } = namedCatalogPorts();
+    const { ports, store, commits, syncWrites } = namedCatalogPorts();
     const result = set(ports, { id: "alpha-app", localPath: "/work/new-repo" });
     assert.ok(result.ok);
     assert.deepEqual(result.changed, []);
     assert.deepEqual(commits, []);
     assert.equal(syncWrites(), 0);
-    assert.deepEqual(ports.store.localPaths, {
+    assert.deepEqual(store.localPaths, {
       "alpha-app": "/work/new-repo",
     });
   });
@@ -561,12 +562,12 @@ describe("set use case", () => {
   });
 
   test("rolls back a path-only change that fails validation", () => {
-    const { ports } = namedCatalogPorts();
-    const original = structuredClone(ports.store.localPaths);
+    const { ports, store } = namedCatalogPorts();
+    const original = structuredClone(store.localPaths);
     const error = failed(set(ports, { id: "alpha-app", localPath: "/work/absent" }), "invalid-entry");
     assert.equal(error.message, "could not set repository alpha-app: validation failed");
     assert.deepEqual(details(error).errors, ['the local paths: path does not exist: /work/absent for "alpha-app"']);
-    assert.deepEqual(ports.store.localPaths, original);
+    assert.deepEqual(store.localPaths, original);
   });
 
   test("protects an existing key and allows a deliberate replacement", () => {
