@@ -11,7 +11,7 @@ Charts is the system catalog of Nautilus. It lists repositories, the systems the
 ```
 nautilus-charts/
 ├── folio/                    # the Folio: ignored, local named catalog repositories
-├── templates/                # entry templates
+├── templates/                # Charts-owned entry templates
 ├── bin/charts.js             # the charts command: Node check, then scripts/charts.ts
 ├── scripts/charts.ts         # composition root
 ├── scripts/tag-version.mjs   # tags v<version>; run by .github/workflows/
@@ -243,7 +243,7 @@ charts add repository shop-api --catalog work \
   --data '{"description":"The shop API.","system":"shop"}'
 ```
 
-Charts reads the selected catalog's matching template to set field order. It writes only supplied values. A Repository can omit `--local-path`; when supplied, Charts stores the path in that catalog's ignored machine-local path map. Charts checks the local Git root and remote setting without contacting the code-repository remote. It appends new path mappings without changing prior text. It replaces a stale single-line mapping for the same ID with a warning. It refuses to write when it cannot update the map safely. A Repository's local path is stored as an absolute path in the selected catalog.
+Charts reads its own matching template from `templates/` to set field order. It writes only supplied values. A Repository can omit `--local-path`; when supplied, Charts stores the path in that catalog's ignored machine-local path map. Charts checks the local Git root and remote setting without contacting the code-repository remote. It appends new path mappings without changing prior text. It replaces a stale single-line mapping for the same ID with a warning. It refuses to write when it cannot update the map safely. A Repository's local path is stored as an absolute path in the selected catalog.
 
 For a missing Repository tag, propose a lowercase kebab-case name and a description. Ask the catalog owner to confirm both before passing `--new-tag`. The Repository must use every new tag. Charts appends the new definitions to the selected catalog's `tags.toml` and keeps prior text unchanged.
 
@@ -267,7 +267,7 @@ Use hand edits only to rename an ID or remove an entry. When renaming an ID, ren
 
 ## Catalog data
 
-Named catalog entries, templates, and tags are tracked in that catalog's Git repository. The machine-local registry and each catalog's path map stay outside remote sync. Charts contacts only a catalog's configured `origin`; it never contacts code-repository remotes.
+Named catalog entries and tags are tracked in that catalog's Git repository. Charts reads entry templates from its own `templates/` folder. An existing catalog's `templates/` folder is unused and its owner may delete it. The machine-local registry and each catalog's path map stay outside remote sync. Charts contacts only a catalog's configured `origin`; it never contacts code-repository remotes.
 
 ## Out of scope
 

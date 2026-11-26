@@ -73,7 +73,7 @@ Each named catalog stores its entries and `tags.toml` in a separate Git reposito
 
 Use `charts catalog list` to see registered catalogs. If no catalog is registered, commands that read or change catalog data return a usage error that names `charts catalog create` and `charts catalog clone`. Read [docs/getting-started.md](./docs/getting-started.md) to set up a first catalog in the Folio, and [docs/structure.md](./docs/structure.md) for entry types, fields, ID rules, and catalog commands. Follow the [charts skill](./.agents/skills/charts/SKILL.md) when finding or changing entries or resolving a local repository path.
 
-Use the templates in `templates/` when adding entries. Keep one entry per file. The file name is the ID. Each named catalog has its own `tags.toml`; use only tags listed there. Keep catalog names and code-repository paths in machine-local files. Do not sync these paths.
+Use Charts' templates in its `templates/` folder when adding entries. Catalogs do not store or override these templates. Keep one entry per file. The file name is the ID. Each named catalog has its own `tags.toml`; use only tags listed there. Keep catalog names and code-repository paths in machine-local files. Do not sync these paths.
 
 ## Skills
 
