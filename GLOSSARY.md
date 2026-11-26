@@ -66,3 +66,7 @@ _Avoid_: Owner (unqualified), maintainer
 **Local path**:
 A folder on one machine where Charts finds a Repository or a Named catalog. Each machine records its own.
 _Avoid_: Checkout, working copy, clone, main local copy
+
+**Folio**:
+The `folio/` folder in the Charts root that holds the local repositories of Named catalogs, one child folder per catalog, for example `folio/work/`. A Folio is not itself a Named catalog, and the Charts source repository ignores it.
+_Avoid_: Catalog folder, catalogs directory, workspace
