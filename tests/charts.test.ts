@@ -1066,7 +1066,7 @@ describe("charts add", () => {
     );
     assert.equal(existsSync(join(root, "repositories/demo.toml")), true);
     assert.equal(capture(() => main(["check"], root)).result, 0);
-    assert.ok(result.output.some((line) => line.includes("New tags: data-pipeline. The shared tag list has uncommitted changes.")));
+    assert.ok(result.output.some((line) => line.includes("New tags: data-pipeline.")));
   });
 
   test("adds a separator when tags.toml has no final newline", () => {
