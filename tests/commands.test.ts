@@ -5,6 +5,8 @@ import { check } from "../src/commands/check.ts";
 import { deps, rdeps } from "../src/commands/deps.ts";
 import { set } from "../src/commands/set.ts";
 import { show } from "../src/commands/show.ts";
+import { validateCatalog } from "../src/domain/validation.ts";
+import type { Snapshot } from "../src/domain/catalog.ts";
 import { FakeGit } from "./fakes/fake-git.ts";
 import { MemoryStore } from "./fakes/memory-store.ts";
 import type { ChartsError, ErrorCode } from "../src/domain/errors.ts";
@@ -20,6 +22,10 @@ function failed(result: { ok: true } | { ok: false; error: ChartsError }, code: 
 /** The validation errors and warnings in a failure's details. */
 function details(error: ChartsError): { errors: string[]; warnings: string[] } {
   return error.details as { errors: string[]; warnings: string[] };
+}
+
+function snapshot(entries: Snapshot["entries"], loadErrors: string[] = []): Snapshot {
+  return { entries, tags: {}, tagsExists: true, localPaths: null, localPathsExists: false, loadErrors };
 }
 
 // Use cases run against in-memory fakes: no temporary folders and no Git.
@@ -116,6 +122,58 @@ describe("deps use cases", () => {
       assert.deepEqual(external.error.details, { id: "stripe" });
     }
     assert.equal(rdeps(ports, "stripe").ok, true);
+  });
+});
+
+describe("relationships across named catalogs", () => {
+  const facts = { localPaths: new Map(), localPathsIgnored: { ignored: true } };
+
+  test("resolves dependency IDs in another registered catalog", () => {
+    const work = snapshot([{
+      kind: "repository",
+      id: "app",
+      data: { description: "Application.", "depends-on": [{ id: "shared-lib" }] },
+      file: "repositories/app.toml",
+    }]);
+    const shared = snapshot([{
+      kind: "repository",
+      id: "shared-lib",
+      data: { description: "Shared library." },
+      file: "repositories/shared-lib.toml",
+    }]);
+    const result = validateCatalog(work, facts, { catalogName: "work", catalogs: [{ name: "shared", snapshot: shared }] });
+    assert.deepEqual(result.errors, []);
+  });
+
+  test("rejects duplicate IDs across catalogs and cross-catalog system links", () => {
+    const work = snapshot([
+      { kind: "system", id: "shared-id", data: { description: "Local system." }, file: "systems/shared-id.toml" },
+      { kind: "repository", id: "app", data: { description: "Application.", system: "shared-system" }, file: "repositories/app.toml" },
+    ]);
+    const shared = snapshot([
+      { kind: "system", id: "shared-id", data: { description: "Other system." }, file: "systems/shared-id.toml" },
+      { kind: "system", id: "shared-system", data: { description: "Other system." }, file: "systems/shared-system.toml" },
+    ]);
+    const result = validateCatalog(work, facts, { catalogName: "work", catalogs: [{ name: "shared", snapshot: shared }] });
+    assert.ok(result.errors.some((error) => error.includes('duplicate ID "shared-id"') && error.includes('catalog "shared"')));
+    assert.ok(result.errors.some((error) => error.includes('system "shared-system" names a system in another catalog')));
+  });
+
+  test("reports missing or unreadable registered catalogs during dependency lookup", () => {
+    const work = snapshot([{
+      kind: "repository",
+      id: "app",
+      data: { description: "Application.", "depends-on": [{ id: "missing" }] },
+      file: "repositories/app.toml",
+    }]);
+    const missing = validateCatalog(work, facts, { catalogName: "work" });
+    assert.ok(missing.errors.some((error) => error.includes('ID "missing" does not exist in any registered catalog')));
+
+    const unreadable = validateCatalog(work, facts, {
+      catalogName: "work",
+      catalogs: [{ name: "shared", snapshot: snapshot([], ["repository files could not be read"]) }],
+    });
+    assert.ok(unreadable.errors.some((error) => error.includes('catalog(s) could not be read') && error.includes('"shared"')));
   });
 });
 
