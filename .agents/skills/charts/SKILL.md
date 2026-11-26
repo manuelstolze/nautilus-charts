@@ -11,7 +11,7 @@ Charts stores Systems, Repositories, and Externals as TOML files. Use this skill
 
 Run `charts --version` or `charts describe --json` from any folder. If `charts` is not found, stop and ask the catalog owner to link the command as the [README](../../../README.md#setup) shows. `charts describe --json` lists each command, option, output field, and error code. With `--json`, a failure prints `{"error": {"code", "message", "details"}}`; act on the code, not the message.
 
-Use a catalog name supplied by the catalog owner. For this setup, store named catalog repositories under a local parent directory called `folio/`, such as `folio/work/` and `folio/private/`. Each child directory is a separate catalog Git repository. The `folio/` parent is not a catalog. If no named catalogs are registered, the legacy root catalog is the default. When named catalogs are registered, scoped reads and writes need `--catalog <name>`. The catalog registry is machine-local. It lives at `${XDG_CONFIG_HOME}/nautilus-charts/catalogs.json`, or at `~/.config/nautilus-charts/catalogs.json` when `XDG_CONFIG_HOME` is not set. Do not guess a catalog name or local folder.
+Use a catalog name supplied by the catalog owner. For this setup, store named catalog repositories under `./folio/` from the Charts root, such as `./folio/work/` and `./folio/private/`. Each child directory is a separate catalog Git repository. The `folio/` parent is not a catalog, and the Charts source repository ignores it. If no named catalogs are registered, the legacy root catalog is the default. When named catalogs are registered, scoped reads and writes need `--catalog <name>`. The catalog registry is machine-local. It lives at `${XDG_CONFIG_HOME}/nautilus-charts/catalogs.json`, or at `~/.config/nautilus-charts/catalogs.json` when `XDG_CONFIG_HOME` is not set. Do not guess a catalog name or local folder.
 
 ## Create or clone a catalog
 
@@ -20,13 +20,13 @@ A named catalog is an independent Git repository. It has one configured `origin`
 Create an empty catalog:
 
 ```sh
-charts catalog create work --path ~/folio/work --remote https://example.com/charts-work.git
+charts catalog create work --path ./folio/work --remote https://example.com/charts-work.git
 ```
 
 Clone an existing catalog:
 
 ```sh
-charts catalog clone private --path ~/folio/private --remote https://example.com/charts-private.git
+charts catalog clone private --path ./folio/private --remote https://example.com/charts-private.git
 ```
 
 Use only a remote that the catalog owner confirms is a Charts catalog. Never clone or sync a code repository listed in Charts. Do not put credentials in a remote URL.
