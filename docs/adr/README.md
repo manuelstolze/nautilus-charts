@@ -21,3 +21,4 @@ When a changed decision affects a constitution rule, change the rule through the
 Each ADR with its status, as its frontmatter holds it:
 
 - [ADR 0001: Charts uses lean hexagonal architecture](0001-hexagonal-architecture.md) (accepted). [nautilus-bridge ADR 0014](https://github.com/manuelstolze/nautilus-bridge/blob/main/docs/adr/0014-the-bridge-applies-the-shared-style-at-its-boundaries.md) describes how the Bridge applies the shared style.
+- [ADR 0002: Named catalogs have independent Git histories](0002-named-catalogs.md) (accepted).
