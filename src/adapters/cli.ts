@@ -695,9 +695,7 @@ export function renderSet(json: boolean, result: SetResult): number {
   } else {
     const changed = result.changed.length ? result.changed.join(", ") : "none";
     console.log(`Updated ${result.type} ${result.id}; changed fields: ${changed}; validation ok`);
-    if (result.newTags.length) {
-      console.log(`New tags: ${result.newTags.join(", ")}. The shared tag list has uncommitted changes.`);
-    }
+    if (result.newTags.length) console.log(`New tags: ${result.newTags.join(", ")}.`);
   }
   return 0;
 }
@@ -717,9 +715,7 @@ export function renderAdd(json: boolean, result: AddResult): number {
   }
   for (const warning of result.validation.warnings) console.log(`WARNING: ${warning}`);
   console.log(`Created ${result.type} ${result.id}; validation ok`);
-  if (result.newTags.length) {
-    console.log(`New tags: ${result.newTags.join(", ")}. The shared tag list has uncommitted changes.`);
-  }
+  if (result.newTags.length) console.log(`New tags: ${result.newTags.join(", ")}.`);
   return 0;
 }
 
