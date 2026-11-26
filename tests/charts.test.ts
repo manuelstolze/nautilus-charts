@@ -273,6 +273,10 @@ describe("named catalog setup", () => {
     assert.equal(bridgeEntry.local_path_status, "ok");
     const bridgeShow = capture(() => main(["show", "shared-lib", "--json"], root));
     assert.equal(JSON.parse(bridgeShow.output.join("\\n")).local_path, codePath);
+    // "work" sorts after "shared", so its paths are not the primary snapshot's.
+    const laterCatalogShow = JSON.parse(capture(() => main(["show", "app", "--json"], root)).output.join("\\n"));
+    assert.equal(laterCatalogShow.local_path, codePath);
+    assert.equal(laterCatalogShow.local_path_status, "ok");
     const manualSync = capture(() => main(["catalog", "sync", "work", "--json"], root));
     assert.equal(manualSync.result, 0);
     assert.equal(JSON.parse(manualSync.output.join("\\n")).action, "sync");

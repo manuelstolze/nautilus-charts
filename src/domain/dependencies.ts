@@ -27,7 +27,7 @@ export function showEntry(index: CatalogIndex, entry: Entry, facts: LocalPathFac
   const result = entryJson(entry);
   if (entry.kind !== "repository") return result;
   const ticketKey = resolveTicketKey(index, entry);
-  const configured = index.snapshot.localPaths?.[entry.id];
+  const configured = index.snapshotFor(entry).localPaths?.[entry.id];
   const fact = facts.get(entry.id);
   if (!isString(configured) || !fact) {
     return {
