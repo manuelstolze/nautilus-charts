@@ -13,7 +13,7 @@ jobs:
       XDG_CONFIG_HOME: ${{ runner.temp }}/charts-config
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
