@@ -1,6 +1,7 @@
 {
   "name": "nautilus-charts",
   "version": "2.1.0",
+  "license": "MIT",
   "private": true,
   "bin": {
     "charts": "bin/charts.js"
