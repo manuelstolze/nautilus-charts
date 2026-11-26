@@ -31,9 +31,11 @@ export function add(ports: Ports, { kind, id, data, localPath, newTags = [] }: A
     return failure([`ID ${JSON.stringify(id)} already exists`]);
   }
 
-  const ignored = git.isIgnored(path);
-  if ("error" in ignored) return failure([`could not check Git ignore rule: ${ignored.error}`], "external", [], "the Git ignore rule could not be checked");
-  if (!ignored.ignored) return failure([`${kind} ${id} is not ignored by Git`], "refused", [], "Git does not ignore the entry");
+  if (ports.catalogName === undefined) {
+    const ignored = git.isIgnored(path);
+    if ("error" in ignored) return failure([`could not check Git ignore rule: ${ignored.error}`], "external", [], "the Git ignore rule could not be checked");
+    if (!ignored.ignored) return failure([`${kind} ${id} is not ignored by Git`], "refused", [], "Git does not ignore the entry");
+  }
 
   const newTagErrors = validateNewTags(index.snapshot.tags, newTags, data.tags);
   if (newTagErrors.length) return failure(newTagErrors);

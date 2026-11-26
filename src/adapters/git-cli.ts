@@ -58,7 +58,7 @@ export class GitCli implements GitInspector {
     return isAbsolute(rawPath) ? resolve(rawPath) : resolve(this.root, rawPath);
   }
 
-  inspectLocalPath(rawPath: string, remote?: unknown): LocalPathFact {
+  inspectLocalPath(rawPath: string, remote?: unknown, _catalogName?: string): LocalPathFact {
     const resolved = this.resolveLocalPath(rawPath);
     return { resolved, error: localPathError(resolved, remote) };
   }

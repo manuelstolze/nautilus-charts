@@ -40,7 +40,7 @@ export function set(ports: Ports, options: SetOptions): SetResult {
   const { store, git } = ports;
   const snapshot = store.load();
   const index = new CatalogIndex(snapshot);
-  const current = index.get(options.id);
+  const current = index.getInCatalog(options.id);
   const failure = (errors: string[], code: ErrorCode = "invalid-entry", warnings: string[] = [], reason = "validation failed"): SetResult => {
     const name = current ? `${current.kind} ${options.id}` : `entry ${options.id}`;
     return { ok: false, error: new ChartsError(code, `could not set ${name}: ${reason}`, { errors, warnings }) };
@@ -68,9 +68,11 @@ export function set(ports: Ports, options: SetOptions): SetResult {
   if (localPath !== undefined && current.kind !== "repository") return usage("--local-path is valid only for a repository");
   if (newTags.length > 0 && current.kind !== "repository") return usage("--new-tag is valid only for a repository");
 
-  const ignored = git.isIgnored(path);
-  if ("error" in ignored) return failure([`could not check Git ignore rule: ${ignored.error}`], "external", [], "the Git ignore rule could not be checked");
-  if (!ignored.ignored) return failure([`${current.kind} ${options.id} is not ignored by Git`], "refused", [], "Git does not ignore the entry");
+  if (ports.catalogName === undefined) {
+    const ignored = git.isIgnored(path);
+    if ("error" in ignored) return failure([`could not check Git ignore rule: ${ignored.error}`], "external", [], "the Git ignore rule could not be checked");
+    if (!ignored.ignored) return failure([`${current.kind} ${options.id} is not ignored by Git`], "refused", [], "Git does not ignore the entry");
+  }
 
   const merged = mergeEntryData(current.data, data ?? {});
   if (

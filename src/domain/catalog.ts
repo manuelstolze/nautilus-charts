@@ -10,6 +10,9 @@ export type Snapshot = {
   localPaths: Data | null;
   localPathsExists: boolean;
   loadErrors: string[];
+  /** Runtime context supplied by the CLI; it is never stored in catalog files. */
+  catalogName?: string;
+  catalogs?: readonly NamedCatalogSnapshot[];
 };
 
 export type NamedCatalogSnapshot = { name: string; snapshot: Snapshot };
@@ -31,15 +34,15 @@ export class CatalogIndex {
 
   constructor(snapshot: Snapshot, options: CatalogIndexOptions = {}) {
     this.snapshot = snapshot;
-    this.catalogName = options.catalogName;
+    this.catalogName = options.catalogName ?? snapshot.catalogName;
     this.loadedCatalogs = [
-      { name: options.catalogName ?? "current", snapshot },
-      ...(options.catalogs ?? []),
+      { name: this.catalogName ?? "current", snapshot },
+      ...(options.catalogs ?? snapshot.catalogs ?? []),
     ];
     for (const [position, catalog] of this.loadedCatalogs.entries()) {
       for (const entry of catalog.snapshot.entries) {
         this.allEntries.push(entry);
-        this.catalogByEntry.set(entry, position === 0 ? options.catalogName : catalog.name);
+        this.catalogByEntry.set(entry, position === 0 ? this.catalogName : catalog.name);
         this.snapshotByEntry.set(entry, catalog.snapshot);
         // The first entry per ID wins.
         if (!this.byId.has(entry.id)) this.byId.set(entry.id, entry);
@@ -53,6 +56,14 @@ export class CatalogIndex {
 
   get(id: string): Entry | undefined {
     return this.byId.get(id);
+  }
+
+  getInCatalog(id: string, catalogName = this.catalogName): Entry | undefined {
+    return this.entries.find((entry) => entry.id === id && this.catalogOf(entry) === catalogName);
+  }
+
+  get primaryEntries(): Entry[] {
+    return this.snapshot.entries;
   }
 
   catalogOf(entry: Entry): string | undefined {

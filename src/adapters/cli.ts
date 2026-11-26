@@ -20,7 +20,7 @@ import { ChartsError, ERROR_CATEGORIES, ERROR_CODES, exitCodeOf, type ErrorCode 
 
 // The terminal adapter: argument parsing and text or JSON output.
 
-export type CommandName = "find" | "show" | "deps" | "rdeps" | "check" | "add" | "set" | "describe";
+export type CommandName = "find" | "show" | "deps" | "rdeps" | "check" | "add" | "set" | "catalog" | "describe";
 
 export type Options = {
   command: CommandName;
@@ -36,7 +36,16 @@ export type Options = {
   tag?: string;
   status?: string;
   owner?: string;
+  catalogName?: string;
+  catalogAction?: "create" | "clone";
+  path?: string;
+  remote?: string;
 };
+
+function parseCatalogName(name: string): string {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)) throw new Error("catalog name must use lowercase kebab-case");
+  return name;
+}
 
 function parseAdd(rest: string[]): Options {
   const options: Options = { command: "add", json: false };
@@ -51,13 +60,16 @@ function parseAdd(rest: string[]): Options {
       options.json = true;
       continue;
     }
-    if (argument === "--data" || argument === "--local-path" || argument === "--new-tag") {
+    if (argument === "--data" || argument === "--local-path" || argument === "--new-tag" || argument === "--catalog") {
       const value = rest[index + 1];
       if (value === undefined) throw new Error(`${argument} requires a value`);
       index += 1;
       if (argument === "--data") {
         if (dataText !== undefined) throw new Error("--data can be used only once");
         dataText = value;
+      } else if (argument === "--catalog") {
+        if (options.catalogName !== undefined) throw new Error("--catalog can be used only once");
+        options.catalogName = parseCatalogName(value);
       } else if (argument === "--local-path") {
         if (localPathSet) throw new Error("--local-path can be used only once");
         localPathSet = true;
@@ -125,13 +137,16 @@ function parseSet(rest: string[]): Options {
       options.replaceKey = true;
       continue;
     }
-    if (argument === "--data" || argument === "--local-path" || argument === "--new-tag") {
+    if (argument === "--data" || argument === "--local-path" || argument === "--new-tag" || argument === "--catalog") {
       const value = rest[index + 1];
       if (value === undefined) throw new Error(`${argument} requires a value`);
       index += 1;
       if (argument === "--data") {
         if (dataText !== undefined) throw new Error("--data can be used only once");
         dataText = value;
+      } else if (argument === "--catalog") {
+        if (options.catalogName !== undefined) throw new Error("--catalog can be used only once");
+        options.catalogName = parseCatalogName(value);
       } else if (argument === "--local-path") {
         if (localPathSet) throw new Error("--local-path can be used only once");
         localPathSet = true;
@@ -188,9 +203,8 @@ function parseQuery(command: "find" | "show" | "deps" | "rdeps" | "check", rest:
       continue;
     }
     if (argument.startsWith("--")) {
-      if (command !== "find" || !["--system", "--tag", "--status", "--owner"].includes(argument)) {
-        throw new Error(`unknown option: ${argument}`);
-      }
+      const filterOption = command === "find" && ["--system", "--tag", "--status", "--owner"].includes(argument);
+      if (!filterOption && argument !== "--catalog") throw new Error(`unknown option: ${argument}`);
       const value = rest[index + 1];
       if (!value || value.startsWith("--")) throw new Error(`${argument} requires a value`);
       index += 1;
@@ -198,6 +212,10 @@ function parseQuery(command: "find" | "show" | "deps" | "rdeps" | "check", rest:
       if (argument === "--tag") options.tag = value;
       if (argument === "--status") options.status = value;
       if (argument === "--owner") options.owner = value;
+      if (argument === "--catalog") {
+        if (options.catalogName !== undefined) throw new Error("--catalog can be used only once");
+        options.catalogName = parseCatalogName(value);
+      }
       continue;
     }
     positional.push(argument);
@@ -213,6 +231,40 @@ function parseQuery(command: "find" | "show" | "deps" | "rdeps" | "check", rest:
     if (positional.length !== 1) throw new Error(`${command} requires one entry ID`);
     options.id = positional[0];
   }
+  return options;
+}
+
+function parseCatalog(rest: string[]): Options {
+  const action = rest[0];
+  if (action !== "create" && action !== "clone") throw new Error("catalog requires create or clone");
+  const options: Options = { command: "catalog", catalogAction: action, json: false };
+  const positional: string[] = [];
+  for (let index = 1; index < rest.length; index += 1) {
+    const argument = rest[index];
+    if (argument === "--json") {
+      options.json = true;
+      continue;
+    }
+    if (argument === "--path" || argument === "--remote") {
+      const value = rest[index + 1];
+      if (!value || value.startsWith("--")) throw new Error(`${argument} requires a value`);
+      index += 1;
+      if (argument === "--path") {
+        if (options.path !== undefined) throw new Error("--path can be used only once");
+        options.path = value;
+      } else {
+        if (options.remote !== undefined) throw new Error("--remote can be used only once");
+        options.remote = value;
+      }
+      continue;
+    }
+    if (argument.startsWith("--")) throw new Error(`unknown option: ${argument}`);
+    positional.push(argument);
+  }
+  if (positional.length !== 1) throw new Error("catalog requires one name");
+  options.catalogName = parseCatalogName(positional[0]);
+  if (options.path === undefined) throw new Error("catalog requires --path <path>");
+  if (options.remote === undefined) throw new Error("catalog requires --remote <url>");
   return options;
 }
 
@@ -263,6 +315,7 @@ const text = (description: string): JsonSchema => ({ type: "string", description
 const ID_SCHEMA: JsonSchema = { type: "string", title: "id", description: "an entry ID, lowercase kebab-case", pattern: ID_PATTERN.source };
 const KIND_SCHEMA: JsonSchema = { type: "string", title: "type", enum: ["system", "repository", "external"] };
 const ENTRY_OPTIONS: Record<string, JsonSchema> = {
+  catalog: text("the registered catalog name"),
   data: text("the entry fields as a JSON object, without id"),
   "local-path": text("a repository's local path on this machine"),
   "new-tag": {
@@ -287,25 +340,26 @@ const CHANGE_FIELDS: Record<string, string> = {
 export const COMMANDS: CommandSpec[] = [
   {
     name: "find",
-    usage: "[<text>] [--system <id>] [--tag <tag>] [--status <status>] [--owner <text>]",
+    usage: "[<text>] [--catalog <name>] [--system <id>] [--tag <tag>] [--status <status>] [--owner <text>]",
     summary: "Finds entries by text and filters, sorted by type and ID.",
     arguments: positionalSchema([], [{ ...text("text that the entry contains, ignoring case"), title: "text" }]),
     options: optionsSchema({
+      catalog: text("search only this registered catalog"),
       system: text("only this system and its repositories and externals"),
       tag: text("only repositories with this tag"),
       status: { type: "string", description: "only entries with this status", enum: [...STATUSES] },
       owner: text("only entries whose owner contains this text, ignoring case"),
     }),
-    output: { type: "object", fields: { entries: "the matching entries, each with type, id, name, and its fields" } },
+    output: { type: "object", fields: { entries: "matching entries; an exact Bridge ID lookup also returns a repository's checked local path" } },
     errors: ["usage", "external"],
     parse: (args) => parseQuery("find", args),
   },
   {
     name: "show",
-    usage: "<id>",
+    usage: "<id> [--catalog <name>]",
     summary: "Shows an entry; a repository also gets its ticket key and checked local path.",
     arguments: positionalSchema([ID_SCHEMA]),
-    options: optionsSchema(),
+    options: optionsSchema({ catalog: text("look only in this registered catalog; omit it for a unique ID lookup") }),
     output: {
       type: "object",
       fields: {
@@ -321,10 +375,10 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     name: "deps",
-    usage: "<id>",
+    usage: "<id> [--catalog <name>]",
     summary: "Lists what a repository or system depends on; a system's are derived from its repositories.",
     arguments: positionalSchema([ID_SCHEMA]),
-    options: optionsSchema(),
+    options: optionsSchema({ catalog: text("the registered catalog name") }),
     output: {
       type: "object",
       fields: {
@@ -339,10 +393,10 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     name: "rdeps",
-    usage: "<id>",
+    usage: "<id> [--catalog <name>]",
     summary: "Lists what depends on an entry.",
     arguments: positionalSchema([ID_SCHEMA]),
-    options: optionsSchema(),
+    options: optionsSchema({ catalog: text("the registered catalog name") }),
     output: {
       type: "object",
       fields: { id: "the entry ID", type: "the entry type", dependents: "each dependent with id, type, and via, from, or via_repositories where known" },
@@ -352,17 +406,17 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     name: "check",
-    usage: "",
-    summary: "Validates the catalog; with errors it prints its report and exits with 3.",
+    usage: "[--catalog <name>]",
+    summary: "Validates the selected catalog; with errors it prints its report and exits with 3.",
     arguments: positionalSchema([]),
-    options: optionsSchema(),
+    options: optionsSchema({ catalog: text("the registered catalog name") }),
     output: { type: "object", fields: { ok: "whether the catalog is valid", errors: "the errors", warnings: "the warnings" } },
     errors: ["usage", "external"],
     parse: (args) => parseQuery("check", args),
   },
   {
     name: "add",
-    usage: "<system|repository|external> <id> --data '<JSON>' [--local-path <path>] [--new-tag <name>=<description>]...",
+    usage: "<system|repository|external> <id> --data '<JSON>' [--catalog <name>] [--local-path <path>] [--new-tag <name>=<description>]...",
     summary: "Adds an entry from its template and validates the whole catalog; nothing is kept when that fails.",
     arguments: positionalSchema([KIND_SCHEMA, ID_SCHEMA]),
     options: optionsSchema(ENTRY_OPTIONS, ["data"]),
@@ -372,7 +426,7 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     name: "set",
-    usage: "<id> [--data '<JSON>'] [--local-path <path>] [--new-tag <name>=<description>]... [--replace-key]",
+    usage: "<id> [--catalog <name>] [--data '<JSON>'] [--local-path <path>] [--new-tag <name>=<description>]... [--replace-key]",
     summary: "Updates the given fields of an entry and validates the whole catalog; nothing is kept when that fails.",
     arguments: positionalSchema([ID_SCHEMA]),
     options: {
@@ -388,6 +442,16 @@ export const COMMANDS: CommandSpec[] = [
     },
     errors: ["usage", "entry-not-found", "invalid-entry", "refused", "external"],
     parse: parseSet,
+  },
+  {
+    name: "catalog",
+    usage: "<create|clone> <name> --path <path> --remote <url>",
+    summary: "Creates or clones a named catalog and registers its local folder.",
+    arguments: positionalSchema([{ type: "string", enum: ["create", "clone"] }, { ...text("the catalog's lowercase kebab-case name"), title: "name" }]),
+    options: optionsSchema({ path: text("the local catalog folder"), remote: text("the catalog Git remote URL") }, ["path", "remote"]),
+    output: { type: "object", fields: { ok: "true", action: "create or clone", name: "the catalog name", remote: "the catalog's Git remote" } },
+    errors: ["usage", "external"],
+    parse: parseCatalog,
   },
   {
     name: "describe",
@@ -469,12 +533,25 @@ function renderFailure(json: boolean, error: ChartsError): number {
   return renderError(json, error);
 }
 
-export function renderFind(json: boolean, result: FindResult): number {
+export function renderFind(json: boolean, result: FindResult, bridgeEntry?: Data): number {
   if (json) {
-    printJson({ entries: result.entries.map(entryJson) });
+    printJson({
+      entries: result.entries.map((entry) => {
+        const data = entryJson(entry);
+        if (bridgeEntry && entry.id === bridgeEntry.id && entry.kind === "repository") {
+          data.local_path = bridgeEntry.local_path;
+          data.local_path_status = bridgeEntry.local_path_status;
+        }
+        return data;
+      }),
+    });
   } else {
     for (const entry of result.entries) {
-      console.log(`${entry.kind} ${entry.id} — ${compact(entryName(entry))} — ${compact(entry.data.description ?? "")}`);
+      let line = `${entry.kind} ${entry.id} — ${compact(entryName(entry))} — ${compact(entry.data.description ?? "")}`;
+      if (bridgeEntry && entry.id === bridgeEntry.id && entry.kind === "repository") {
+        line += ` — local path: ${compact(bridgeEntry.local_path ?? bridgeEntry.local_path_status ?? "not configured")}`;
+      }
+      console.log(line);
     }
   }
   return 0;
@@ -635,6 +712,12 @@ export function describeModule(info: ModuleInfo): Description {
       errors,
     })),
   };
+}
+
+export function renderCatalog(json: boolean, action: "create" | "clone", name: string, remote: string): number {
+  if (json) printJson({ ok: true, action, name, remote });
+  else console.log(`${action === "create" ? "Created" : "Cloned"} catalog ${name}`);
+  return 0;
 }
 
 export function renderDescribe(json: boolean, info: ModuleInfo): number {
