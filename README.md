@@ -36,14 +36,17 @@ Workflow modules use Charts. Today this is the Bridge, and Sonar is planned to u
 | Repository | `repositories/<id>.toml` | `nautilus-charts`, `shop-common-lib` |
 | External | `externals/<id>.toml` | `amazon-s3` |
 
-- One file per entry. The file name is the ID, in lowercase kebab-case, and unique across all entry types.
+- One file per entry. The file name is the ID, in lowercase kebab-case, and unique across all entry types and registered catalogs.
 - A repository may name its `system` and list what it `depends-on`: other repositories or externals.
 - Charts derives system dependencies from repository dependencies. They are never recorded by hand.
-- Repository tags come from `tags.toml`.
-- Entries in this Charts source repository remain Git-ignored. Named catalogs will store entries in separate Git repositories and may sync to remotes set by their owner.
-- A code repository belongs to one named catalog. The catalog-name registry and code-repository paths stay on each machine and are not synced.
-- The current command still uses one root catalog. Named catalogs and catalog sync are approved follow-up work; they are not implemented yet.
-- `local/paths.toml` maps repository IDs to local paths on this machine. Git ignores it.
+- Repository tags come from the selected catalog's `tags.toml`.
+- The source repository still has a legacy root catalog. Its entry files stay Git-ignored. Named catalogs store entries and tags in separate Git repositories.
+- Each named catalog has one configured `origin` remote (`origin` is Git's local name for the remote address). Each machine maps catalog names to local folders. A code Repository belongs to one Named catalog, and entry IDs are unique across all catalogs.
+- `depends-on` links can cross catalogs. A Repository's `system` link must name a System in the same catalog.
+- Catalog paths and code-repository paths stay on each machine. Git ignores each catalog's `local/paths.toml` file.
+- A due read syncs all registered catalogs. The default interval is 15 minutes. A write syncs only the catalog it changes. Charts uses fast-forward sync, which updates local history only when it can move forward without a merge. A failed sync warns and keeps local data. Charts never force-pushes.
+- Charts contacts only its own named catalog repositories. It never contacts or changes code repositories listed in a catalog.
+- The root catalog stays available until its owner chooses which entries to migrate. Charts never removes the root automatically.
 
 ```toml
 # repositories/nautilus-bridge.toml
@@ -62,44 +65,51 @@ depends-on = [
 Ask an agent, for example Pi or Claude, from this repository. The `charts` skill handles the request:
 
 - "Where is `<repository>` on this machine?" shows the entry and its checked local path.
-- "Register `<repository>` in system `<system>`" uses `charts add` and runs full catalog validation.
-- "Update fields on `<id>`" uses `charts set` and keeps all other entry text unchanged.
-- "What depends on `<id>`?" lists the entries that depend on a repository, external, or system.
+- "Register `<repository>` in system `<system>`" uses `charts add --catalog <name>` and checks the selected catalog.
+- "Update fields on `<id>`" uses `charts set --catalog <name>` and keeps all other entry text unchanged.
+- "What depends on `<id>`?" uses `charts rdeps <id> --catalog <name>` to list dependents.
 - "Remove `<id>`" lists the dependents first and asks before changing anything. It never deletes the repository.
 
 Or run the `charts` command from any folder once it is linked ([Setup](#setup)):
 
 ```bash
-charts find [text]   # filters: --system, --tag, --status (all entry types), --owner
-charts show <id>
-charts deps <id>
-charts rdeps <id>
-charts check
-charts add <system|repository|external> <id> --data '<JSON>' [--local-path <path>] [--new-tag <name>=<description>]... [--json]
-charts set <id> [--data '<JSON>'] [--local-path <path>] [--new-tag <name>=<description>]... [--replace-key] [--json]
+charts catalog create <name> --path <folder> --remote <url>
+charts catalog clone <name> --path <folder> --remote <url>
+charts catalog sync <name>
+charts find <text> --catalog <name> [--system <id>] [--tag <tag>] [--status <status>] [--owner <text>]
+charts find <id>                 # exact ID lookup across catalogs
+charts show <id> [--catalog <name>]
+charts deps <id> --catalog <name>
+charts rdeps <id> --catalog <name>
+charts check --catalog <name>
+charts add <system|repository|external> <id> --catalog <name> --data '<JSON>' [--local-path <path>] [--new-tag <name>=<description>]... [--json]
+charts set <id> --catalog <name> [--data '<JSON>'] [--local-path <path>] [--new-tag <name>=<description>]... [--replace-key] [--json]
+charts migrate <id> --catalog <destination>
 charts describe [--json]
 charts --version [--json]
 ```
+
+When no named catalogs are registered, commands without `--catalog` use the legacy root catalog. Once named catalogs are registered, `add`, `set`, `deps`, `rdeps`, `check`, and general text search require `--catalog`. Without it, `show <id>` and exact-ID `find <id>` search registered named catalogs only.
 
 `add` and `set` success results identify the entry by type and ID and report validation; they do not include a Charts store path. Catalog findings name an entry or catalog part, for example `repository shop: tag "unknown" is not defined in the tag list` or `the local paths are missing; local path checks were skipped`.
 
 For example:
 
 ```bash
-charts add system shop --data '{"description":"Online shop system."}'
+charts add system shop --catalog work --data '{"description":"Online shop system."}'
 ```
 
 The `--data` value is a JSON object. JSON is a text format for structured data. Include a required `description`. Do not include an `id`; pass it as the second positional value. Use only fields defined for that entry type. Charts uses the matching template and omits optional fields you do not supply. It does not generate IDs or repository keys.
 
 Systems and repositories may set an optional `ticket-key` for an external ticket tracker. Use 2–10 characters: an uppercase letter, then uppercase letters or digits. Ticket keys are not unique and may equal a Repository's `key`. A Repository's own value takes precedence over its System's value. If neither sets a value, no ticket key resolves. `show <repository> --json` reports the resolved value and its source as `resolved_ticket_key` and `ticket_key_source`.
 
-Use `--local-path` only for a repository. Charts checks the full catalog, including the path and its relation to a configured remote. The Charts skill asks the catalog owner to confirm a proposed remote before it adds that remote. If a repository needs a tag missing from `tags.toml`, pass `--new-tag <name>=<description>` once for each new tag. The name and description must be non-empty. The name must be lowercase kebab-case, must not already exist in `tags.toml`, and must appear in the repository's `tags` list. A new tag that the entry does not use is rejected. The Charts skill proposes the name and description and asks the catalog owner to confirm both before using the option.
+Use `--local-path` only for a Repository. Charts checks the selected catalog, the local path, and its relation to a recorded remote. It reads code-repository Git data locally and does not contact the code-repository remote. The Charts skill asks the catalog owner to confirm a proposed code-repository remote before it records that remote. If a Repository needs a tag missing from the selected catalog's `tags.toml`, pass `--new-tag <name>=<description>` once for each new tag. The name and description must be non-empty. The name must be lowercase kebab-case, must not already exist in that file, and must appear in the Repository's `tags` list. A new tag that the entry does not use is rejected. The Charts skill proposes the name and description and asks the catalog owner to confirm both before using the option.
 
-`tags.toml` is shared and tracked by Git. Charts appends new tags without changing its prior text. If writing or full-catalog validation fails, Charts removes the new entry and restores `local/paths.toml` and `tags.toml`. A successful add leaves `tags.toml` changed and uncommitted. Charts never stages or commits it; the catalog owner decides whether to commit it. The entry and path files stay ignored by Git.
+Each named catalog has its own tracked `tags.toml`. Charts appends new tag definitions without changing prior text. A named-catalog write commits its entry and tag definitions in that catalog, then syncs only that catalog. If writing or validation fails, Charts restores the entry, `local/paths.toml`, and `tags.toml`. The machine-local path file stays ignored and is never committed. The legacy root catalog keeps its existing behavior.
 
-Use `charts set <id>` to add or replace fields on an existing entry. Its `--data` value is a partial JSON object. Each named field replaces the full old value; other fields stay unchanged. `--local-path` and `--new-tag` follow the repository rules above. Changing an existing repository key needs `--replace-key`; check in the Logbook that no other module uses the key, then ask the catalog owner before using this option. Charts changes only the named TOML lines, validates the full catalog, and restores the entry, `local/paths.toml`, and `tags.toml` when validation fails. Unsafe layouts, such as duplicate or dotted fields and TOML table sections, are refused. A request that changes nothing succeeds without writing.
+Use `charts set <id> --catalog <name>` to add or replace fields in a named catalog. Its `--data` value is a partial JSON object. Each named field replaces the full old value; other fields stay unchanged. `--local-path` and `--new-tag` follow the repository rules above. Changing an existing repository key needs `--replace-key`; check in the Logbook that no other module uses the key, then ask the catalog owner before using this option. Charts changes only the named TOML lines, validates the destination and registered links, and restores the entry, path map, and tags when validation fails. It commits the selected catalog. A failed remote sync warns and keeps the local commit. Unsafe layouts, such as duplicate or dotted fields and TOML table sections, are refused. A request that changes nothing succeeds without writing.
 
-Find prints one line per entry. Add `--json` when another tool reads a result. With `--json`, a failure prints `{"error": {"code", "message", "details"}}` and exits with 1 for a usage error, 2 for not found, 3 for a refusal, and 4 for an external failure; [docs/structure.md](docs/structure.md#errors-and-exit-codes) lists the codes. `charts check` with errors exits with 3 and keeps its report as output. `charts describe --json` lists every command and error code. The current command uses local Git data only. The named-catalog feature will allow remote Git operations only for Charts' own catalog repositories. It will not contact or change code repositories listed in a catalog.
+Find prints one line per entry. An exact-ID Bridge lookup also returns a Repository's checked local path. Add `--json` when another tool reads a result. A sync failure prints a warning on standard error; a failed write keeps its local commit. With `--json`, a command failure prints `{"error": {"code", "message", "details"}}` and exits with 1 for a usage error, 2 for not found, 3 for a refusal, and 4 for an external failure; [docs/structure.md](docs/structure.md#errors-and-exit-codes) lists the codes. `charts check --catalog <name>` with errors exits with 3 and keeps its report as output. `charts describe --json` lists every command and error code. Catalog sync contacts only registered Charts catalog remotes. Code-repository checks use local Git data only.
 
 ## Requirements
 
@@ -121,7 +131,9 @@ npm run check
 
 The link puts the `charts` command on `PATH` when `~/.local/bin` is on it, whichever Node version nvm has active; do not use `npm link`. Link it once per machine. The command runs with plain Node and works from any folder.
 
-The current root catalog starts empty. Add systems, repositories, and externals with `charts add`, or ask the `charts` skill to register them. Git ignores these current entries, so back them up yourself, for example in a private repository. Named catalogs and catalog sync are approved follow-up work, not yet available.
+Use `charts catalog create` to start an empty named catalog, or `charts catalog clone` to copy one from its configured remote. Charts stores the name-to-folder registry at `${XDG_CONFIG_HOME:-~/.config}/nautilus-charts/catalogs.json`; each machine keeps its own copy. Due reads sync all registered catalogs every 15 minutes by default. Set `CHARTS_READ_SYNC_INTERVAL_MS` to change the interval. Use `0` to sync on every read.
+
+The legacy root catalog stays available until its owner confirms migration. Copy one root entry at a time with `charts migrate <id> --catalog <name>`. Migration copies needed tag definitions and this machine's local path, checks and commits the destination locally, and does not sync. Review the copied entry, then run `charts catalog sync <name>` to share it. Migration does not delete or change the root entry.
 
 Skills live in `.agents/skills/`. The links in `.claude/skills/` are tracked. When you add a skill, create its link with this command. Use the skill's path under `.agents/skills/` as `<path>`:
 
