@@ -352,6 +352,23 @@ describe("named catalog setup", () => {
 });
 
 describe("catalog validation", () => {
+  test("requires a named catalog before commands read catalog data", () => {
+    const emptyRegistry = join(temporary, "empty-config", "catalogs.json");
+    const cases = [
+      ["find", "--catalog", "x", "--json"],
+      ["add", "system", "new-system", "--data", '{"description":"New."}', "--json"],
+      ["check", "--json"],
+    ];
+    for (const arguments_ of cases) {
+      const result = capture(() => runCharts(arguments_, chartsRoot, emptyRegistry));
+      assert.equal(result.result, 1, arguments_.join(" "));
+      const error = JSON.parse(result.output.join("\\n")).error;
+      assert.equal(error.code, "usage");
+      assert.match(error.message, /charts catalog create/);
+      assert.match(error.message, /charts catalog clone/);
+    }
+  });
+
   test("accepts a missing local paths file", () => {
     const result = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
     assert.deepEqual(result.errors, []);
@@ -431,7 +448,7 @@ describe("catalog validation", () => {
     const { errors } = validateCatalog({ store: new TomlStore(root), git: new GitCli(root) });
     assert.ok(errors.some((error) => error.includes("system \"missing-system\" does not name a system")));
     assert.ok(errors.some((error) => error.includes("cannot point to the same repository")));
-    assert.ok(errors.some((error) => error.includes("ID \"missing-repo\" does not exist")));
+    assert.ok(errors.some((error) => error.includes("ID \"missing-repo\" does not exist in any registered catalog")));
     assert.ok(errors.some((error) => error.includes("unknown field(s): extra")));
     assert.ok(errors.some((error) => error.includes("via must be a string")));
   });
@@ -1338,7 +1355,7 @@ describe("charts set", () => {
     mkdirSync(work);
     execFileSync("git", ["init", "-q", work]);
     write("local/paths.toml", 'alpha-app = "/old/path" # keep note\n');
-    const pathResult = update("alpha-app", { description: "Updated with a local path." }, ["--local-path", work, "--json"]);
+    const pathResult = update("alpha-app", undefined, ["--local-path", work, "--json"]);
     const pathPayload = JSON.parse(pathResult.output.join("\\n"));
     assert.equal(pathResult.result, 0, JSON.stringify({ output: pathResult.output, errors: pathResult.errors }));
     assert.ok(pathPayload.validation.warnings.some((warning: string) => warning.includes("replaced the existing local path")));
@@ -1516,7 +1533,7 @@ describe("catalog commands", () => {
     return { ...process.env, XDG_CONFIG_HOME: join(temporary, "isolated-config") };
   }
 
-  /** Copies the command and its code into the fixture, whose catalog Git ignores. */
+  /** Copies the Charts command and code into the named catalog fixture. */
   function installCommand(): void {
     for (const folder of ["bin", "scripts", "src"]) cpSync(join(REPO_ROOT, folder), join(root, folder), { recursive: true });
     copyFileSync(join(REPO_ROOT, "package.json"), join(root, "package.json"));
@@ -1524,7 +1541,18 @@ describe("catalog commands", () => {
   }
 
   /** Runs the `charts` command through a symbolic link, from a folder outside Charts. */
-  function runLinked(args: string[]) {
+  function registeredEnv(): NodeJS.ProcessEnv {
+    const configHome = join(temporary, "registered-config");
+    const remote = execFileSync("git", ["-C", root, "remote", "get-url", "origin"], { encoding: "utf8" }).trim();
+    new FileCatalogRegistry(join(configHome, "nautilus-charts", "catalogs.json")).register({
+      name: "nautilus",
+      path: root,
+      remote,
+    });
+    return { ...process.env, XDG_CONFIG_HOME: configHome };
+  }
+
+  function runLinked(args: string[], env = isolatedEnv()) {
     const binFolder = join(temporary, "local-bin");
     mkdirSync(binFolder, { recursive: true });
     const link = join(binFolder, "charts");
@@ -1532,21 +1560,22 @@ describe("catalog commands", () => {
     symlinkSync(join(root, "bin/charts.js"), link);
     const cwd = join(temporary, "elsewhere");
     mkdirSync(cwd, { recursive: true });
-    return spawnSync(link, args, { cwd, encoding: "utf8", env: isolatedEnv() });
+    return spawnSync(link, args, { cwd, encoding: "utf8", env });
   }
 
   test("the charts command runs through a symbolic link from another folder like the script", () => {
     installCommand();
-    const linked = runLinked(["find", "--json"]);
-    const script = spawnSync(process.execPath, [realpathSync(join(root, "scripts/charts.ts")), "find", "--json"], { cwd: root, encoding: "utf8", env: isolatedEnv() });
-    assert.equal(script.status, 0, script.stderr);
+    const env = registeredEnv();
+    const linked = runLinked(["find", "--catalog", "nautilus", "--json"], env);
+    const script = spawnSync(process.execPath, [realpathSync(join(root, "scripts/charts.ts")), "find", "--catalog", "nautilus", "--json"], { cwd: root, encoding: "utf8", env });
+    assert.equal(script.status, 0, script.stdout + script.stderr);
     assert.equal(linked.status, 0, linked.stdout + linked.stderr);
     assert.equal(linked.stderr, "");
     assert.equal(linked.stdout, script.stdout);
     // main runs exactly once: one JSON document.
     assert.equal(JSON.parse(linked.stdout).entries.length, 7);
 
-    const failed = runLinked(["show", "missing", "--json"]);
+    const failed = runLinked(["show", "missing", "--json"], env);
     assert.equal(failed.status, 2, failed.stdout + failed.stderr);
     assert.equal(JSON.parse(failed.stdout).error.code, "entry-not-found");
   });
@@ -1584,7 +1613,7 @@ describe("catalog commands", () => {
       const output = execFileSync(
         process.execPath,
         [realpathSync(join(root, "scripts/charts.ts")), "find", "alpha-app", "--json"],
-        { cwd: otherDirectory, encoding: "utf8", env: isolatedEnv() },
+        { cwd: otherDirectory, encoding: "utf8", env: registeredEnv() },
       );
       const payload = JSON.parse(output);
       assert.ok(payload.entries.some((entry: { id: string }) => entry.id === "alpha-app"));

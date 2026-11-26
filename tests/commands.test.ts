@@ -460,14 +460,12 @@ describe("add use case", () => {
     assert.equal(ports.store.files.size, 0);
   });
 
-  test("rejects an entry path that Git does not ignore", () => {
+  test("adds catalog entries without checking an ignore rule", () => {
     const ports = catalog();
     ports.git.notIgnored.add("systems/new-system.toml");
     const result = add(ports, { kind: "system", id: "new-system", data: { description: "New." } });
-    const error = failed(result, "refused");
-    assert.equal(error.message, "could not add system new-system: Git does not ignore the entry");
-    assert.deepEqual(details(error).errors, ["system new-system is not ignored by Git"]);
-    assert.equal(ports.store.files.size, 0);
+    assert.equal(result.ok, true);
+    assert.equal(ports.store.files.has("systems/new-system.toml"), true);
   });
 
   test("rejects invalid input before writing", () => {
@@ -588,7 +586,7 @@ describe("set use case", () => {
       { data: { extra: true }, expected: "repository beta-lib: unknown field(s): extra" },
       { data: { tags: ["missing"] }, expected: 'repository beta-lib: tag "missing" is not defined in the tag list' },
       { data: { system: "missing" }, expected: 'repository beta-lib: system "missing" does not name a system' },
-      { data: { "depends-on": [{ id: "missing" }] }, expected: 'repository beta-lib: depends-on[0] ID "missing" does not exist' },
+      { data: { "depends-on": [{ id: "missing" }] }, expected: 'repository beta-lib: depends-on[0] ID "missing" does not exist in any registered catalog' },
       { data: { key: "ALP" }, replaceKey: true, expected: 'repository beta-lib: duplicate key "ALP"; also used by repository alpha-app' },
     ];
     for (const item of cases) {

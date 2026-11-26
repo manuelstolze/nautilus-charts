@@ -175,14 +175,13 @@ export function validateEntryData(
     if (dependencyId === entry.id) errors.push(`${dependencyLabel} cannot point to the same repository`);
     const target = index.get(dependencyId);
     if (!target) {
-      const hasNamedCatalogs = index.catalogName !== undefined || index.entries.length !== index.snapshot.entries.length;
-      const unreadable = hasNamedCatalogs ? index.unreadableCatalogs() : [];
+      const unreadable = index.unreadableCatalogs();
       if (unreadable.length > 0) {
         const details = unreadable.map(({ name, snapshot }) => `${JSON.stringify(name)}: ${snapshot.loadErrors.join("; ")}`).join(", ");
         errors.push(`${dependencyLabel} cannot resolve ID ${JSON.stringify(dependencyId)} because registered catalog(s) could not be read: ${details}`);
-      } else if (hasNamedCatalogs) {
+      } else {
         errors.push(`${dependencyLabel} ID ${JSON.stringify(dependencyId)} does not exist in any registered catalog`);
-      } else errors.push(`${dependencyLabel} ID ${JSON.stringify(dependencyId)} does not exist`);
+      }
     } else if (target.kind !== "repository" && target.kind !== "external") {
       errors.push(`${dependencyLabel} ID ${JSON.stringify(dependencyId)} is not a repository or external`);
     }

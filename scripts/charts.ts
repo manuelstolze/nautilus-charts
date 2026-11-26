@@ -90,8 +90,8 @@ class CatalogPathInspector implements GitInspector {
   private readonly primary: GitCli;
   private readonly byName: Map<string, GitCli>;
 
-  constructor(root: string, registration: CatalogRegistration | undefined, catalogs: CatalogRegistration[]) {
-    this.primary = new GitCli(registration?.path ?? root);
+  constructor(registration: CatalogRegistration, catalogs: CatalogRegistration[]) {
+    this.primary = new GitCli(registration.path);
     this.byName = new Map(catalogs.map((catalog) => [catalog.name, new GitCli(catalog.path)]));
   }
 
@@ -115,6 +115,9 @@ function bridgeLookupError(index: CatalogIndex): ChartsError | null {
 
 function buildPorts(options: Options, root: string, registry: FileCatalogRegistry): Ports {
   const registrations = registry.list();
+  if (registrations.length === 0) {
+    throw new ChartsError("usage", "no catalogs are registered; run charts catalog create or charts catalog clone");
+  }
   let registration: CatalogRegistration | undefined;
   let includeRelated = false;
   let allCatalogs = false;
@@ -122,7 +125,7 @@ function buildPorts(options: Options, root: string, registry: FileCatalogRegistr
   if (options.catalogName !== undefined) {
     registration = registry.get(options.catalogName) ?? undefined;
     if (!registration) throw new ChartsError("usage", `unknown catalog: ${options.catalogName}`);
-  } else if (registrations.length > 0) {
+  } else {
     if (options.command === "show") {
       registration = registrations[0];
       includeRelated = true;
@@ -147,9 +150,9 @@ function buildPorts(options: Options, root: string, registry: FileCatalogRegistr
     : options.catalogName && registration && ["add", "set", "check", "deps", "rdeps", "migrate"].includes(options.command)
       ? registrations.filter((catalog) => catalog.name !== registration!.name)
       : [];
-  const base = new TomlStore(registration?.path ?? root);
+  const base = new TomlStore(registration!.path);
   const store = new IndexedCatalogStore(base, registration, related);
-  const git = new CatalogPathInspector(root, registration, registrations);
+  const git = new CatalogPathInspector(registration!, registrations);
   return {
     store,
     git,
@@ -227,6 +230,7 @@ export function main(argv = process.argv.slice(2), root = ROOT, registryPath?: s
       : join(resolvedRoot, "local", "catalogs.json"));
     const registry = new FileCatalogRegistry(localRegistryPath);
     if (options.command === "catalog") return createOrCloneCatalog(options, resolvedRoot, registry);
+    if (options.command === "describe") return renderDescribe(options.json, moduleInfo());
 
     const ports = buildPorts(options, resolvedRoot, registry);
     if (["find", "show", "deps", "rdeps", "check"].includes(options.command)) {
@@ -289,8 +293,6 @@ export function main(argv = process.argv.slice(2), root = ROOT, registryPath?: s
         return renderEdges(options.json, deps(ports, options.id!), false);
       case "rdeps":
         return renderEdges(options.json, rdeps(ports, options.id!), true);
-      case "describe":
-        return renderDescribe(options.json, moduleInfo());
     }
   } catch (error) {
     return renderError(options.json, error);
