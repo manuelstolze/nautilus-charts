@@ -57,11 +57,6 @@ function makeFixture(): void {
   for (const kind of ["system", "repository", "external"]) {
     copyFileSync(join(REPO_ROOT, `templates/${kind}.toml`), join(chartsRoot, `templates/${kind}.toml`));
   }
-  for (const directory of ["systems", "repositories", "externals", "local"]) {
-    mkdirSync(join(chartsRoot, directory), { recursive: true });
-  }
-  writeFileSync(join(chartsRoot, ".gitignore"), "/systems/*.toml\n/repositories/*.toml\n/externals/*.toml\n/local/paths.toml\n", "utf8");
-  execFileSync("git", ["init", "-q", chartsRoot]);
   const remote = join(temporary, "nautilus.git");
   execFileSync("git", ["init", "--bare", "--quiet", remote]);
   new CatalogGitCli(REPO_ROOT).initialize(root, remote);
@@ -310,48 +305,18 @@ describe("named catalog setup", () => {
     assert.match(JSON.parse(missingCatalog.output.join("\\n")).error.message, /--catalog is required/);
   });
 
-  test("copies a root entry and its tags and local path without changing or syncing the root", () => {
-    const codePath = join(chartsRoot, "migration-code");
-    mkdirSync(codePath);
-    execFileSync("git", ["init", "--quiet", codePath]);
-    execFileSync("git", ["-C", codePath, "remote", "add", "origin", "https://example.com/migrated.git"]);
-    writeAt(chartsRoot, "repositories/migrate-me.toml",
-      'description = "Migration target."\nremote = "https://example.com/migrated.git"\ntags = ["utility"]\n');
-    writeAt(chartsRoot, "tags.toml", 'utility = "Shared tools."\n');
-    writeAt(chartsRoot, "local/paths.toml", 'migrate-me = "migration-code"\n');
-    const sourceEntry = readFileSync(join(chartsRoot, "repositories/migrate-me.toml"), "utf8");
-    const sourceTags = readFileSync(join(chartsRoot, "tags.toml"), "utf8");
-    const sourcePaths = readFileSync(join(chartsRoot, "local/paths.toml"), "utf8");
-
-    const remote = join(temporary, "migration.git");
-    const destinationPath = join(temporary, "migration-destination");
-    execFileSync("git", ["init", "--bare", "--quiet", remote]);
-    const created = capture(() => main([
-      "catalog", "create", "migration-target", "--path", destinationPath, "--remote", remote, "--json",
-    ], root));
-    assert.equal(created.result, 0);
-    execFileSync("git", ["-C", destinationPath, "config", "user.name", "Charts Test"]);
-    execFileSync("git", ["-C", destinationPath, "config", "user.email", "charts@example.com"]);
-
-    const result = capture(() => main(["migrate", "migrate-me", "--catalog", "migration-target", "--json"], root));
-    const payload = JSON.parse(result.output.join("\\n"));
-    assert.equal(result.result, 0, [...result.output, ...result.errors].join("\\n"));
-    assert.equal(payload.catalog, "migration-target");
-    assert.equal(payload.sync_started, false);
-    assert.deepEqual(
-      JSON.parse(JSON.stringify(parseToml(readFileSync(join(destinationPath, "repositories/migrate-me.toml"), "utf8")))),
-      JSON.parse(JSON.stringify(parseToml(sourceEntry))),
-    );
-    assert.equal(parseToml(readFileSync(join(destinationPath, "tags.toml"), "utf8")).utility, "Shared tools.");
-    assert.equal(parseToml(readFileSync(join(destinationPath, "local/paths.toml"), "utf8"))["migrate-me"], codePath);
-    assert.equal(readFileSync(join(chartsRoot, "repositories/migrate-me.toml"), "utf8"), sourceEntry);
-    assert.equal(readFileSync(join(chartsRoot, "tags.toml"), "utf8"), sourceTags);
-    assert.equal(readFileSync(join(chartsRoot, "local/paths.toml"), "utf8"), sourcePaths);
-    assert.equal(execFileSync("git", ["--git-dir", remote, "for-each-ref", "--format=%(refname)"], { encoding: "utf8" }).trim(), "");
-  });
 });
 
 describe("catalog validation", () => {
+  test("reports migrate as an unknown command", () => {
+    const result = capture(() => runCharts(["migrate", "x", "--catalog", "y", "--json"], chartsRoot, registryPath));
+    assert.equal(result.result, 1);
+    const error = JSON.parse(result.output.join("\\n")).error;
+    assert.equal(error.code, "usage");
+    assert.match(error.message, /^usage: charts </);
+    assert.doesNotMatch(error.message, /migrate/);
+  });
+
   test("requires a named catalog before commands read catalog data", () => {
     const emptyRegistry = join(temporary, "empty-config", "catalogs.json");
     const cases = [
