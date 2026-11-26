@@ -67,7 +67,7 @@ export class CatalogIndex {
   }
 
   catalogOf(entry: Entry): string | undefined {
-    return this.catalogByEntry.get(entry);
+    return this.catalogByEntry.has(entry) ? this.catalogByEntry.get(entry) : this.catalogName;
   }
 
   snapshotFor(entry: Entry): Snapshot {
