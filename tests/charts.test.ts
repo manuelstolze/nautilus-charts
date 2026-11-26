@@ -273,6 +273,10 @@ describe("named catalog setup", () => {
     assert.equal(bridgeEntry.local_path_status, "ok");
     const bridgeShow = capture(() => main(["show", "shared-lib", "--json"], root));
     assert.equal(JSON.parse(bridgeShow.output.join("\\n")).local_path, codePath);
+    // "work" sorts after "shared", so its paths are not the primary snapshot's.
+    const laterCatalogShow = JSON.parse(capture(() => main(["show", "app", "--json"], root)).output.join("\\n"));
+    assert.equal(laterCatalogShow.local_path, codePath);
+    assert.equal(laterCatalogShow.local_path_status, "ok");
     const manualSync = capture(() => main(["catalog", "sync", "work", "--json"], root));
     assert.equal(manualSync.result, 0);
     assert.equal(JSON.parse(manualSync.output.join("\\n")).action, "sync");
@@ -1475,6 +1479,11 @@ describe("catalog commands", () => {
     assert.ok(errors[0].includes("not external entries"));
   });
 
+  /** A child-process environment whose catalog registry is empty, not this machine's. */
+  function isolatedEnv(): NodeJS.ProcessEnv {
+    return { ...process.env, XDG_CONFIG_HOME: join(temporary, "isolated-config") };
+  }
+
   /** Copies the command and its code into the fixture, whose catalog Git ignores. */
   function installCommand(): void {
     for (const folder of ["bin", "scripts", "src"]) cpSync(join(REPO_ROOT, folder), join(root, folder), { recursive: true });
@@ -1491,13 +1500,13 @@ describe("catalog commands", () => {
     symlinkSync(join(root, "bin/charts.js"), link);
     const cwd = join(temporary, "elsewhere");
     mkdirSync(cwd, { recursive: true });
-    return spawnSync(link, args, { cwd, encoding: "utf8" });
+    return spawnSync(link, args, { cwd, encoding: "utf8", env: isolatedEnv() });
   }
 
   test("the charts command runs through a symbolic link from another folder like the script", () => {
     installCommand();
     const linked = runLinked(["find", "--json"]);
-    const script = spawnSync(process.execPath, [realpathSync(join(root, "scripts/charts.ts")), "find", "--json"], { cwd: root, encoding: "utf8" });
+    const script = spawnSync(process.execPath, [realpathSync(join(root, "scripts/charts.ts")), "find", "--json"], { cwd: root, encoding: "utf8", env: isolatedEnv() });
     assert.equal(script.status, 0, script.stderr);
     assert.equal(linked.status, 0, linked.stdout + linked.stderr);
     assert.equal(linked.stderr, "");
@@ -1543,7 +1552,7 @@ describe("catalog commands", () => {
       const output = execFileSync(
         process.execPath,
         [realpathSync(join(root, "scripts/charts.ts")), "find", "alpha-app", "--json"],
-        { cwd: otherDirectory, encoding: "utf8" },
+        { cwd: otherDirectory, encoding: "utf8", env: isolatedEnv() },
       );
       const payload = JSON.parse(output);
       assert.ok(payload.entries.some((entry: { id: string }) => entry.id === "alpha-app"));
