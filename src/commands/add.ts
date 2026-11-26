@@ -13,12 +13,11 @@ export type AddResult =
 /**
  * Adds an entry: checks the input, writes the entry, its local path and new tags,
  * revalidates the whole catalog, and rolls back when that fails.
- * A failure is `invalid-entry` for validation errors, `refused` when Git does
- * not ignore the entry file, and `external` when Git, a write, or the rollback
- * fails; its details hold the errors and warnings.
+ * A failure is `invalid-entry` for validation errors and `external` when Git,
+ * a write, or the rollback fails; its details hold the errors and warnings.
  */
 export function add(ports: Ports, { kind, id, data, localPath, newTags = [] }: AddOptions): AddResult {
-  const { store, git } = ports;
+  const { store } = ports;
   const path = entryFile(kind, id);
   const failure = (errors: string[], code: ErrorCode = "invalid-entry", warnings: string[] = [], reason = "validation failed"): AddResult => ({
     ok: false,
@@ -31,11 +30,6 @@ export function add(ports: Ports, { kind, id, data, localPath, newTags = [] }: A
     return failure([`ID ${JSON.stringify(id)} already exists`]);
   }
 
-  if (ports.catalogName === undefined) {
-    const ignored = git.isIgnored(path);
-    if ("error" in ignored) return failure([`could not check Git ignore rule: ${ignored.error}`], "external", [], "the Git ignore rule could not be checked");
-    if (!ignored.ignored) return failure([`${kind} ${id} is not ignored by Git`], "refused", [], "Git does not ignore the entry");
-  }
 
   const newTagErrors = validateNewTags(index.snapshot.tags, newTags, data.tags);
   if (newTagErrors.length) return failure(newTagErrors);

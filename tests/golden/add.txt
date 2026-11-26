@@ -1,5 +1,5 @@
 ## system success
-$ charts "add" "system" "new-system" "--data" "{\"description\":\"Line one.\\nLine two.\",\"name\":\"Quoted \\\"System\\\"\",\"status\":\"planned\"}"
+$ charts "add" "system" "new-system" "--data" "{\"description\":\"Line one.\\nLine two.\",\"name\":\"Quoted \\\"System\\\"\",\"status\":\"planned\"}" "--catalog" "nautilus"
 exit: 0
 --- stdout
 Created system new-system; validation ok
@@ -10,7 +10,7 @@ description = "Line one.\nLine two."
 status = "planned"
 
 ## system success (--json)
-$ charts "add" "system" "new-system" "--data" "{\"description\":\"Line one.\\nLine two.\",\"name\":\"Quoted \\\"System\\\"\",\"status\":\"planned\"}" "--json"
+$ charts "add" "system" "new-system" "--data" "{\"description\":\"Line one.\\nLine two.\",\"name\":\"Quoted \\\"System\\\"\",\"status\":\"planned\"}" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -30,7 +30,7 @@ description = "Line one.\nLine two."
 status = "planned"
 
 ## repository success with a local path
-$ charts "add" "repository" "new-repo" "--data" "{\"depends-on\":[{\"id\":\"beta-lib\",\"via\":\"npm package\"},{\"id\":\"stripe\"}],\"tags\":[\"library\",\"utility\"],\"system\":\"alpha\",\"key\":\"NEW\",\"remote\":\"https://example.com/shop/new-repo.git\",\"description\":\"A new repository.\",\"default-branch\":\"main\"}" "--local-path" "<TMP>/work/new-repo"
+$ charts "add" "repository" "new-repo" "--data" "{\"depends-on\":[{\"id\":\"beta-lib\",\"via\":\"npm package\"},{\"id\":\"stripe\"}],\"tags\":[\"library\",\"utility\"],\"system\":\"alpha\",\"key\":\"NEW\",\"remote\":\"https://example.com/shop/new-repo.git\",\"description\":\"A new repository.\",\"default-branch\":\"main\"}" "--local-path" "<TMP>/work/new-repo" "--catalog" "nautilus"
 exit: 0
 --- stdout
 Created repository new-repo; validation ok
@@ -48,7 +48,7 @@ alpha-app = "<TMP>/work/alpha-app"
 new-repo = "<TMP>/work/new-repo"
 
 ## repository success with a local path (--json)
-$ charts "add" "repository" "new-repo" "--data" "{\"depends-on\":[{\"id\":\"beta-lib\",\"via\":\"npm package\"},{\"id\":\"stripe\"}],\"tags\":[\"library\",\"utility\"],\"system\":\"alpha\",\"key\":\"NEW\",\"remote\":\"https://example.com/shop/new-repo.git\",\"description\":\"A new repository.\",\"default-branch\":\"main\"}" "--local-path" "<TMP>/work/new-repo" "--json"
+$ charts "add" "repository" "new-repo" "--data" "{\"depends-on\":[{\"id\":\"beta-lib\",\"via\":\"npm package\"},{\"id\":\"stripe\"}],\"tags\":[\"library\",\"utility\"],\"system\":\"alpha\",\"key\":\"NEW\",\"remote\":\"https://example.com/shop/new-repo.git\",\"description\":\"A new repository.\",\"default-branch\":\"main\"}" "--local-path" "<TMP>/work/new-repo" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -75,7 +75,7 @@ alpha-app = "<TMP>/work/alpha-app"
 new-repo = "<TMP>/work/new-repo"
 
 ## repository success creating the local paths file
-$ charts "add" "repository" "fresh-repo" "--data" "{\"description\":\"Fresh.\"}" "--local-path" "<TMP>/work/fresh-repo"
+$ charts "add" "repository" "fresh-repo" "--data" "{\"description\":\"Fresh.\"}" "--local-path" "<TMP>/work/fresh-repo" "--catalog" "nautilus"
 exit: 0
 --- stdout
 Created repository fresh-repo; validation ok
@@ -86,7 +86,7 @@ description = "Fresh."
 fresh-repo = "<TMP>/work/fresh-repo"
 
 ## repository success creating the local paths file (--json)
-$ charts "add" "repository" "fresh-repo" "--data" "{\"description\":\"Fresh.\"}" "--local-path" "<TMP>/work/fresh-repo" "--json"
+$ charts "add" "repository" "fresh-repo" "--data" "{\"description\":\"Fresh.\"}" "--local-path" "<TMP>/work/fresh-repo" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -106,7 +106,7 @@ description = "Fresh."
 fresh-repo = "<TMP>/work/fresh-repo"
 
 ## external success with a deprecated dependency warning
-$ charts "add" "external" "new-api" "--data" "{\"kind\":\"saas\",\"provider\":\"example\",\"description\":\"New API.\"}"
+$ charts "add" "external" "new-api" "--data" "{\"kind\":\"saas\",\"provider\":\"example\",\"description\":\"New API.\"}" "--catalog" "nautilus"
 exit: 0
 --- stdout
 WARNING: repository delta-app: depends-on[0] points to deprecated entry "gamma-app"
@@ -118,7 +118,7 @@ provider = "example"
 kind = "saas"
 
 ## external success with a deprecated dependency warning (--json)
-$ charts "add" "external" "new-api" "--data" "{\"kind\":\"saas\",\"provider\":\"example\",\"description\":\"New API.\"}" "--json"
+$ charts "add" "external" "new-api" "--data" "{\"kind\":\"saas\",\"provider\":\"example\",\"description\":\"New API.\"}" "--catalog" "nautilus" "--json"
 exit: 0
 --- stdout
 {
@@ -140,7 +140,7 @@ provider = "example"
 kind = "saas"
 
 ## invalid input
-$ charts "add" "repository" "bad-input" "--data" "{\"description\":\"Bad.\",\"key\":\"ALP\",\"status\":\"paused\",\"tags\":[\"unknown\"],\"extra\":1,\"depends-on\":[{\"id\":\"alpha\"},{\"id\":\"old-api\"}]}"
+$ charts "add" "repository" "bad-input" "--data" "{\"description\":\"Bad.\",\"key\":\"ALP\",\"status\":\"paused\",\"tags\":[\"unknown\"],\"extra\":1,\"depends-on\":[{\"id\":\"alpha\"},{\"id\":\"old-api\"}]}" "--catalog" "nautilus"
 exit: 3
 --- stdout
 WARNING: repository bad-input: depends-on[1] points to archived entry "old-api"
@@ -155,7 +155,7 @@ ERROR: could not add repository bad-input: validation failed
 (absent)
 
 ## invalid input (--json)
-$ charts "add" "repository" "bad-input" "--data" "{\"description\":\"Bad.\",\"key\":\"ALP\",\"status\":\"paused\",\"tags\":[\"unknown\"],\"extra\":1,\"depends-on\":[{\"id\":\"alpha\"},{\"id\":\"old-api\"}]}" "--json"
+$ charts "add" "repository" "bad-input" "--data" "{\"description\":\"Bad.\",\"key\":\"ALP\",\"status\":\"paused\",\"tags\":[\"unknown\"],\"extra\":1,\"depends-on\":[{\"id\":\"alpha\"},{\"id\":\"old-api\"}]}" "--catalog" "nautilus" "--json"
 exit: 3
 --- stdout
 {
@@ -181,7 +181,7 @@ exit: 3
 (absent)
 
 ## missing description
-$ charts "add" "system" "no-description" "--data" "{\"name\":\"No description\"}"
+$ charts "add" "system" "no-description" "--data" "{\"name\":\"No description\"}" "--catalog" "nautilus"
 exit: 3
 --- stdout
 --- stderr
@@ -191,7 +191,7 @@ ERROR: could not add system no-description: validation failed
 (absent)
 
 ## missing description (--json)
-$ charts "add" "system" "no-description" "--data" "{\"name\":\"No description\"}" "--json"
+$ charts "add" "system" "no-description" "--data" "{\"name\":\"No description\"}" "--catalog" "nautilus" "--json"
 exit: 3
 --- stdout
 {
@@ -211,7 +211,7 @@ exit: 3
 (absent)
 
 ## duplicate ID
-$ charts "add" "external" "alpha-app" "--data" "{\"description\":\"Duplicate.\"}"
+$ charts "add" "external" "alpha-app" "--data" "{\"description\":\"Duplicate.\"}" "--catalog" "nautilus"
 exit: 3
 --- stdout
 --- stderr
@@ -221,7 +221,7 @@ ERROR: could not add external alpha-app: validation failed
 (absent)
 
 ## duplicate ID (--json)
-$ charts "add" "external" "alpha-app" "--data" "{\"description\":\"Duplicate.\"}" "--json"
+$ charts "add" "external" "alpha-app" "--data" "{\"description\":\"Duplicate.\"}" "--catalog" "nautilus" "--json"
 exit: 3
 --- stdout
 {
@@ -241,7 +241,7 @@ exit: 3
 (absent)
 
 ## duplicate ID in an unreadable entry
-$ charts "add" "system" "broken" "--data" "{\"description\":\"Duplicate.\"}"
+$ charts "add" "system" "broken" "--data" "{\"description\":\"Duplicate.\"}" "--catalog" "nautilus"
 exit: 3
 --- stdout
 --- stderr
@@ -251,7 +251,7 @@ ERROR: could not add system broken: validation failed
 (absent)
 
 ## duplicate ID in an unreadable entry (--json)
-$ charts "add" "system" "broken" "--data" "{\"description\":\"Duplicate.\"}" "--json"
+$ charts "add" "system" "broken" "--data" "{\"description\":\"Duplicate.\"}" "--catalog" "nautilus" "--json"
 exit: 3
 --- stdout
 {
@@ -271,37 +271,34 @@ exit: 3
 (absent)
 
 ## entry path not ignored
-$ charts "add" "system" "unignored" "--data" "{\"description\":\"Unignored.\"}"
-exit: 3
+$ charts "add" "system" "unignored" "--data" "{\"description\":\"Unignored.\"}" "--catalog" "nautilus"
+exit: 0
 --- stdout
+Created system unignored; validation ok
 --- stderr
-ERROR: system unignored is not ignored by Git
-ERROR: could not add system unignored: Git does not ignore the entry
 --- file systems/unignored.toml
-(absent)
+description = "Unignored."
 
 ## entry path not ignored (--json)
-$ charts "add" "system" "unignored" "--data" "{\"description\":\"Unignored.\"}" "--json"
-exit: 3
+$ charts "add" "system" "unignored" "--data" "{\"description\":\"Unignored.\"}" "--catalog" "nautilus" "--json"
+exit: 0
 --- stdout
 {
-  "error": {
-    "code": "refused",
-    "message": "could not add system unignored: Git does not ignore the entry",
-    "details": {
-      "errors": [
-        "system unignored is not ignored by Git"
-      ],
-      "warnings": []
-    }
+  "ok": true,
+  "type": "system",
+  "id": "unignored",
+  "validation": {
+    "ok": true,
+    "errors": [],
+    "warnings": []
   }
 }
 --- stderr
 --- file systems/unignored.toml
-(absent)
+description = "Unignored."
 
 ## failed validation with rollback of an existing map
-$ charts "add" "repository" "rollback-repo" "--data" "{\"description\":\"Rollback.\"}" "--local-path" "<TMP>/work/absent"
+$ charts "add" "repository" "rollback-repo" "--data" "{\"description\":\"Rollback.\"}" "--local-path" "<TMP>/work/absent" "--catalog" "nautilus"
 exit: 3
 --- stdout
 --- stderr
@@ -313,7 +310,7 @@ ERROR: could not add repository rollback-repo: validation failed
 alpha-app = "<TMP>/work/alpha-app"
 
 ## failed validation with rollback of an existing map (--json)
-$ charts "add" "repository" "rollback-repo" "--data" "{\"description\":\"Rollback.\"}" "--local-path" "<TMP>/work/absent" "--json"
+$ charts "add" "repository" "rollback-repo" "--data" "{\"description\":\"Rollback.\"}" "--local-path" "<TMP>/work/absent" "--catalog" "nautilus" "--json"
 exit: 3
 --- stdout
 {
@@ -335,7 +332,7 @@ exit: 3
 alpha-app = "<TMP>/work/alpha-app"
 
 ## failed validation with rollback of a new map
-$ charts "add" "repository" "rollback-new" "--data" "{\"description\":\"Rollback.\",\"remote\":\"https://example.com/wanted.git\"}" "--local-path" "<TMP>/work/mismatch"
+$ charts "add" "repository" "rollback-new" "--data" "{\"description\":\"Rollback.\",\"remote\":\"https://example.com/wanted.git\"}" "--local-path" "<TMP>/work/mismatch" "--catalog" "nautilus"
 exit: 3
 --- stdout
 --- stderr
@@ -347,7 +344,7 @@ ERROR: could not add repository rollback-new: validation failed
 (absent)
 
 ## failed validation with rollback of a new map (--json)
-$ charts "add" "repository" "rollback-new" "--data" "{\"description\":\"Rollback.\",\"remote\":\"https://example.com/wanted.git\"}" "--local-path" "<TMP>/work/mismatch" "--json"
+$ charts "add" "repository" "rollback-new" "--data" "{\"description\":\"Rollback.\",\"remote\":\"https://example.com/wanted.git\"}" "--local-path" "<TMP>/work/mismatch" "--catalog" "nautilus" "--json"
 exit: 3
 --- stdout
 {
@@ -369,7 +366,7 @@ exit: 3
 (absent)
 
 ## failed validation of an already broken catalog
-$ charts "add" "system" "after-broken" "--data" "{\"description\":\"After broken.\"}"
+$ charts "add" "system" "after-broken" "--data" "{\"description\":\"After broken.\"}" "--catalog" "nautilus"
 exit: 3
 --- stdout
 --- stderr
@@ -379,7 +376,7 @@ ERROR: could not add system after-broken: validation failed
 (absent)
 
 ## failed validation of an already broken catalog (--json)
-$ charts "add" "system" "after-broken" "--data" "{\"description\":\"After broken.\"}" "--json"
+$ charts "add" "system" "after-broken" "--data" "{\"description\":\"After broken.\"}" "--catalog" "nautilus" "--json"
 exit: 3
 --- stdout
 {
@@ -399,7 +396,7 @@ exit: 3
 (absent)
 
 ## invalid local paths file
-$ charts "add" "repository" "map-error" "--data" "{\"description\":\"Map error.\"}" "--local-path" "<TMP>/work/alpha-app"
+$ charts "add" "repository" "map-error" "--data" "{\"description\":\"Map error.\"}" "--local-path" "<TMP>/work/alpha-app" "--catalog" "nautilus"
 exit: 3
 --- stdout
 --- stderr
@@ -414,7 +411,7 @@ ERROR: could not add repository map-error: validation failed
 alpha-app = [
 
 ## invalid local paths file (--json)
-$ charts "add" "repository" "map-error" "--data" "{\"description\":\"Map error.\"}" "--local-path" "<TMP>/work/alpha-app" "--json"
+$ charts "add" "repository" "map-error" "--data" "{\"description\":\"Map error.\"}" "--local-path" "<TMP>/work/alpha-app" "--catalog" "nautilus" "--json"
 exit: 3
 --- stdout
 {
@@ -436,14 +433,14 @@ exit: 3
 alpha-app = [
 
 ## argument error: missing data
-$ charts "add" "system" "no-data"
+$ charts "add" "system" "no-data" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
 ERROR: add requires --data '<JSON>'
 
 ## argument error: missing data (--json)
-$ charts "add" "system" "no-data" "--json"
+$ charts "add" "system" "no-data" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {
@@ -456,14 +453,14 @@ exit: 1
 --- stderr
 
 ## argument error: invalid JSON
-$ charts "add" "system" "bad-json" "--data" "{"
+$ charts "add" "system" "bad-json" "--data" "{" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
 ERROR: --data is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2)
 
 ## argument error: invalid JSON (--json)
-$ charts "add" "system" "bad-json" "--data" "{" "--json"
+$ charts "add" "system" "bad-json" "--data" "{" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {
@@ -476,14 +473,14 @@ exit: 1
 --- stderr
 
 ## argument error: not an object
-$ charts "add" "system" "not-object" "--data" "[]"
+$ charts "add" "system" "not-object" "--data" "[]" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
 ERROR: --data must be a JSON object
 
 ## argument error: not an object (--json)
-$ charts "add" "system" "not-object" "--data" "[]" "--json"
+$ charts "add" "system" "not-object" "--data" "[]" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {
@@ -496,14 +493,14 @@ exit: 1
 --- stderr
 
 ## argument error: id in data
-$ charts "add" "system" "with-id" "--data" "{\"id\":\"x\",\"description\":\"X.\"}"
+$ charts "add" "system" "with-id" "--data" "{\"id\":\"x\",\"description\":\"X.\"}" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
 ERROR: do not include id in --data; pass it as the positional ID
 
 ## argument error: id in data (--json)
-$ charts "add" "system" "with-id" "--data" "{\"id\":\"x\",\"description\":\"X.\"}" "--json"
+$ charts "add" "system" "with-id" "--data" "{\"id\":\"x\",\"description\":\"X.\"}" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {
@@ -516,14 +513,14 @@ exit: 1
 --- stderr
 
 ## argument error: invalid type
-$ charts "add" "service" "new-entry" "--data" "{\"description\":\"X.\"}"
+$ charts "add" "service" "new-entry" "--data" "{\"description\":\"X.\"}" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
 ERROR: invalid entry type: service
 
 ## argument error: invalid type (--json)
-$ charts "add" "service" "new-entry" "--data" "{\"description\":\"X.\"}" "--json"
+$ charts "add" "service" "new-entry" "--data" "{\"description\":\"X.\"}" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {
@@ -536,14 +533,14 @@ exit: 1
 --- stderr
 
 ## argument error: invalid ID
-$ charts "add" "system" "Bad_ID" "--data" "{\"description\":\"X.\"}"
+$ charts "add" "system" "Bad_ID" "--data" "{\"description\":\"X.\"}" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
 ERROR: invalid ID "Bad_ID"; use lowercase kebab-case
 
 ## argument error: invalid ID (--json)
-$ charts "add" "system" "Bad_ID" "--data" "{\"description\":\"X.\"}" "--json"
+$ charts "add" "system" "Bad_ID" "--data" "{\"description\":\"X.\"}" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {
@@ -556,14 +553,14 @@ exit: 1
 --- stderr
 
 ## argument error: missing ID
-$ charts "add" "system" "--data" "{\"description\":\"X.\"}"
+$ charts "add" "system" "--data" "{\"description\":\"X.\"}" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
 ERROR: add requires an entry type and ID
 
 ## argument error: missing ID (--json)
-$ charts "add" "system" "--data" "{\"description\":\"X.\"}" "--json"
+$ charts "add" "system" "--data" "{\"description\":\"X.\"}" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {
@@ -576,14 +573,14 @@ exit: 1
 --- stderr
 
 ## argument error: local path for external
-$ charts "add" "external" "ext" "--data" "{\"description\":\"X.\"}" "--local-path" "/absent"
+$ charts "add" "external" "ext" "--data" "{\"description\":\"X.\"}" "--local-path" "/absent" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
 ERROR: --local-path is valid only for repository entries
 
 ## argument error: local path for external (--json)
-$ charts "add" "external" "ext" "--data" "{\"description\":\"X.\"}" "--local-path" "/absent" "--json"
+$ charts "add" "external" "ext" "--data" "{\"description\":\"X.\"}" "--local-path" "/absent" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {
@@ -596,14 +593,14 @@ exit: 1
 --- stderr
 
 ## argument error: empty local path
-$ charts "add" "repository" "empty-path" "--data" "{\"description\":\"X.\"}" "--local-path" ""
+$ charts "add" "repository" "empty-path" "--data" "{\"description\":\"X.\"}" "--local-path" "" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
 ERROR: --local-path must not be empty
 
 ## argument error: empty local path (--json)
-$ charts "add" "repository" "empty-path" "--data" "{\"description\":\"X.\"}" "--local-path" "" "--json"
+$ charts "add" "repository" "empty-path" "--data" "{\"description\":\"X.\"}" "--local-path" "" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {
@@ -616,14 +613,14 @@ exit: 1
 --- stderr
 
 ## argument error: repeated data
-$ charts "add" "system" "twice" "--data" "{}" "--data" "{}"
+$ charts "add" "system" "twice" "--data" "{}" "--data" "{}" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
 ERROR: --data can be used only once
 
 ## argument error: repeated data (--json)
-$ charts "add" "system" "twice" "--data" "{}" "--data" "{}" "--json"
+$ charts "add" "system" "twice" "--data" "{}" "--data" "{}" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {
@@ -636,14 +633,14 @@ exit: 1
 --- stderr
 
 ## argument error: repeated local path
-$ charts "add" "repository" "twice" "--data" "{}" "--local-path" "/a" "--local-path" "/b"
+$ charts "add" "repository" "twice" "--data" "{}" "--local-path" "/a" "--local-path" "/b" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
 ERROR: --local-path can be used only once
 
 ## argument error: repeated local path (--json)
-$ charts "add" "repository" "twice" "--data" "{}" "--local-path" "/a" "--local-path" "/b" "--json"
+$ charts "add" "repository" "twice" "--data" "{}" "--local-path" "/a" "--local-path" "/b" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {
@@ -656,34 +653,34 @@ exit: 1
 --- stderr
 
 ## argument error: option without value
-$ charts "add" "repository" "no-value" "--local-path"
+$ charts "add" "repository" "no-value" "--local-path" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
-ERROR: --local-path requires a value
+ERROR: add requires an entry type and ID
 
 ## argument error: option without value (--json)
-$ charts "add" "repository" "no-value" "--local-path" "--json"
+$ charts "add" "repository" "no-value" "--local-path" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {
   "error": {
     "code": "usage",
-    "message": "--local-path requires a value",
+    "message": "add requires an entry type and ID",
     "details": {}
   }
 }
 --- stderr
 
 ## argument error: unknown option
-$ charts "add" "system" "unknown" "--force"
+$ charts "add" "system" "unknown" "--force" "--catalog" "nautilus"
 exit: 1
 --- stdout
 --- stderr
 ERROR: unknown option: --force
 
 ## argument error: unknown option (--json)
-$ charts "add" "system" "unknown" "--force" "--json"
+$ charts "add" "system" "unknown" "--force" "--catalog" "nautilus" "--json"
 exit: 1
 --- stdout
 {

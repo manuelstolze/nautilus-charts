@@ -5,7 +5,9 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, test } from "node:test";
-import { main } from "../scripts/charts.ts";
+import { main as runCharts } from "../scripts/charts.ts";
+import { CatalogGitCli } from "../src/adapters/catalog-git.ts";
+import { FileCatalogRegistry } from "../src/adapters/catalog-registry.ts";
 
 // Golden output: every command, in text and --json, against one fixture
 // catalog. Set UPDATE_GOLDEN=1 to record the files from the current code.
@@ -14,13 +16,17 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const GOLDEN_DIR = join(REPO_ROOT, "tests/golden");
 const UPDATE = process.env.UPDATE_GOLDEN === "1";
 
-type Fixture = { temporary: string; root: string; work: string };
+type Fixture = { temporary: string; root: string; projectRoot: string; registryPath: string; work: string };
 type Case = { name: string; argv: (fixture: Fixture) => string[]; setup?: (fixture: Fixture) => void; files?: string[] };
 
 function write(root: string, relativePath: string, content: string): void {
   const path = join(root, relativePath);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, content, "utf8");
+  if (!relativePath.startsWith("local/")) {
+    execFileSync("git", ["-C", root, "add", "--", relativePath]);
+    execFileSync("git", ["-C", root, "-c", "user.name=Charts Test", "-c", "user.email=charts@example.com", "commit", "--quiet", "-m", "Fixture update", "--", relativePath]);
+  }
 }
 
 function gitRepository(path: string, remote?: string): void {
@@ -31,16 +37,18 @@ function gitRepository(path: string, remote?: string): void {
 
 function makeFixture(): Fixture {
   const temporary = mkdtempSync(join(tmpdir(), "charts-golden-"));
-  const root = join(temporary, "charts");
+  const projectRoot = join(temporary, "charts");
+  const root = join(temporary, "folio", "nautilus");
+  const registryPath = join(temporary, "config", "catalogs.json");
   const work = join(temporary, "work");
-  for (const directory of ["systems", "repositories", "externals", "local", "templates"]) {
-    mkdirSync(join(root, directory), { recursive: true });
-  }
+  const remote = join(temporary, "nautilus.git");
+  mkdirSync(join(projectRoot, "templates"), { recursive: true });
   for (const kind of ["system", "repository", "external"]) {
-    copyFileSync(join(REPO_ROOT, `templates/${kind}.toml`), join(root, `templates/${kind}.toml`));
+    copyFileSync(join(REPO_ROOT, `templates/${kind}.toml`), join(projectRoot, `templates/${kind}.toml`));
   }
-  write(root, ".gitignore", "/systems/*.toml\n/repositories/*.toml\n/externals/*.toml\n/local/paths.toml\n");
-  execFileSync("git", ["init", "-q", root]);
+  execFileSync("git", ["init", "--bare", "--quiet", remote]);
+  new CatalogGitCli(REPO_ROOT).initialize(root, remote);
+  new FileCatalogRegistry(registryPath).register({ name: "nautilus", path: root, remote });
   write(root, "tags.toml", 'utility = "Shared tools."\nlibrary = "Reusable code."\n');
   write(root, "systems/alpha.toml", 'name = "Alpha"\ndescription = "Alpha system."\nowner = "Team Alpha"\n');
   write(root, "systems/beta.toml", 'description = "Beta system."\nowner = "Team Beta"\n');
@@ -63,7 +71,7 @@ function makeFixture(): Fixture {
   write(root, "externals/old-api.toml", 'description = "Retired API."\nstatus = "archived"\n');
   gitRepository(join(work, "alpha-app"), "https://example.com/shop/alpha-app.git");
   write(root, "local/paths.toml", `alpha-app = ${JSON.stringify(join(work, "alpha-app"))}\n`);
-  return { temporary, root, work };
+  return { temporary, root, projectRoot, registryPath, work };
 }
 
 const fixed = (...argv: string[]) => () => argv;
@@ -353,7 +361,11 @@ function run(item: Case, json: boolean): string {
   const fixture = makeFixture();
   try {
     item.setup?.(fixture);
-    const argv = [...item.argv(fixture), ...(json ? ["--json"] : [])];
+    const argv = [...item.argv(fixture)];
+    if (["find", "show", "deps", "rdeps", "check", "add", "set"].includes(argv[0]) && !argv.includes("--catalog")) {
+      argv.push("--catalog", "nautilus");
+    }
+    if (json) argv.push("--json");
     const stdout: string[] = [];
     const stderr: string[] = [];
     const log = console.log;
@@ -362,7 +374,7 @@ function run(item: Case, json: boolean): string {
     console.error = (...values: unknown[]) => stderr.push(values.map(String).join(" "));
     let status: number;
     try {
-      status = main(argv, fixture.root);
+      status = runCharts(argv, fixture.projectRoot, fixture.registryPath);
     } finally {
       console.log = log;
       console.error = error;

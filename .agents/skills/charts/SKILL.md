@@ -1,6 +1,6 @@
 ---
 name: charts
-description: Use when finding, adding, updating, migrating, or removing Charts entries, managing named catalogs, syncing catalogs, or resolving a local code-repository path.
+description: Use when finding, adding, updating, or removing Charts entries, managing named catalogs, syncing catalogs, or resolving a local code-repository path.
 ---
 
 # Charts
@@ -11,7 +11,11 @@ Charts stores Systems, Repositories, and Externals as TOML files. Use this skill
 
 Run `charts --version` or `charts describe --json` from any folder. If `charts` is not found, stop and ask the catalog owner to link the command as the [README](../../../README.md#setup) shows. `charts describe --json` lists each command, option, output field, and error code. With `--json`, a failure prints `{"error": {"code", "message", "details"}}`; act on the code, not the message.
 
-Use a catalog name supplied by the catalog owner. For this setup, store named catalog repositories under `./folio/` from the Charts root, such as `./folio/work/` and `./folio/private/`. Each child directory is a separate catalog Git repository. The `folio/` parent is not a catalog, and the Charts source repository ignores it. If no named catalogs are registered, the legacy root catalog is the default. When named catalogs are registered, scoped reads and writes need `--catalog <name>`. The catalog registry is machine-local. It lives at `${XDG_CONFIG_HOME}/nautilus-charts/catalogs.json`, or at `~/.config/nautilus-charts/catalogs.json` when `XDG_CONFIG_HOME` is not set. Do not guess a catalog name or local folder.
+Use a catalog name supplied by the catalog owner. For this setup, store named catalog repositories under `./folio/` from the Charts root, such as `./folio/work/` and `./folio/private/`. Each child directory is a separate catalog Git repository. The `folio/` parent is not a catalog, and the Charts source repository ignores it. Run `charts catalog list` to see registered catalogs. If no catalog is registered, commands that read or change catalog data return a usage error that names `charts catalog create` and `charts catalog clone`. Pass `--catalog <name>` for `find` searches and for `add`, `set`, `deps`, `rdeps`, and `check`. `show` and exact-ID lookups can omit it when catalogs are registered. The catalog registry is machine-local. It lives at `${XDG_CONFIG_HOME}/nautilus-charts/catalogs.json`, or at `~/.config/nautilus-charts/catalogs.json` when `XDG_CONFIG_HOME` is not set. Do not guess a catalog name or local folder.
+
+## List catalogs
+
+Run `charts catalog list` to print each registered catalog's name, local path, and remote. Add `--json` for `{ catalogs: [{ name, path, remote }] }`. An empty registry returns an empty list and succeeds.
 
 ## Create or clone a catalog
 
@@ -50,7 +54,7 @@ charts find <id>
 
 These exact-ID lookups search all registered catalogs. For a Repository, they return its checked local code-repository path when that path is valid. For other searches, pass `--catalog`.
 
-Use a local code-repository path only when `local_path_status` is `ok`. A path in `local/paths.toml` belongs to this machine. Do not invent a path when it is missing.
+Use a local code-repository path only when `local_path_status` is `ok`. A path from the machine-local path map belongs to this machine. Do not invent a path when it is missing.
 
 ## Add an entry
 
@@ -61,8 +65,6 @@ Use a local code-repository path only when `local_path_status` is `ok`. A path i
 5. For a Repository, pass `--local-path <path>` only when the owner gives or approves the path. Charts checks the local Git root and any recorded code-repository remote from local Git data. It does not contact the code-repository remote.
 6. Run `charts add <type> <id> --catalog <name> --data '<JSON>'`. Charts checks the destination, commits the entry and new tags in that catalog, then syncs only that catalog. If the remote is unavailable, the local commit stays and Charts reports a warning.
 
-Charts does not stage or commit the legacy root catalog's `tags.toml`. That old catalog keeps its existing behavior.
-
 ## Update an entry
 
 1. Use `find` and `show` to identify the entry and confirm its type.
@@ -70,22 +72,6 @@ Charts does not stage or commit the legacy root catalog's `tags.toml`. That old 
 3. Use `--local-path` only when the owner requests a path change. Ask the owner before recording a code-repository remote.
 4. Ask before using `--replace-key`. Do not change a Repository key that another module uses.
 5. Check the command result. Charts validates the catalog, commits the selected entry and any new tags, and syncs only the selected catalog. A failed remote sync warns and keeps local data.
-
-## Migrate a root entry
-
-The legacy root catalog stays available until its owner confirms migration. Migrate one entry at a time:
-
-```sh
-charts migrate <id> --catalog <destination>
-```
-
-Charts copies the entry, its needed tag definitions, and this machine's local path mapping. It checks and commits the destination locally. It does not change the root or sync the copy. Review the destination entry and validation result. Only after approval, run:
-
-```sh
-charts catalog sync <destination>
-```
-
-Migration does not delete root entries. Do not clean up the root without a separate owner decision.
 
 ## Sync rules
 
