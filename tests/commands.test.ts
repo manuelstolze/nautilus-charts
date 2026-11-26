@@ -514,6 +514,62 @@ describe("add use case", () => {
 });
 
 describe("set use case", () => {
+  function namedCatalogPorts() {
+    const memory = catalog();
+    const ports: Ports = memory;
+    ports.catalogName = "work";
+    ports.catalogPath = "/catalog/work";
+    ports.catalogRemote = "https://example.com/work.git";
+    const commits: Array<{ files: readonly string[]; message: string }> = [];
+    let syncWrites = 0;
+    ports.catalogGit = {
+      initialize() {},
+      clone() {},
+      assertWriteClean() {},
+      syncRead() {},
+      syncWrite() { syncWrites++; },
+      commit(_path, files, message) { commits.push({ files, message }); },
+    };
+    return { ports, store: memory.store, commits, syncWrites: () => syncWrites };
+  }
+
+  test("records a path-only change without committing or syncing", () => {
+    const { ports, store, commits, syncWrites } = namedCatalogPorts();
+    const result = set(ports, { id: "alpha-app", localPath: "/work/new-repo" });
+    assert.ok(result.ok);
+    assert.deepEqual(result.changed, []);
+    assert.deepEqual(commits, []);
+    assert.equal(syncWrites(), 0);
+    assert.deepEqual(store.localPaths, {
+      "alpha-app": "/work/new-repo",
+    });
+  });
+
+  test("commits and syncs an entry change with a local path", () => {
+    const { ports, commits, syncWrites } = namedCatalogPorts();
+    const result = set(ports, {
+      id: "alpha-app",
+      data: { description: "Updated application." },
+      localPath: "/work/new-repo",
+    });
+    assert.ok(result.ok);
+    assert.deepEqual(result.changed, ["description"]);
+    assert.deepEqual(commits, [{
+      files: ["repositories/alpha-app.toml", "tags.toml"],
+      message: "Update repository alpha-app",
+    }]);
+    assert.equal(syncWrites(), 1);
+  });
+
+  test("rolls back a path-only change that fails validation", () => {
+    const { ports, store } = namedCatalogPorts();
+    const original = structuredClone(store.localPaths);
+    const error = failed(set(ports, { id: "alpha-app", localPath: "/work/absent" }), "invalid-entry");
+    assert.equal(error.message, "could not set repository alpha-app: validation failed");
+    assert.deepEqual(details(error).errors, ['the local paths: path does not exist: /work/absent for "alpha-app"']);
+    assert.deepEqual(store.localPaths, original);
+  });
+
   test("protects an existing key and allows a deliberate replacement", () => {
     const ports = catalog();
     const same = set(ports, { id: "alpha-app", data: { key: "ALP" } });

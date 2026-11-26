@@ -1412,6 +1412,33 @@ describe("charts set", () => {
     assert.equal((parseToml(readFileSync(join(root, "tags.toml"), "utf8")) as Record<string, unknown>)["data-pipeline"], "Moves data.");
   });
 
+  test("sets only a named catalog path without creating a catalog commit", () => {
+    const work = join(temporary, "set-path-only");
+    mkdirSync(work);
+    execFileSync("git", ["init", "-q", work]);
+    write("local/paths.toml", 'alpha-app = "/old/path"\n');
+    execFileSync("git", ["-C", root, "add", ".gitignore"]);
+    execFileSync("git", ["-C", root, "-c", "user.name=Charts Test", "-c", "user.email=charts@example.com", "commit", "--quiet", "-m", "Track catalog ignore rules"]);
+    assert.equal(execFileSync("git", ["-C", root, "status", "--porcelain"], { encoding: "utf8" }).trim(), "");
+    const headBefore = execFileSync("git", ["-C", root, "log", "-1", "--format=%H"], { encoding: "utf8" }).trim();
+
+    const result = update("alpha-app", undefined, ["--local-path", work, "--json"]);
+    const payload = JSON.parse(result.output.join("\\n"));
+    assert.equal(result.result, 0, JSON.stringify({ output: result.output, errors: result.errors }));
+    assert.equal(payload.ok, true);
+    assert.deepEqual(payload.changed, []);
+
+    const shown = capture(() => main(["show", "alpha-app", "--json"], root));
+    const entry = JSON.parse(shown.output.join("\\n"));
+    assert.equal(shown.result, 0);
+    assert.equal(entry.local_path, work);
+    assert.equal(entry.local_path_status, "ok");
+
+    const headAfter = execFileSync("git", ["-C", root, "log", "-1", "--format=%H"], { encoding: "utf8" }).trim();
+    assert.equal(headAfter, headBefore);
+    assert.equal(execFileSync("git", ["-C", root, "status", "--porcelain"], { encoding: "utf8" }).trim(), "");
+  });
+
   test("rejects local paths and new tags for non-repositories", () => {
     for (const id of ["alpha", "stripe"]) {
       const pathResult = update(id, undefined, ["--local-path", "/work/example", "--json"]);
